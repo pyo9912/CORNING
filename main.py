@@ -280,8 +280,8 @@ def log_args(args):
 
 
 if __name__ == "__main__":
-    args = parseargs()
-    main(args)
+    # args = parseargs()
+    main()
 
 """
 python main.py --batch_size=32 --max_len=128 --num_epochs=10 --know_ablation=pseudo --pseudo_pos_num=1 --pseudo_pos_rank=1 \
