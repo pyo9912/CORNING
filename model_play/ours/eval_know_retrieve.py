@@ -47,12 +47,9 @@ def eval_know(args, test_dataloader, retriever, knowledge_data, knowledgeDB, tok
     # bert_model = bert_model.to(args.device)
     new_cnt = 0
     logger.info('Knowledge indexing for test')
-    knowledge_index = knowledge_reindexing(args, knowledge_data, retriever, stage='retrieve')
-    knowledge_index = knowledge_index.to(args.device)
 
-    if args.stage == 'rerank':
-        knowledge_index_rerank = knowledge_reindexing(args, knowledge_data, retriever, stage='rerank')
-        knowledge_index_rerank = knowledge_index_rerank.to(args.device)
+    knowledge_index_rerank = knowledge_reindexing(args, knowledge_data, retriever, stage='rerank')
+    knowledge_index_rerank = knowledge_index_rerank.to(args.device)
 
     goal_list = ['Movie recommendation', 'POI recommendation', 'Music recommendation', 'Q&A', 'Food recommendation', 'Chat about stars']
     hit1_goal, hit3_goal, hit5_goal, hit10_goal, hit20_goal = defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list)
@@ -84,65 +81,23 @@ def eval_know(args, test_dataloader, retriever, knowledge_data, knowledgeDB, tok
         target_knowledge_idx = batch['target_knowledge']
 
         # if args.stage == 'retrieve':
-        dot_score = retriever.compute_know_score(dialog_token, dialog_mask, knowledge_index, batch['goal_idx'])
+        dot_score = retriever.compute_know_score_candidate(dialog_token, dialog_mask, knowledge_index_rerank)  # todo: DPR용 (1/2)
 
-        if args.stage == 'rerank':
-            # candidate_indice = torch.topk(dot_score, k=args.know_topk, dim=1).indices
-            # dot_score = retriever.compute_know_score_candidate(dialog_token, dialog_mask, knowledge_index_rerank[candidate_indice]) # todo: 2-stage
-            dot_score = retriever.compute_know_score_candidate(dialog_token, dialog_mask, knowledge_index_rerank)  # todo: DPR용 (1/2)
-
-            # dot_score = torch.gather(dot_score, 1, candidate_indice)
-
-            # candidate_indice = torch.topk(dot_score, k=args.know_topk, dim=1).indices  # [B, K]
-            # candidate_knowledge_text = [args.knowledgeDB[idx] for candidates in candidate_indice for idx in candidates]
-            # candidate_knowledge = tokenizer(candidate_knowledge_text, truncation=True, padding='max_length', max_length=args.max_length)
-            # candidate_knowledge_token = candidate_knowledge.input_ids
-            # candidate_knowledge_mask = candidate_knowledge.attention_mask
-            # candidate_knowledge_token = torch.LongTensor(candidate_knowledge_token).to(args.device).view(-1, args.know_topk, args.max_length)
-            # candidate_knowledge_mask = torch.LongTensor(candidate_knowledge_mask).to(args.device).view(-1, args.know_topk, args.max_length)
-            # dot_score = retriever.knowledge_retrieve(dialog_token, dialog_mask, candidate_knowledge_token, candidate_knowledge_mask)  # [B, 2]
-
-        # if retrieve:
+        # if write:
         #     top_candidate = torch.topk(dot_score, k=args.know_topk, dim=1).indices  # [B, K]
-        #     for idx in range(batch_size):
-        #         # query_token = tokenizer.encode(tokenizer.decode(response[idx], skip_special_tokens=True) + "|" + topic_idx[idx])[1:-1]
-        #         # bm_scores = args.bm25.get_scores(query_token)
-        #         # candidate_list = top_candidate.cpu().numpy().tolist()[idx]
-        #         # candidate_list_score = [bm_scores[candi] for candi in candidate_list]
-        #         # sorted_list_idx = np.argsort(candidate_list_score)[::-1]
-        #         # sorted_candidates = [candidate_list[idx] for idx in sorted_list_idx]
-        #         # test_dataloader.dataset.augmented_raw_sample[current + idx]['candidate_knowledges'] = sorted_candidates
-        #         test_dataloader.dataset.augmented_raw_sample[current + idx]['target_knowledge'] = knowledgeDB[target_knowledge_idx[idx]]
-        #         test_dataloader.dataset.augmented_raw_sample[current + idx]['candidate_knowledges'] = [knowledgeDB[rank] for rank in top_candidate[idx].cpu().tolist()]
-
-        #     current += batch_size
-
-        if write:
-            top_candidate = torch.topk(dot_score, k=args.know_topk, dim=1).indices  # [B, K]
-            input_text = '||'.join(tokenizer.batch_decode(dialog_token, skip_special_tokens=True))
-            target_knowledge_text = knowledgeDB[target_knowledge_idx]
-            retrieved_knowledge_text = [knowledgeDB[idx].lower() for idx in top_candidate[0]]  # list
-            correct = target_knowledge_idx in top_candidate
-
-            response = '||'.join(tokenizer.batch_decode(response, skip_special_tokens=True))
-            query = topic_idx[0] + "|" + response
-            bm_scores = args.bm25.get_scores(bm_tokenizer(query, tokenizer))
-            retrieved_knowledge_score = bm_scores[top_candidate[0].cpu().numpy()]
-            jsonlineSave.append({'goal_type': goal_idx[0], 'topic': topic_idx[0], 'tf': correct, 'dialog': input_text, 'target': target_knowledge_text, 'response': response, "predict5": retrieved_knowledge_text, "score5": retrieved_knowledge_score})
-            # save_json(args, f"{args.time}_{args.model_name}_inout", jsonlineSave)
+        #     input_text = '||'.join(tokenizer.batch_decode(dialog_token, skip_special_tokens=True))
+        #     target_knowledge_text = knowledgeDB[target_knowledge_idx]
+        #     retrieved_knowledge_text = [knowledgeDB[idx].lower() for idx in top_candidate[0]]  # list
+        #     correct = target_knowledge_idx in top_candidate
+        #
+        #     response = '||'.join(tokenizer.batch_decode(response, skip_special_tokens=True))
+        #     query = topic_idx[0] + "|" + response
+        #     bm_scores = args.bm25.get_scores(bm_tokenizer(query, tokenizer))
+        #     retrieved_knowledge_score = bm_scores[top_candidate[0].cpu().numpy()]
+        #     jsonlineSave.append({'goal_type': goal_idx[0], 'topic': topic_idx[0], 'tf': correct, 'dialog': input_text, 'target': target_knowledge_text, 'response': response, "predict5": retrieved_knowledge_text, "score5": retrieved_knowledge_score})
+        #     # save_json(args, f"{args.time}_{args.model_name}_inout", jsonlineSave)
 
         for idx, (score, target, pseudo_targets, goal, new) in enumerate(zip(dot_score, target_knowledge_idx, batch['pseudo_targets'], goal_idx, new_knowledge)):
-            # goal = args.goalDic['int'][int(goal_idx)]
-            # top_candidate = torch.topk(score, k=args.know_topk, dim=0).indices  # [K]
-            # candidate_knowledge_text = [args.knowledgeDB[int(idx)] for idx in top_candidate]  # [K, .]
-            # candidate_knowledge = tokenizer(candidate_knowledge_text, truncation=True, padding='max_length', max_length=args.max_length, return_tensors='pt')
-            # candidate_knowledge_token = candidate_knowledge.input_ids.to(args.device)  # [K, L]
-            # candidate_knowledge_mask = candidate_knowledge.attention_mask.to(args.device)  # [K, L]
-            # re_rank_score = retriever.knowledge_retrieve(dialog_token[idx].unsqueeze(0), dialog_mask[idx].unsqueeze(0), candidate_knowledge_token.unsqueeze(0), candidate_knowledge_mask.unsqueeze(0)).squeeze(0)  # [K]
-            # pseudo_targets1 = pseudo_targets[0]
-            # pseudo_targets2 = pseudo_targets[1]
-            # pseudo_targets3 = pseudo_targets[2]
-
             if new:
                 new_cnt += 1
             for k in [1, 3, 5, 10]:
@@ -179,25 +134,6 @@ def eval_know(args, test_dataloader, retriever, knowledge_data, knowledgeDB, tok
                     if new:
                         hit20_new.append(correct_k)
 
-                # correct_k = pseudo_targets1 in top_candidate
-                # if k == 20:
-                #     hit20_p1.append(correct_k)
-                #
-                # correct_k = pseudo_targets2 in top_candidate
-                # if k == 20:
-                #     hit20_p2.append(correct_k)
-                #
-                # correct_k = pseudo_targets3 in top_candidate
-                # if k == 20:
-                #     hit20_p3.append(correct_k)
-                #
-                # correct_k = (pseudo_targets2 in top_candidate) or (pseudo_targets3 in top_candidate)
-                # if k == 20:
-                #     hit20_p23.append(correct_k)
-    # for i in range(10):
-    #     logger.info("T:%s\tP:%s" %(targets[i], pred[i]))
-
-    # topic_eval(targets, pred)
     hit1 = np.average(hit1)
     hit3 = np.average(hit3)
     hit5 = np.average(hit5)
@@ -209,9 +145,6 @@ def eval_know(args, test_dataloader, retriever, knowledge_data, knowledgeDB, tok
     hit5_new = np.average(hit5_new)
     hit10_new = np.average(hit10_new)
     hit20_new = np.average(hit20_new)
-
-    # hit20_p1 = np.average(hit20_p1)
-    # hit20_p2 = np.average(hit20_p2)
 
     hit_movie_result = [np.average(hit1_goal["Movie recommendation"]), np.average(hit3_goal["Movie recommendation"]), np.average(hit5_goal["Movie recommendation"]), np.average(hit10_goal["Movie recommendation"]), np.average(hit20_goal["Movie recommendation"])]
     hit_music_result = [np.average(hit1_goal["Music recommendation"]), np.average(hit3_goal["Music recommendation"]), np.average(hit5_goal["Music recommendation"]), np.average(hit10_goal["Music recommendation"]), np.average(hit20_goal["Music recommendation"])]
@@ -262,18 +195,18 @@ def eval_know(args, test_dataloader, retriever, knowledge_data, knowledgeDB, tok
     return [hit1, hit3, hit5, hit10, hit20, hit_movie_result, hit_music_result, hit_qa_result, hit_poi_result, hit_food_result, hit_chat_result, hit1_new, hit3_new, hit5_new, hit10_new, hit20_new]
 
 
-def bm_tokenizer(text, tokenizer):
-    # # 특정 구문을 임시 토큰으로 대체
-    # for phrase in phrase_list:
-    #     text = text.replace(phrase, phrase.replace(' ', '_'))
-    #
-    # # 기본 NLTK tokenizer를 사용하여 텍스트를 토큰화
-    # tokens = nltk.word_tokenize(text)
-    #
-    # # 임시 토큰을 원래 구문으로 되돌리기
-    # for i, token in enumerate(tokens):
-    #     tokens[i] = token.replace('_', ' ')
-    text = " ".join([word for word in text.split() if word not in stop_words])
-    tokens = tokenizer.encode(text)[1:-1]
-
-    return tokens
+# def bm_tokenizer(text, tokenizer):
+#     # # 특정 구문을 임시 토큰으로 대체
+#     # for phrase in phrase_list:
+#     #     text = text.replace(phrase, phrase.replace(' ', '_'))
+#     #
+#     # # 기본 NLTK tokenizer를 사용하여 텍스트를 토큰화
+#     # tokens = nltk.word_tokenize(text)
+#     #
+#     # # 임시 토큰을 원래 구문으로 되돌리기
+#     # for i, token in enumerate(tokens):
+#     #     tokens[i] = token.replace('_', ' ')
+#     text = " ".join([word for word in text.split() if word not in stop_words])
+#     tokens = tokenizer.encode(text)[1:-1]
+#
+#     return tokens

@@ -195,7 +195,7 @@ class DialogDataset(Dataset):
             predicted_goal, predicted_topic = data['predicted_goal'][0], '|'.join(predicted_topic_list)
         else:
             predicted_goal = data['predicted_goal'][0]
-            if data['predicted_topic_confidence'][0] > self.args.topic_conf:
+            if data['predicted_topic_confidence'][0] > (1 - self.args.topic_conf):
                 predicted_topic = data['predicted_topic'][0]
             else:
                 predicted_topic = '|'.join(predicted_topic_list)
@@ -315,7 +315,7 @@ class DialogDataset(Dataset):
         context_batch['candidate_knowledge_mask'] = candidate_knowledge_mask
 
         context_batch['pseudo_targets'] = candidate_knowledges_pos  # [candidate_knowledges[0]]
-        context_batch['pseudo_confidences'] = (candidate_confidences_pos > self.args.know_conf)  # + [-1e10] * (self.args.knowledge_num - len(candidate_confidences_pos))
+        # context_batch['pseudo_confidences'] = (candidate_confidences_pos > self.args.know_conf)  # + [-1e10] * (self.args.knowledge_num - len(candidate_confidences_pos))
 
         context_batch['target_knowledge'] = [target_knowledge_idx]  # candidate_knowledges[:3]  # target_knowledge_idx
         context_batch['all_negative'] = candidate_knowledges + self.all_negative(candidate_knowledges)
