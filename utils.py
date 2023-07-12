@@ -217,7 +217,7 @@ def parseargs():
 def default_parser(parser):
     # Default For All
     parser.add_argument("--earlystop", action='store_true', help="Whether to Use EarlyStopping.")
-    parser.add_argument("--task", default='know', type=str, help="Choose the task", choices=['know', 'goal', 'topic', 'gt_eval', 'resp'])
+    parser.add_argument("--task", default='know', type=str, help="Choose the task")
     parser.add_argument("--subtask", default='topic', type=str, help="Choose the task")
     parser.add_argument('--goal_list', default='Movie_Music_POI_QA_Food_Chat', type=str, help="input goal type")
     parser.add_argument("--data_dir", default='data', type=str, help="The data directory.")

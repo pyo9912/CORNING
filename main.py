@@ -156,7 +156,7 @@ def main(args=None):
     # pred_goal_topic_aug(args, retriever, tokenizer, train_dataset, 'goal')
     # pred_goal_topic_aug(args, retriever, tokenizer, train_dataset, 'topic')
 
-    if 'gt_eval' in args.task:  ## TEMP Dataset Stat
+    if 'gt' in args.task and 'eval' in args.task:  ## TEMP Dataset Stat
         logger.info(f" Goal, Topic Task Evaluation with pseudo goal,topic labeling")
         # args.gt_max_length = 256
         # args.gt_batch_size = 32
