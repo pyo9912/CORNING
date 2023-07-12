@@ -71,13 +71,16 @@ def index_update(args, model=None, dataset=None):
         model.set_retriever(retriever)
 
 
-def train_retrieve(args, model, tokenizer, train_dataset_aug, test_dataset_aug, train_knowledge_seq_set, faiss_dataset):
+def train_retrieve(args, model, tokenizer, train_dataset_aug=None, test_dataset_aug=None, train_knowledge_seq_set=None, faiss_dataset=None, train_Dataset=None, test_Dataset=None):
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.1, eps=5e-9)
-
-    train_Dataset = RAG_KnowledgeDataset(args, train_dataset_aug, train_knowledge_seq_set, tokenizer, mode='train')
-    test_Dataset = RAG_KnowledgeDataset(args, test_dataset_aug, train_knowledge_seq_set, tokenizer, mode='test')
-    train_dataloader = DataLoader(train_Dataset, batch_size=args.rag_batch_size, shuffle=True)
-    test_dataloader = DataLoader(test_Dataset, batch_size=args.rag_batch_size, shuffle=False)
+    if train_dataset_aug and test_dataset_aug:
+        train_Dataset = RAG_KnowledgeDataset(args, train_dataset_aug, train_knowledge_seq_set, tokenizer, mode='train')
+        test_Dataset = RAG_KnowledgeDataset(args, test_dataset_aug, train_knowledge_seq_set, tokenizer, mode='test')
+        train_dataloader = DataLoader(train_Dataset, batch_size=args.rag_batch_size, shuffle=True)
+        test_dataloader = DataLoader(test_Dataset, batch_size=args.rag_batch_size, shuffle=False)
+    if train_Dataset and test_Dataset:
+        train_dataloader = DataLoader(train_Dataset, batch_size=args.rag_batch_size, shuffle=True)
+        test_dataloader = DataLoader(test_Dataset, batch_size=args.rag_batch_size, shuffle=False)
 
     best_hitdic_ratio = {'total': {'hit1': 0, 'hit3': 0, 'hit5': 0, 'hit1_new':0, 'hit3_new':0, 'hit5_new':0, 'total': 0}}
     best_hitdic_str = None
@@ -101,6 +104,58 @@ def train_retrieve(args, model, tokenizer, train_dataset_aug, test_dataset_aug, 
 
 
 def epoch_play(args, tokenizer, model, data_loader, optimizer, epoch, faiss_dataset, mode='train'):
+    epoch_loss = 0
+    torch.cuda.empty_cache()
+    contexts, label_gold_knowledges, label_pseudo_knowledges, top5_docs, real_resps, gen_resp, new_knows = [], [], [], [], [], [], []
+    types = []
+    for batch in tqdm(data_loader, desc=f"Epoch {epoch}__{mode}", bar_format=' {l_bar} | {bar:23} {r_bar}'):
+        source_ids, source_mask, target_ids = batch["input_ids"].to(args.device), batch["attention_mask"].to(args.device), batch["labels"].to(args.device)
+        ### lm_labels = target_ids # response == target_ids ### decoder_input_ids = target_ids[:, :-1].contiguous() ### lm_labels = target_ids[:, 1:].clone()
+        outputs = model(input_ids=source_ids,
+                        attention_mask=source_mask,
+                        labels=target_ids,  # target_ids = response
+                        output_retrieved=True)
+        # decoder_input_ids = decoder_input_ids,
+        retrieved_docs_pt = outputs.retrieved_doc_ids.data
+        loss = outputs['loss'].mean()
+        epoch_loss += loss.item()
+
+        if mode == 'train':
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            loss.detach()
+
+        knowledge_gold_label = batch['knowledge_task_label']
+        knowledge_pseudo_label = batch['knowledge_task_pseudo_label']
+        batch_types = batch['goal']
+
+        batch_top5_docs = [faiss_dataset[i]['text'] for i in retrieved_docs_pt]
+        top5_docs.extend(batch_top5_docs)
+        new_knows.extend([int(i) for i in batch['is_new_knowledge']])
+        contexts.extend(tokenizer.question_encoder.batch_decode(source_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True))
+        real_resps.extend(tokenizer.generator.batch_decode(target_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True))
+        label_gold_knowledges.extend(knowledge_gold_label)
+        label_pseudo_knowledges.extend(knowledge_pseudo_label)
+        types.extend(batch_types)
+
+        if (mode == 'test' or epoch % 5 == 0) and epoch > 1:
+            resp_batch = tokenizer.generator.batch_decode(
+                model.generate(source_ids, min_length=0, max_length=args.max_gen_length, early_stopping=True), skip_special_tokens=True, clean_up_tokenization_spaces=True)
+            gen_resp.extend(resp_batch)
+
+    # hit1, hit3, hit5, hit1_new, hit3_new, hit5_new = utils.know_hit_ratio(args, pred_pt=top5_docs, gold_pt=label_gold_knowledges, new_knows=new_knows, types=types)
+    hitDic = know_hit_ratio(args, pred_pt=top5_docs, gold_pt=label_gold_knowledges, new_knows=new_knows, types=types)
+    hitdic, hitdic_ratio, output_str = know_hit_ratio(args, pred_pt=top5_docs, gold_pt=label_gold_knowledges, new_knows=new_knows, types=types)
+    for i in output_str:
+        logger.info(f"{mode} {i}")
+    # print(f"{mode} New_Knowledge hit / hit_k: {hit1_new}, {hit3_new}, {hit5_new}")
+    # knowledge_task_label, knowledge_task_pseudo_label, is_new_knowledge
+    logger.info(f"{mode} Loss: {epoch_loss}")
+    save_preds(args, contexts, top5_docs, label_gold_knowledges, epoch=epoch, new_knows=new_knows, real_resp=real_resps, gen_resps=gen_resp, mode=mode)
+    return hitDic, hitdic_ratio, output_str #output_strings, hit1_ratio, total_hit1, total_hit3, total_hit5, total_hit1_new, total_hit3_new, total_hit5_new
+
+def epoch_play_ForOurGenerationDataset(args, tokenizer, model, data_loader, optimizer, epoch, faiss_dataset, mode='train'):
     epoch_loss = 0
     torch.cuda.empty_cache()
     contexts, label_gold_knowledges, label_pseudo_knowledges, top5_docs, real_resps, gen_resp, new_knows = [], [], [], [], [], [], []
@@ -286,10 +341,10 @@ class RAG_KnowledgeDataset(Dataset):  # knowledge용 데이터셋
             'goal': type,
             'knowledge_task_label': target_knowledge,
             'knowledge_task_pseudo_label': candidate_knowledges[0],
-            # 'knowledge_task_label': torch.LongTensor(label), # tensor
-            # 'knowledge_task_pseudo_label': torch.LongTensor(pseudo_label), # tensor
             'is_new_knowledge': 1 if target_knowledge not in self.train_knowledge_seq_set else 0,
         }
+            # 'knowledge_task_label': torch.LongTensor(label), # tensor
+            # 'knowledge_task_pseudo_label': torch.LongTensor(pseudo_label), # tensor
 
 
 
