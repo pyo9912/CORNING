@@ -82,8 +82,8 @@ def main():
 
     ## Create KnowledgeDB
     knowledgeDB_csv_path = os.path.join(args.data_dir, 'rag')  # HOME/data/2/rag/"train_knowledge.csv")
-    knowledgeDB_csv_path = os.path.join(knowledgeDB_csv_path, f'my_knowledge_dataset_{args.gpu}'+ ('_debug.csv' if args.debug else '.csv'))
     utils.checkPath(knowledgeDB_csv_path)
+    knowledgeDB_csv_path = os.path.join(knowledgeDB_csv_path, f'my_knowledge_dataset_{args.gpu}'+ ('_debug.csv' if args.debug else '.csv'))
     args.knowledgeDB_csv_path = knowledgeDB_csv_path
     with open(knowledgeDB_csv_path, 'w', encoding='utf-8') as f:
         for know in knowledgeDB_list:

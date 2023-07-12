@@ -161,7 +161,7 @@ def save_preds(args, context, pred_words, label_words, epoch=None, new_knows=Non
 
 def know_hit_ratio(args, pred_pt, gold_pt, new_knows=None, types=None, typelist=['Q&A', 'Movie recommendation', 'Music recommendation', 'POI recommendation', 'Food recommendation']):
     # TODO: Beam처리
-    hitdic={type:{'hit1':0, 'hit3':0, 'hit5':0, 'hit1_new':0, 'hit3_new':0, 'hit5_new':0,  'count':0} for type in typelist + ['Others', 'total']}
+    hitdic={type:{'hit1':0, 'hit3':0, 'hit5':0, 'hit1_new':0, 'hit3_new':0, 'hit5_new':0,  'total':0} for type in typelist + ['Others', 'total']}
     for idx in range(len(gold_pt)):
         goal_type=types[idx]
         if goal_type in typelist: tmp_goal=goal_type
@@ -169,8 +169,8 @@ def know_hit_ratio(args, pred_pt, gold_pt, new_knows=None, types=None, typelist=
 
         pred, gold = pred_pt[idx], gold_pt[idx]
 
-        hitdic[tmp_goal]['count']+=1
-        hitdic['total']['count']+=1
+        hitdic[tmp_goal]['total']+=1
+        hitdic['total']['total']+=1
 
         if args.rag_num_beams>1:
             if gold in pred:
