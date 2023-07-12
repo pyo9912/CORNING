@@ -78,12 +78,26 @@ def train_retrieve(args, model, tokenizer, train_dataset_aug, test_dataset_aug, 
     train_dataloader = DataLoader(train_Dataset, batch_size=args.rag_batch_size, shuffle=True)
     test_dataloader = DataLoader(test_Dataset, batch_size=args.rag_batch_size, shuffle=False)
 
-
+    best_hitdic_ratio = {'total': {'hit1': 0, 'hit3': 0, 'hit5': 0, 'hit1_new':0, 'hit3_new':0, 'hit5_new':0, 'total': 0}}
+    best_hitdic_str = None
     logger.info(f"Logging Epoch results:                      hit@1, hit@3, hit@5, hit_new@1, hit_new@3, hit_new@5")
     for epoch in range(args.rag_epochs):
         # mode='train'
         model.train()
-        epoch_play(args, tokenizer, model, train_dataloader, optimizer, epoch, faiss_dataset, 'train')
+        hitDic, hitdic_ratio, output_str = epoch_play(args, tokenizer, model, train_dataloader, optimizer, epoch, faiss_dataset, 'train')
+        if epoch<4:
+            index_update(args, model, faiss_dataset)
+
+        model.eval()
+        with torch.no_grad():
+            hitDic, hitdic_ratio, output_str = epoch_play(args, tokenizer, model, test_dataloader, optimizer, epoch, faiss_dataset, 'test')
+            if best_hitdic_ratio['total']['hit1'] <= hitdic_ratio['total']['hit1']:
+                best_hitdic_ratio = hitdic_ratio
+                best_hitdic_str = output_str
+
+    for i in best_hitdic_str:
+        logger.info(f"Test_best {i}")
+
 
 def epoch_play(args, tokenizer, model, data_loader, optimizer, epoch, faiss_dataset, mode='train'):
     epoch_loss = 0
@@ -133,18 +147,16 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, epoch, faiss_data
         logger.info(f"{mode} {i}")
     # print(f"{mode} New_Knowledge hit / hit_k: {hit1_new}, {hit3_new}, {hit5_new}")
     # knowledge_task_label, knowledge_task_pseudo_label, is_new_knowledge
-    print(f"{mode} Loss: {epoch_loss}")
+    logger.info(f"{mode} Loss: {epoch_loss}")
     save_preds(args, contexts, top5_docs, label_gold_knowledges, epoch=epoch, new_knows=new_knows, real_resp=real_resps, gen_resps=gen_resp, mode=mode)
     return hitDic, hitdic_ratio, output_str #output_strings, hit1_ratio, total_hit1, total_hit3, total_hit5, total_hit1_new, total_hit3_new, total_hit5_new
 
-    return
 
 def save_preds(args, context, pred_words, label_words, epoch=None, new_knows=None, real_resp=None, gen_resps=None, mode='train'):
     # HJ: 동일 파일 덮어쓰면서 맨 윗줄에 몇번째 에폭인지만 쓰도록 수정
     log_file_name = mode + f'{str(epoch)}_'+ args.log_name + '.txt'
     path = os.path.join(args.output_dir, log_file_name)
-    if not os.path.exists(path): os.makedirs(path)
-    print(f"Save {mode}, Epoch: {str(epoch)}, generated results in {path}")
+    # if not os.path.exists(path): os.makedirs(path)
     with open(path , 'w' ,encoding='utf-8') as f:
         f.write(f"{mode}, Epoch: {str(epoch)} Input and Output results {args.time}\n")
         f.write(f"Log File Name: {args.log_name} \n")
@@ -157,6 +169,7 @@ def save_preds(args, context, pred_words, label_words, epoch=None, new_knows=Non
             f.write(f"Real Response: {real_resp[i]}\n")
             if gen_resps: f.write(f"Gen Response: {gen_resps[i]}\n")
             f.write(f"\n")
+    logger.info(f"Save {mode}, Epoch: {str(epoch)}, generated results in {path}")
     return
 
 

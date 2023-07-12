@@ -178,3 +178,7 @@ def process_augment_rag_sample(args, raw_data, tokenizer=None, mode='train', goa
 
 if __name__=='__main__':
     main()
+
+"""
+python rag_new.py --gpu=3 --lr=2e-6 --num_epochs=15 --log_name="All_typeAllKnowIdx_lr2e-6_onlyDialog" --use_test_knows_index ; python rag_new.py --gpu=0 --lr=1e-7 --num_epochs=15 --log_name="All_typeAllKnowIdx_lr1e-7_onlyDialog" --use_test_knows_index
+"""
