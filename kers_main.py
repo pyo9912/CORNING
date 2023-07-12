@@ -28,12 +28,11 @@ def add_kers_specific_args(parser):
     parser.add_argument("--TopicTask_Train_Prompt_usePredGoal", action='store_true', help="Topic prediction시 Predicted goal 사용여부 (Train)")
     parser.add_argument("--TopicTask_Test_Prompt_usePredGoal", action='store_true', help="Topic prediction시 Predicted goal 사용여부 (Test)")
     parser.add_argument("--gtpred", action='store_true', help="Goal-Topic prediction 해서 label로 추가 할지 여부")
-    parser.add_argument("--usePseudoTrain", action='store_true', help="Pseudo label을 label로 사용할지 여부 (Train)")
-    parser.add_argument("--usePseudoTest", action='store_true', help="Pseudo label을 label로 사용할지 여부 (Test)")
+    parser.add_argument("--usePseudoTrain", action='store_true', help="Knowledge Pseudo label을 label로 사용할지 여부 (Train)")
+    parser.add_argument("--usePseudoTest", action='store_true', help="Knowledge Pseudo label을 label로 사용할지 여부 (Test)")
 
     parser.add_argument("--inputWithKnowledge", action='store_true', help="Input으로 Dialog 외의 정보들도 줄지 여부")
     parser.add_argument("--inputWithTopic", action='store_true', help="Input에 Topic도 넣어줄지 여부")
-    parser.add_argument("--shuffle_pseudo", action='store_true', help="Pseudo knowledge에 대해 shuffle할지 여부")
 
     return parser
 
@@ -47,11 +46,12 @@ def main():
     args = parser.parse_args()
     args.method = 'kers'
     args.model_name = 'kers'
-    args.gtpred = True
-    args.max_length = 256  # BERT
+    args.gt_max_length = 256  # HJ: Goal Topic max length -> goal,topic best model이 max len 256 으로 학습되어있음
+    args.gtpred = True  # HJ: goal topic prediction 수행하고 진행을 default로 하도록
+    # args.max_length = 256 # BERT
     args.max_gen_length = 256  # knowledge comment들어간경우 무진장 긺
-    args.shuffle_pseudo = True
-    # args.usePseudoTrain, args.usePseudoTest = True, False # 230711 TH: Train은 Pseudo_label, Test는 Gold_label이 우리 상황과 맞는것
+    # args.debug=False
+    # args.usePseudoTrain, args.usePseudoTest = True, False # 230711 TH: Train은 Pseudo_label, Test는 Gold_label이 우리 상황
 
     args = utils.dir_init(args)
     initLogging(args)
@@ -84,7 +84,7 @@ def main():
     all_knowledgeDB = list(all_knowledgeDB)
 
     train_dataset_aug, test_dataset_aug = None, None
-    # -- For Knowledge Retrieve Task --#
+    # -- Predicted goal, topic -- #
     if args.gtpred or not os.path.exists(os.path.join(args.data_dir, 'pred_aug', 'kers_train_gt_pred_auged_dataset.pkl')):
         logger.info(f"Create Predicted augmented dataset in {os.path.join(args.data_dir, 'pred_aug', 'kers_train_gt_pred_auged_dataset.pkl')}")
         # train_dataset_resp = data_utils.process_augment_all_sample(train_dataset_raw)
@@ -93,6 +93,7 @@ def main():
         test_dataset_resp = data_utils.process_augment_sample(test_dataset_raw, goal_list=['Movie recommendation', 'POI recommendation', 'Music recommendation', 'Q&A', 'POI recommendation', 'Food recommendation'])
         train_dataset_aug, test_dataset_aug = mk_goal_topic_pred(args=args, aug_train_dataset=train_dataset_resp, aug_test_dataset=test_dataset_resp)
 
+    # -- For Knowledge Retrieve Task --#
     kers_knowledge_retrieve_task = True
     if kers_knowledge_retrieve_task:
         from transformers import BertTokenizer, BartForConditionalGeneration, BartTokenizer
@@ -126,27 +127,18 @@ def main():
         args.task = 'knowledge'
 
         log_args(args)
-        if args.shuffle_pseudo:
-            logger.info("Shuffle Pseudo knowledge order")
-            train_dataset_aug = pseudo_knowledge_shuffle(train_dataset_aug)
-            test_dataset_aug = pseudo_knowledge_shuffle(test_dataset_aug)
+
+        logger.info("**Shuffle Pseudo knowledge order**")
+        train_dataset_aug = pseudo_knowledge_shuffle(train_dataset_aug)
+        test_dataset_aug = pseudo_knowledge_shuffle(test_dataset_aug)
         logger.info(f'Input with knowledges: {args.inputWithKnowledge}, Input with topic: {args.inputWithTopic}')
         kers_knowledge_retrieve.train_test_pseudo_knowledge_bart(args, model, tokenizer, train_dataset_aug, test_dataset_aug, train_knowledgeDB, all_knowledgeDB)
-
-        # train_datamodel_resp = data_pseudo.GenerationDataset(args, train_dataset_resp, train_knowledge_seq_set, tokenizer, mode='train')
-        # test_datamodel_resp = data_pseudo.GenerationDataset(args, test_dataset_resp, train_knowledge_seq_set, tokenizer, mode='test')
-        #
-        # train_data_loader = DataLoader(train_datamodel_resp, batch_size=args.batch_size, shuffle=True)
-        # test_data_loader = DataLoader(test_datamodel_resp, batch_size=args.batch_size, shuffle=False)
-        #
-        # optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=5e-4, eps=5e-9)
-        # beam_temp = args.num_beams
-        # args.num_beams = 1
 
 
 def pseudo_knowledge_shuffle(dataset_aug):
     shuffled_dataset = deepcopy(dataset_aug)
     for data in shuffled_dataset:
+        data['candidate_knowledge_label'] = deepcopy(data['candidate_knowledges'][0])
         tmp = [[k, c] for k, c in zip(data['candidate_knowledges'], data['candidate_confidences'])]
         shuffle(tmp)
         data['candidate_knowledges'] = [i[0] for i in tmp]
@@ -312,3 +304,7 @@ def HitbyType(args, task_preds, task_labels, gold_goal):
 
 if __name__ == '__main__':
     main()
+
+"""
+python kers_main.py --TopicTask_Test_Prompt_usePredGoal --device=2 --inputWithKnowledge --gtpred --log_name="P_Goal_WithK_Train_PK_Test_GK_ShuffleK" --usePseudoTrain
+"""

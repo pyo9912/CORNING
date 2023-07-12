@@ -22,8 +22,8 @@ def train_test_pseudo_knowledge_bart(args, model, tokenizer, train_dataset_aug, 
     logger.info(f'Train aug dataset len: {len(train_dataset_aug)}, Train knowledge sequence len: {len(train_knowledge_seq_set)}')  # TH 230601
     logger.info(f'Test aug dataset len: {len(test_dataset_aug)}, Test knowledge sequence len: {len(test_knowledge_seq_set)}')  # TH 230601
 
-    train_datamodel_resp = GenerationDataset(args, train_dataset_aug, train_knowledge_seq_set, tokenizer, mode='train')
-    test_datamodel_resp = GenerationDataset(args, test_dataset_aug, train_knowledge_seq_set, tokenizer, mode='test')
+    train_datamodel_resp = KersKnowledgeDataset(args, train_dataset_aug, train_knowledge_seq_set, tokenizer, mode='train')
+    test_datamodel_resp = KersKnowledgeDataset(args, test_dataset_aug, train_knowledge_seq_set, tokenizer, mode='test')
     train_data_loader = DataLoader(train_datamodel_resp, batch_size=args.batch_size, shuffle=True)
     test_data_loader = DataLoader(test_datamodel_resp, batch_size=args.batch_size, shuffle=False)
 
@@ -59,11 +59,11 @@ def train_test_pseudo_knowledge_bart(args, model, tokenizer, train_dataset_aug, 
             optimizer.step()
             train_loss += loss.item()
             loss.detach()
-            # context_word, label_word, pred_word = decode_withBeam(args, model=model, tokenizer=tokenizer, input=dialog, label=pseudo_knowledge, num_beams=args.num_beams)
 
-            # context_words.extend(context_word)
-            # pred_words.extend(pred_word)
-            # label_words.extend(label_word)
+            context_word, label_word, pred_word = decode_withBeam(args, model=model, tokenizer=tokenizer, input=dialog, label=knowledge, num_beams=args.num_beams)
+            context_words.extend(context_word)
+            pred_words.extend(pred_word)
+            label_words.extend(label_word)
 
         # print(train_loss, f", New Knowledge Count in Train: {sum(new_knows)}")
         # p, r, f = know_f1_score(args, pred_words, label_words)
@@ -75,7 +75,7 @@ def train_test_pseudo_knowledge_bart(args, model, tokenizer, train_dataset_aug, 
         # # logger.info(f'Epoch_{epoch} Train loss: {train_loss}, Samples: {len(context_words)}')
         # # logger.info(f"Epoch_{epoch}_{args.data_mode} Knowledge P/R/F1/Hit@1/Hit@{args.num_beams}: {p}, {r}, {f}, {hit1}, {hit3}, {hit5} \t Train loss: {train_loss}, Samples: {len(context_words)}")
         # logger.info(f"Epoch_{epoch}_{args.data_mode} Knowledge Hit@1/Hit@3/Hit@5: {hit1}, {hit3}, {hit5} \t Train loss: {train_loss:.3f}, Samples: {len(context_words)}")
-        # save_preds(args, context_words, pred_words, label_words, epoch)
+        save_preds(args, context_words, pred_words, label_words, epoch)
 
         args.data_mode = 'test'
         model.eval()
@@ -94,7 +94,7 @@ def train_test_pseudo_knowledge_bart(args, model, tokenizer, train_dataset_aug, 
                 loss = outputs.loss
                 test_loss += loss.item()
                 # HJ: Beam 사이즈 조절하여 decode할 수 있도록 코드 수정 (train, test) model, tokenizer, input, label, num_beams
-                context_word, label_word, pred_word = decode_withBeam(args, model=model, tokenizer=tokenizer, input=dialog, label=knowledge, num_beams=args.num_beams)
+                context_word, label_word, pred_word = decode_withBeam(args, model=model, tokenizer=tokenizer, input=dialog, label=knowledge, num_beams=args.num_beams, istrain=False)
 
                 context_words.extend(context_word)
                 pred_words.extend(pred_word)
@@ -111,23 +111,26 @@ def train_test_pseudo_knowledge_bart(args, model, tokenizer, train_dataset_aug, 
         logger.info(f'Epoch_{epoch} Test loss: {test_loss}, Samples: {len(context_words)}')
         logger.info(f"Epoch_{epoch}_{args.data_mode}  Knowledge     Hit@1/Hit@3/Hit@5: {hit1}, {hit3}, {hit5} \t ")
         logger.info(f"Epoch_{epoch}_{args.data_mode}  New Knowledge Hit@1/Hit@3/Hit@5: {hit1_new}, {hit3_new}, {hit5_new} \t New Knowledge Count: {sum(new_knows)}")
-        save_preds(args, context_words, pred_words, label_words, epoch, new_knows)
+        save_preds(args, context_words, pred_words, label_words, epoch, new_knows, )
 
 
-def decode_withBeam(args, model, tokenizer, input, label, num_beams=1):
+def decode_withBeam(args, model, tokenizer, input, label, num_beams=1, istrain=True):
     # TODO : beam 2 이상에서 debug 필요
-    context_word = tokenizer.batch_decode(input)
-    label_word = tokenizer.batch_decode(label)
-    summary_ids = model.generate(input, num_return_sequences=num_beams, num_beams=num_beams, min_length=0, max_length=args.max_gen_length, early_stopping=True)
-    pred_words = tokenizer.batch_decode(summary_ids)
-    if num_beams > 1:
-        output = [pred_words[i * num_beams:(i + 1) * num_beams] for i in range(len(input))]
+    context_word = tokenizer.batch_decode(input, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+    label_word = tokenizer.batch_decode(label, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+    if not istrain:
+        summary_ids = model.generate(input, num_return_sequences=num_beams, num_beams=num_beams, min_length=0, max_length=args.max_gen_length, early_stopping=True)
+        pred_words = tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        if num_beams > 1:
+            output = [pred_words[i * num_beams:(i + 1) * num_beams] for i in range(len(input))]
+        else:
+            output = pred_words
     else:
-        output = pred_words
+        output = ["Train Not decode For fast" for i in context_word]
     return context_word, label_word, output
 
 
-class GenerationDataset(Dataset):  # knowledge용 데이터셋
+class KersKnowledgeDataset(Dataset):  # knowledge용 데이터셋
     def __init__(self, args, data_sample, train_knowledge_seq_set, tokenizer, mode='train'):
         super(Dataset, self).__init__()
         self.args = args
@@ -146,6 +149,7 @@ class GenerationDataset(Dataset):  # knowledge용 데이터셋
         cbdicKeys = [ \
             'dialog', 'user_profile', 'situation', 'response', 'goal', 'last_goal', 'topic', 'target_knowledge', 'candidate_knowledges', 'predicted_goal', 'predicted_topic']
         dialog, user_profile, situation, response, type, last_type, topic, target_knowledge, candidate_knowledges, predicted_goal, predicted_topic = [data[i] for i in cbdicKeys]
+        candidate_knowledge_label = data['candidate_knowledge_label']
         pad_token_id = self.tokenizer.pad_token_id
         type = data['predicted_goal'][0]
         context_batch = defaultdict()
@@ -187,7 +191,7 @@ class GenerationDataset(Dataset):  # knowledge용 데이터셋
                 input = input + type_token + last_type_token
 
         # Train시 label: pseudo knowledge top 1
-        pseudo_label = self.tokenizer('<knowledge>' + candidate_knowledges[0], max_length=self.args.max_gen_length, padding='max_length', truncation=True).input_ids
+        pseudo_label = self.tokenizer('<knowledge>' + candidate_knowledge_label, max_length=self.args.max_gen_length, padding='max_length', truncation=True).input_ids
         # Test시 label: gold knowledge
         label = self.tokenizer('<knowledge>' + target_knowledge, max_length=self.args.max_gen_length, padding='max_length', truncation=True).input_ids
 
