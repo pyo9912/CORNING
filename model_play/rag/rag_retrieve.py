@@ -143,8 +143,7 @@ def save_preds(args, context, pred_words, label_words, epoch=None, new_knows=Non
     # HJ: 동일 파일 덮어쓰면서 맨 윗줄에 몇번째 에폭인지만 쓰도록 수정
     log_file_name = mode + f'{str(epoch)}_'+ args.log_name + '.txt'
     path = os.path.join(args.output_dir, log_file_name)
-    if not os.path.exists(path): os.makedirs(path)
-    print(f"Save {mode}, Epoch: {str(epoch)}, generated results in {path}")
+    # if not os.path.exists(path): os.makedirs(path)
     with open(path , 'w' ,encoding='utf-8') as f:
         f.write(f"{mode}, Epoch: {str(epoch)} Input and Output results {args.time}\n")
         f.write(f"Log File Name: {args.log_name} \n")
@@ -157,6 +156,7 @@ def save_preds(args, context, pred_words, label_words, epoch=None, new_knows=Non
             f.write(f"Real Response: {real_resp[i]}\n")
             if gen_resps: f.write(f"Gen Response: {gen_resps[i]}\n")
             f.write(f"\n")
+    print(f"Save {mode}, Epoch: {str(epoch)}, generated results in {path}")
     return
 
 
