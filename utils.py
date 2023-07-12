@@ -310,6 +310,7 @@ def dir_init(default_args):
 
     checkPath(args.data_dir, args.saved_model_path, args.log_dir)
     checkPath(os.path.join(args.data_dir, 'pred_aug'))
+    checkPath(os.path.join(args.output_dir))
     # args.usebart = True
     # args.bert_cache_name = os.path.join(args.home, "cache", args.kencoder_name)
     return args
