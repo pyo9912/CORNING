@@ -221,7 +221,7 @@ def default_parser(parser):
     parser.add_argument("--subtask", default='topic', type=str, help="Choose the task")
     parser.add_argument('--goal_list', default='Movie_Music_POI_QA_Food_Chat', type=str, help="input goal type")
     parser.add_argument("--data_dir", default='data', type=str, help="The data directory.")
-    parser.add_argument('--bert_name', default='./bert-base-uncased', type=str, help="BERT Model Name")
+    parser.add_argument('--bert_name', default='bert-base-uncased', type=str, help="BERT Model Name")
     parser.add_argument('--bart_name', default='facebook/bart-base', type=str, help="BERT Model Name")
     parser.add_argument('--gpt_name', default='gpt2', type=str, help="BERT Model Name")
 

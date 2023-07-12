@@ -41,7 +41,6 @@ def main(args=None):
     # default_args.debug=True
 
     args = parser.parse_args()
-    # args.usePseudoTrain, args.usePseudoTest = True, False # 230711 TH: Train은 Pseudo_label, Test는 Gold_label이 우리 상황과 맞는것
 
     args = utils.dir_init(args)
     initLogging(args)
@@ -49,7 +48,7 @@ def main(args=None):
 
     if args.TopicTask_Train_Prompt_usePredGoal and not args.TopicTask_Test_Prompt_usePredGoal: logger.info("Default Topic_pred Task 는 Train에 p_goal, Test에 g_goal 써야해")
 
-    print(args)
+    logger.info(args)
 
     logger.info("Model Call")
     bert_model = AutoModel.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
