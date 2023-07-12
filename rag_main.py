@@ -16,9 +16,11 @@ from functools import partial
 """
 
 def add_rag_specific_args(parser):
+    parser.add_argument("--input_dialog", type=str, default="dialog", help=" Method ")
     parser.add_argument("--method", type=str, default="rag", help=" Method ")
     parser.add_argument("--rag_retrieve_input_length", type=int, default=768, help=" Method ")
     parser.add_argument("--rag_batch_size", type=int, default=4, help=" Method ")
+    parser.add_argument("--rag_max_target_length", type=int, default=128, help=" Method ")
     parser.add_argument("--rag_num_beams", type=int, default=5, help=" Method ")
     parser.add_argument("--rag_epochs", type=int, default=10, help=" Method ")
     # parser.add_argument("--TopicTask_Train_Prompt_usePredGoal", action='store_true', help="Topic prediction시 Predicted goal 사용여부 (Train)")
@@ -120,8 +122,8 @@ def main():
     logger.info(model.config)
     log_args(args)
 
-    train_dataset_aug = data_utils.process_augment_sample(args, train_dataset_raw, tokenizer)
-    test_dataset_aug = data_utils.process_augment_sample(args, test_dataset_raw, tokenizer)
+    train_dataset_aug = process_augment_rag_sample(args, train_dataset_raw, tokenizer, mode='train',goal_types=['Q&A', 'Movie recommendation','Music recommendation', 'POI recommendation','Food recommendation'])
+    test_dataset_aug = process_augment_rag_sample(args, test_dataset_raw, tokenizer, mode='test',goal_types=['Q&A', 'Movie recommendation','Music recommendation', 'POI recommendation','Food recommendation'])
     rag_retrieve.train_retrieve(args, model, tokenizer, train_dataset_aug, test_dataset_aug, train_knowledge_seq_set, faiss_dataset=faiss_dataset)
     # train_Dataset = data_model.GenerationDataset(args, train_dataset_aug, train_knowledge_seq_set, tokenizer, mode='train')
     # test_Dataset = data_model.GenerationDataset(args, test_dataset_aug, train_knowledge_seq_set, tokenizer, mode='test')
@@ -130,7 +132,48 @@ def main():
     # optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.1, eps=5e-9)
 
 
-
+def process_augment_rag_sample(args, raw_data, tokenizer=None, mode='train', goal_types=['Q&A', 'Movie recommendation','Music recommendation', 'POI recommendation','Food recommendation']):
+    from tqdm import tqdm
+    from copy import deepcopy
+    train_sample = []
+    logger.info(f"{mode} Data Goal types: {goal_types}")
+    if tokenizer:
+        try:
+            if tokenizer.eos_token is not None: eos_token = tokenizer.eos_token
+            else: eos_token = tokenizer.sep_token
+        except:
+            eos_token = tokenizer.generator.eos_token
+    else:
+        eos_token='</s>'
+    for ij in tqdm(range(len(raw_data)), desc="Dataset Augment", bar_format='{l_bar} | {bar:23} {r_bar}'):
+        conversation = raw_data[ij]
+        augmented_dialog = []
+        augmented_knowledge = []
+        last_type=""
+        for i in range(len(conversation['dialog'])):
+            role = conversation['role_seq'][i]
+            utterance = conversation['dialog'][i] + eos_token
+            goal = conversation['goal'][i]
+            # if goal == 'Movie recommendation' or goal == 'POI recommendation' or goal == 'Music recommendation' or goal == 'Q&A': # TH 230601
+            # if goal == 'Q&A': # QA에 대해서만 볼 때
+            if goal in goal_types:
+                if role == 'System' and len(augmented_dialog) > 0 and len(conversation['pseudo_knowledge_seq'][i]) != 0: # Test 3360 Setting
+                    flatten_dialog = ''.join(augmented_dialog)
+                    train_sample.append({'dialog': flatten_dialog,
+                                         'user_profile': conversation['user_profile'],
+                                         'response': utterance,
+                                         'goal': conversation['goal'][i],
+                                         'last_goal': conversation['goal'][i-1],
+                                         'topic': conversation['topic'][i],
+                                         'situation': conversation['situation'],
+                                         'target_knowledge': conversation['knowledge_seq'][i],
+                                         'candidate_knowledges': conversation['pseudo_knowledge_seq'][i],
+                                         'candidate_confidences': conversation['pseudo_confidence_seq'][i]  # prob
+                                         })
+            if role=='system': last_type = conversation['goal'][i]
+            augmented_dialog.append(utterance)
+            augmented_knowledge.append(conversation['knowledge_seq'][i])
+    return train_sample
 
 
 if __name__=='__main__':

@@ -90,7 +90,7 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, epoch, faiss_data
     torch.cuda.empty_cache()
     contexts, label_gold_knowledges, label_pseudo_knowledges, top5_docs, real_resps, gen_resp, new_knows = [], [], [], [], [], [], []
     types = []
-    for batch in tqdm(data_loader, desc=f"Epoch {epoch}__{args.data_mode}", bar_format=' {l_bar} | {bar:23} {r_bar}'):
+    for batch in tqdm(data_loader, desc=f"Epoch {epoch}__{mode}", bar_format=' {l_bar} | {bar:23} {r_bar}'):
         source_ids, source_mask, target_ids = batch["input_ids"].to(args.device), batch["attention_mask"].to(args.device), batch["labels"].to(args.device)
         ### lm_labels = target_ids # response == target_ids ### decoder_input_ids = target_ids[:, :-1].contiguous() ### lm_labels = target_ids[:, 1:].clone()
         outputs = model(input_ids=source_ids,
@@ -110,7 +110,7 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, epoch, faiss_data
 
         knowledge_gold_label = batch['knowledge_task_label']
         knowledge_pseudo_label = batch['knowledge_task_pseudo_label']
-        batch_types = batch['type']
+        batch_types = batch['goal']
 
         batch_top5_docs = [faiss_dataset[i]['text'] for i in retrieved_docs_pt]
         top5_docs.extend(batch_top5_docs)
@@ -134,14 +134,13 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, epoch, faiss_data
     # print(f"{mode} New_Knowledge hit / hit_k: {hit1_new}, {hit3_new}, {hit5_new}")
     # knowledge_task_label, knowledge_task_pseudo_label, is_new_knowledge
     print(f"{mode} Loss: {epoch_loss}")
-    save_preds(args, contexts, top5_docs, label_gold_knowledges, epoch=epoch, new_knows=new_knows, real_resp=real_resps, gen_resps=gen_resp)
+    save_preds(args, contexts, top5_docs, label_gold_knowledges, epoch=epoch, new_knows=new_knows, real_resp=real_resps, gen_resps=gen_resp, mode=mode)
     return hitDic, hitdic_ratio, output_str #output_strings, hit1_ratio, total_hit1, total_hit3, total_hit5, total_hit1_new, total_hit3_new, total_hit5_new
 
     return
 
-def save_preds(args, context, pred_words, label_words, epoch=None, new_knows=None, real_resp=None, gen_resps=None):
+def save_preds(args, context, pred_words, label_words, epoch=None, new_knows=None, real_resp=None, gen_resps=None, mode='train'):
     # HJ: 동일 파일 덮어쓰면서 맨 윗줄에 몇번째 에폭인지만 쓰도록 수정
-    mode = args.data_mode
     log_file_name = mode + f'{str(epoch)}_'+ args.log_name + '.txt'
     path = os.path.join(args.output_dir, log_file_name)
     print(f"Save {mode}, Epoch: {str(epoch)}, generated results in {path}")
@@ -224,8 +223,8 @@ class RAG_KnowledgeDataset(Dataset):  # knowledge용 데이터셋
 
     def __getitem__(self, idx):  # TODO 구현 전
         data = self.augmented_raw_sample[idx]
-        cbdicKeys = ['dialog', 'user_profile', 'situation', 'response', 'type', 'last_type', 'topic', 'related_knowledges', 'augmented_knowledges', 'target_knowledge', 'candidate_knowledges']
-        dialog, user_profile, situation, response, type, last_type, topic, related_knowledges, augmented_knowledges, target_knowledge, candidate_knowledges = [data[i] for i in cbdicKeys]
+        cbdicKeys = ['dialog', 'user_profile', 'situation', 'response', 'goal', 'last_goal', 'topic',  'target_knowledge', 'candidate_knowledges']
+        dialog, user_profile, situation, response, type, last_type, topic,  target_knowledge, candidate_knowledges = [data[i] for i in cbdicKeys]
 
         # Pad source and target to the right
         source_tokenizer = (self.tokenizer.question_encoder if isinstance(self.tokenizer, RagTokenizer) else self.tokenizer)
@@ -246,11 +245,11 @@ class RAG_KnowledgeDataset(Dataset):  # knowledge용 데이터셋
         #     input = source_tokenizer('<dialog>' + dialog, max_length=self.args.max_length - len(type_token)-len(last_type_token) ,padding='max_length' ,truncation=True).input_ids
         #     input = input + type_token + last_type_token
 
-        if 'topic' in self.args.input_dialog and 'type' in self.args.input_dialog:
+        if 'topic' in self.args.input_dialog and 'goal' in self.args.input_dialog:
             input_dialog = dialog + "<type>" + type + " <topic>" + topic
         elif 'topic' in self.args.input_dialog:
             input_dialog = dialog + " <topic>" + topic
-        elif 'type' in self.args.input_dialog:
+        elif 'goal' in self.args.input_dialog:
             input_dialog = dialog + "<type>" + type
         else:
             input_dialog = dialog
@@ -261,7 +260,7 @@ class RAG_KnowledgeDataset(Dataset):  # knowledge용 데이터셋
 
         input_ids = torch.LongTensor(input)
         input_masks = torch.LongTensor(input_mask)
-        target_ids = torch.LongTensor(target_tokenizer(response, max_length=self.args.max_target_length, padding='max_length', truncation=True).input_ids)
+        target_ids = torch.LongTensor(target_tokenizer(response, max_length=self.args.rag_max_target_length, padding='max_length', truncation=True).input_ids)
         # response 만 target_tokenizer로 토크나이징
         # label = source_tokenizer(target_knowledge, max_length=self.args.max_gen_length, padding='max_length', truncation=True).input_ids
         # pseudo_label = source_tokenizer(candidate_knowledges[0], max_length=self.args.max_gen_length, padding='max_length', truncation=True).input_ids
@@ -269,7 +268,7 @@ class RAG_KnowledgeDataset(Dataset):  # knowledge용 데이터셋
             "input_ids": input_ids,
             "attention_mask": input_masks,
             "labels": target_ids,  # response
-            'type': type,
+            'goal': type,
             'knowledge_task_label': target_knowledge,
             'knowledge_task_pseudo_label': candidate_knowledges[0],
             # 'knowledge_task_label': torch.LongTensor(label), # tensor
