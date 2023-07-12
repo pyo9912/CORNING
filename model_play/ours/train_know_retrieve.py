@@ -12,7 +12,7 @@ from utils import *
 import logging
 import numpy as np
 from loguru import logger
-
+import os
 
 def update_key_bert(key_bert, query_bert):
     logger.info('update moving average')
@@ -144,8 +144,7 @@ def train_know(args, train_dataloader, test_dataloader, retriever, knowledge_dat
             best_hit_chat = hit_chat_result
             best_hit_food = hit_food_result
 
-            if args.stage == 'retrieve':
-                torch.save(retriever.state_dict(), os.path.join(args.model_dir, f"{args.model_name}_retriever.pt"))  # TIME_MODELNAME 형식
+            torch.save(retriever.state_dict(), os.path.join(args.model_dir, f"{args.model_name}_retriever.pt"))  # TIME_MODELNAME 형식
 
             # best_hit_chat = hit_chat_result
 
