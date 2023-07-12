@@ -9,6 +9,8 @@ import faiss
 from datasets import Features, Sequence, Value, load_dataset, list_datasets
 from model_play.rag import rag_retrieve
 from functools import partial
+import torch
+from models.ours.retriever import Retriever
 """
 1. 원본 dataset read
 2. knowledge retrieve task 수행 및 평가, output저장
@@ -36,7 +38,7 @@ def add_rag_specific_args(parser):
     return parser
 
 
-def main():
+def main(our_tokenizer=None, our_question_encoder=None, our_ctx_encoder=None):
     parser = argparse.ArgumentParser(description="kers_main.py")
     parser = utils.default_parser(parser)
     parser = add_rag_specific_args(parser)
@@ -46,6 +48,7 @@ def main():
     # args.max_length = 256 # BERT
     args.max_gen_length = 256  # knowledge comment들어간경우 무진장 긺
     # args.debug=False
+    if args.debug: args.rag_batch_size = 1
     # args.usePseudoTrain, args.usePseudoTest = True, False # 230711 TH: Train은 Pseudo_label, Test는 Gold_label이 우리 상황
 
     args = utils.dir_init(args)
@@ -96,6 +99,9 @@ def main():
     utils.checkPath(MODEL_CACHE_DIR)
     ctx_encoder = DPRContextEncoder.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR).to(device=args.device)
     ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR)
+    if our_ctx_encoder and our_tokenizer:
+        ctx_encoder.ctx_encoder.bert_model = our_ctx_encoder
+        ctx_tokenizer = our_tokenizer
     new_features = Features({"text": Value("string"), "title": Value("string"), "embeddings": Sequence(Value("float32"))})  # optional, save as float32 instead of float64 to save space
 
     logger.info("Create Knowledge Dataset")
@@ -117,7 +123,14 @@ def main():
     retriever.set_ctx_encoder_tokenizer(ctx_tokenizer)
     model = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever).to(args.device)
     tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
-    model.set_context_encoder_for_training(ctx_encoder)
+    if our_tokenizer and our_question_encoder :
+        # retriever.generator_tokenizer = our_tokenizer
+        retriever.question_encoder_tokenizer = our_tokenizer
+        # model.retriever.question_encoder_tokenizer
+        model.question_encoder.question_encoder.bert_model = our_question_encoder
+        model.question_encoder.question_encoder.base_model = our_question_encoder
+        pass
+    else: model.set_context_encoder_for_training(ctx_encoder)
 
     logger.info(model.config)
     log_args(args)
@@ -177,8 +190,13 @@ def process_augment_rag_sample(args, raw_data, tokenizer=None, mode='train', goa
 
 
 if __name__=='__main__':
+    ## TEMP For our
+    # retriever = Retriever(args, bert_model)  # eval_goal_topic_model 함수에서 goal, topic load해서 쓸것임
+    # retriever.to(args.device)
+    # retriever = retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"topic_best_model_GP.pt"), map_location=args.device))
     main()
 
 """
-python rag_new.py --gpu=3 --lr=2e-6 --num_epochs=15 --log_name="All_typeAllKnowIdx_lr2e-6_onlyDialog" --use_test_knows_index ; python rag_new.py --gpu=0 --lr=1e-7 --num_epochs=15 --log_name="All_typeAllKnowIdx_lr1e-7_onlyDialog" --use_test_knows_index
+python rag_main.py --gpu=3 --lr=1e-6 --num_epochs=15 --log_name="All_typeAllKnowIdx_lr1e-6_onlyDialog" --use_test_knows_index 
+python rag_main.py --gpu=2 --lr=5e-7 --num_epochs=15 --log_name="All_typeAllKnowIdx_lr5e-7_onlyDialog" --use_test_knows_index
 """

@@ -39,9 +39,9 @@ def embed(documents: dict, ctx_encoder: DPRContextEncoder, ctx_tokenizer: DPRCon
 
 
 def index_update(args, model=None, dataset=None):
+    MODEL_CACHE_DIR=os.path.join(args.home, 'model_cache', "facebook/dpr-ctx_encoder-multiset-base")
     if model: ctx_encoder = model.rag.ctx_encoder
     else:
-        MODEL_CACHE_DIR=os.path.join(args.home, 'model_cache', "facebook/dpr-ctx_encoder-multiset-base")
         ctx_encoder = DPRContextEncoder.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR).to(device=args.device)
     ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR)
     ctx_encoder = ctx_encoder.to(device=args.device)
