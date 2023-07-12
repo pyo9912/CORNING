@@ -55,7 +55,7 @@ def main(args=None):
     args.bert_name = 'bert-base-uncased'
 
     # args.task = 'know' # 'goal_topic'
-    args.debug = False
+    # args.debug = False
     args.task = 'know'  # 'goal_topic'
     print(args)
 
