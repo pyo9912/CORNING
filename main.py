@@ -41,9 +41,6 @@ def main(args=None):
     # default_args.debug=True
 
     args = parser.parse_args()
-    args.method = 'ours'
-    args.model_name = 'my_retriever'
-    args.gt_max_length = 256  # BERT
     # args.usePseudoTrain, args.usePseudoTest = True, False # 230711 TH: Train은 Pseudo_label, Test는 Gold_label이 우리 상황과 맞는것
 
     args = utils.dir_init(args)
@@ -51,11 +48,7 @@ def main(args=None):
     log_args(args)
 
     if args.TopicTask_Train_Prompt_usePredGoal and not args.TopicTask_Test_Prompt_usePredGoal: logger.info("Default Topic_pred Task 는 Train에 p_goal, Test에 g_goal 써야해")
-    args.num_epochs = 25
-    args.bert_name = 'bert-base-uncased'
 
-    # args.task = 'know' # 'goal_topic'
-    args.task = 'know'  # 'goal_topic'
     print(args)
 
     logger.info("Model Call")
