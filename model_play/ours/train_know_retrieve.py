@@ -70,11 +70,13 @@ def train_know(args, train_dataloader, test_dataloader, retriever, knowledge_dat
             for idx in range(args.pseudo_pos_rank):
                 # confidence = torch.softmax(pseudo_confidences[:, :idx + 1], dim=-1)
                 # g_logit = torch.sum(logit_pos[:, :idx + 1] * pseudo_confidences_mask[:, :idx + 1], dim=-1) / (torch.sum(pseudo_confidences_mask[:, :idx + 1], dim=-1) + 1e-20)
-                g_logit = cumsum_logit[:, idx] / (idx + 1)
+                if args.train_ablation == 'S':
+                    g_logit = logit_pos[:, idx]  # For Sampling
+                if args.train_ablation == 'RG':
+                    g_logit = cumsum_logit[:, idx] / (idx + 1) # For GCL!!!!!!! (our best)
                 # g_logit = cumsum_logit[:, idx] / batch_denominator[:, idx]
 
                 # g_logit = cumsum_logit[:, idx] / num_samples[:, idx]
-                # g_logit = cumsum_logit[:, idx]  # For Sampling
                 g_logit = torch.cat([g_logit.unsqueeze(1), logit_neg], dim=1)
                 loss += (-torch.log_softmax(g_logit, dim=1).select(dim=1, index=0)).mean()
 

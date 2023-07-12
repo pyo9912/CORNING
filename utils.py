@@ -290,8 +290,8 @@ def dir_init(default_args):
     if sysChecker() == 'Linux':
         pass  # HJ KT-server
     elif sysChecker() == "Windows":
-        args.batch_size, args.num_epochs = 4, 2
-        args.debug = True
+        # args.batch_size, args.num_epochs = 4, 2
+        # args.debug = True
         pass  # HJ local
     else:
         raise Exception("Check Your Platform Setting (Linux-Server or Windows)")
