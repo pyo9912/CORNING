@@ -47,7 +47,7 @@ def main():
     args.method = 'kers'
     args.model_name = 'kers'
     args.gt_max_length = 256  # HJ: Goal Topic max length -> goal,topic best model이 max len 256 으로 학습되어있음
-    args.gtpred = True  # HJ: goal topic prediction 수행하고 진행을 default로 하도록
+    args.gtpred = True  # HJ: goal topic prediction 수행하고 진행을 default로 하도록 진행순서 변경
     # args.max_length = 256 # BERT
     args.max_gen_length = 256  # knowledge comment들어간경우 무진장 긺
     # args.debug=False
