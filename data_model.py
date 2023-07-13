@@ -25,14 +25,14 @@ class GenerationDataset(Dataset):
     goal, topic, 용 dataset
     """
 
-    def __init__(self, args, data_sample, knowledgeDB, tokenizer, mode='train', subtask='response'):
+    def __init__(self, args, data_sample, knowledgeDB, tokenizer, mode='train', subtask='resp'):
         super(Dataset, self).__init__()
         self.args = args
         self.tokenizer = tokenizer
         self.knowledgeDB = knowledgeDB
         self.augmented_raw_sample = data_sample
         self.mode = mode  # train , test
-        self.subtask = subtask  # goal , topic
+        self.subtask = subtask  # goal , topic, resp
         self.generate_prompt_ids = self.tokenizer.convert_tokens_to_ids(self.tokenizer.tokenize('System:'))
         self.idxList = deque(maxlen=len(self.augmented_raw_sample))
         self.TopicTask_Train_Prompt_usePredGoal = args.TopicTask_Train_Prompt_usePredGoal
@@ -64,18 +64,28 @@ class GenerationDataset(Dataset):
         elif self.subtask == 'goal':
             prefix = self.tokenizer.encode('<profile>%s.' % user_profile)[:int(self.args.gt_max_length * 2 / 3)]
             prompt = self.tokenizer.encode('predict the next goal: ')
+        elif self.subtask == 'resp': # predicted_goal, predicted_topic
+            predicted_goal = data['predicted_goal'][0]
+            predicted_topic = data['predicted_topic'][0]
+            prefix = self.tokenizer.encode('<goal>%s. <topic>%s. ' % (predicted_goal, predicted_topic))[:int(self.args.gt_max_length * 2 / 3)]
+            prompt = self.tokenizer.encode('predict the next response: ')
         else:
             prefix, prompt = [], []
 
         ## Dialog input 관련
         # dialog = self.tokenizer('<dialog>' + dialog, max_length=self.args.gt_max_length - len(prompt), truncation=True).input_ids
-        dialog = self.tokenizer('<dialog>' + dialog).input_ids[-(self.args.gt_max_length - len(prefix) - len(prompt)):]
+        if self.subtask in ['goal','topic']:
+            dialog = self.tokenizer('<dialog>' + dialog).input_ids[-(self.args.gt_max_length - len(prefix) - len(prompt)):]
+        else: # 'resp
+            dialog = self.tokenizer('<dialog>' + dialog).input_ids[-(self.args.gt_max_length - len(prefix) - len(prompt)):] #TODO: args.resp_max_length 처리 필요
         dialog = prefix + dialog + prompt
 
         if self.subtask == 'goal':
             label = self.tokenizer(goal, max_length=self.args.max_gen_length, truncation=True, padding='max_length').input_ids
         elif self.subtask == 'topic':
             label = self.tokenizer(topic, max_length=self.args.max_gen_length, truncation=True, padding='max_length').input_ids
+        elif self.subtask == 'resp':
+            label = self.tokenizer(response, max_length=self.args.max_gen_length, truncation=True, padding='max_length').input_ids
 
         context_ids = dialog
         context_ids = context_ids[-self.args.gt_max_length:]

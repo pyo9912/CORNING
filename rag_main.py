@@ -197,6 +197,6 @@ if __name__=='__main__':
     main()
 
 """
-python rag_main.py --gpu=3 --lr=1e-6 --num_epochs=15 --log_name="All_typeAllKnowIdx_lr1e-6_onlyDialog" --use_test_knows_index 
-python rag_main.py --gpu=2 --lr=5e-7 --num_epochs=15 --log_name="All_typeAllKnowIdx_lr5e-7_onlyDialog" --use_test_knows_index
+python rag_main.py --gpu=3 --lr=1e-6 --num_epochs=15 --log_name="All_typeAllKnowIdx_lr1e-6_onlyDialog" --use_test_knows_index --rag_batch_size=2
+python rag_main.py --gpu=2 --lr=5e-7 --num_epochs=15 --log_name="All_typeAllKnowIdx_lr5e-7_onlyDialog" --use_test_knows_index --rag_batch_size=2
 """
