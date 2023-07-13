@@ -83,10 +83,7 @@ def main(our_args, our_tokenizer=None, our_question_encoder=None, our_ctx_encode
     train_knowledgeDB = list(train_knowledgeDB)
     all_knowledgeDB = list(all_knowledgeDB)
 
-    if args.use_test_knows_index:
-        knowledgeDB_list = list(all_knowledgeDB)
-    else:
-        knowledgeDB_list = train_knowledgeDB
+    knowledgeDB_list = list(all_knowledgeDB) # Use All Knowledge
     logger.info(f"Length of Knowledge DB: {len(knowledgeDB_list)}")
     assert isinstance(knowledgeDB_list, list)
 
@@ -126,6 +123,7 @@ def main(our_args, our_tokenizer=None, our_question_encoder=None, our_ctx_encode
     # faiss_dataset.add_faiss_index(column='embeddings', index_name = 'embeddings', custom_index=index, faiss_verbose=True)
     print(f"Length of Knowledge knowledge_DB : {len(faiss_dataset)}")
 
+    ### MODEL CALL
     retriever = RagRetriever.from_pretrained('facebook/rag-sequence-nq', index_name='custom', indexed_dataset=faiss_dataset, init_retrieval=True)
     # retriever.set_ctx_encoder_tokenizer(ctx_tokenizer) # NO TOUCH
     model = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever).to(args.device)
@@ -139,21 +137,15 @@ def main(our_args, our_tokenizer=None, our_question_encoder=None, our_ctx_encode
     logger.info(model.config)
     log_args(args)
 
-    # if 'know' in our_args.task:
-    #     ## For our - Retrieve task
-    #     # train_dataset_aug = process_augment_rag_sample(args, train_dataset_raw, tokenizer, mode='train',goal_types=['Q&A', 'Movie recommendation','Music recommendation', 'POI recommendation','Food recommendation'])
-    #     # test_dataset_aug = process_augment_rag_sample(args, test_dataset_raw, tokenizer, mode='test',goal_types=['Q&A', 'Movie recommendation','Music recommendation', 'POI recommendation','Food recommendation'])
-    #     rag_retrieve.train_retrieve(args, model, tokenizer, train_dataset_aug_pred, test_dataset_aug_pred, train_knowledge_seq_set, faiss_dataset=faiss_dataset)
 
     train_dataset_aug_pred = utils.read_pkl(os.path.join(our_args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
     test_dataset_aug_pred = utils.read_pkl(os.path.join(our_args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
-    train_Dataset = data_model.RagDataset(args, train_dataset_aug_pred, tokenizer)
-    test_Dataset = data_model.RagDataset(args, test_dataset_aug_pred, tokenizer)
+    train_Dataset = data_model.RagDataset(args, train_dataset_aug_pred, tokenizer, all_knowledgeDB, mode='train')
+    test_Dataset = data_model.RagDataset(args, test_dataset_aug_pred, tokenizer, all_knowledgeDB, mode='test')
 
     # For our retrieve-generator task
     train_our_rag_retrieve(args, model, tokenizer, train_dataset_aug=None, test_dataset_aug=None, train_knowledge_seq_set=train_knowledge_seq_set, faiss_dataset=faiss_dataset \
                            , train_Dataset=train_Dataset, test_Dataset=test_Dataset)
-    # TODO: Dialog Dataset을 쓸지, Generation Dataset을 쓸지 등등 결정필요
 
 
 def train_our_rag_retrieve(args, model, tokenizer, train_dataset_aug=None, test_dataset_aug=None, train_knowledge_seq_set=None, faiss_dataset=None, train_Dataset=None, test_Dataset=None):
@@ -173,14 +165,14 @@ def train_our_rag_retrieve(args, model, tokenizer, train_dataset_aug=None, test_
     logger.info(f"Logging Epoch results:                      hit@1, hit@3, hit@5, hit_new@1, hit_new@3, hit_new@5")
     for epoch in range(args.rag_epochs):
         # mode='train'
-        model.train()
-        hitDic, hitdic_ratio, output_str = epoch_play(args, tokenizer, model, train_dataloader, optimizer, epoch, faiss_dataset, 'train')
-        # if epoch < 4:
-        #     model_play.rag.rag_retrieve.index_update(args, model, faiss_dataset)
+
+        # model.train()
+        # hitDic, hitdic_ratio, output_str = epoch_play(args, tokenizer, model, train_dataloader, optimizer, epoch, faiss_dataset, mode = 'train')
+
 
         model.eval()
         with torch.no_grad():
-            hitDic, hitdic_ratio, output_str = epoch_play(args, tokenizer, model, test_dataloader, optimizer, epoch, faiss_dataset, 'test')
+            hitDic, hitdic_ratio, output_str = epoch_play(args, tokenizer, model, test_dataloader, optimizer, epoch, faiss_dataset, mode='test')
             if best_hitdic_ratio['total']['hit1'] <= hitdic_ratio['total']['hit1']:
                 best_hitdic_ratio = hitdic_ratio
                 best_hitdic_str = output_str
@@ -191,6 +183,7 @@ def train_our_rag_retrieve(args, model, tokenizer, train_dataset_aug=None, test_
 
 def epoch_play(args, tokenizer, model, data_loader, optimizer, epoch, faiss_dataset, mode='train'):
     from tqdm import tqdm
+    # data_loader
     epoch_loss = 0
     torch.cuda.empty_cache()
     contexts, label_gold_knowledges, label_pseudo_knowledges, top5_docs, real_resps, gen_resp, new_knows = [], [], [], [], [], [], []
@@ -213,22 +206,23 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, epoch, faiss_data
             optimizer.step()
             loss.detach()
 
-        knowledge_gold_label = batch['knowledge_task_label']
-        knowledge_pseudo_label = batch['knowledge_task_pseudo_label']
-        batch_types = batch['goal']
+        knowledge_gold_label = batch['target_knowledge_label']
+        # knowledge_pseudo_label = batch['knowledge_task_pseudo_label']
+        batch_types = [args.goalDic['int'][idx] for idx in batch['goal_idx']]
+
 
         batch_top5_docs = [faiss_dataset[i]['text'] for i in retrieved_docs_pt]
         top5_docs.extend(batch_top5_docs)
-        new_knows.extend([int(i) for i in batch['is_new_knowledge']])
+        # new_knows.extend([int(i) for i in batch['is_new_knowledge']])
         contexts.extend(tokenizer.question_encoder.batch_decode(source_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True))
         real_resps.extend(tokenizer.generator.batch_decode(target_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True))
         label_gold_knowledges.extend(knowledge_gold_label)
-        label_pseudo_knowledges.extend(knowledge_pseudo_label)
+        # label_pseudo_knowledges.extend(knowledge_pseudo_label)
         types.extend(batch_types)
 
-        if (mode == 'test' or epoch % 5 == 0) and epoch > 1:
+        if mode == 'test' :
             resp_batch = tokenizer.generator.batch_decode(
-                model.generate(source_ids, min_length=0, max_length=args.max_gen_length, early_stopping=True), skip_special_tokens=True, clean_up_tokenization_spaces=True)
+                model.generate(source_ids, min_length=0, max_length=args.rag_max_target_length, early_stopping=True), skip_special_tokens=True, clean_up_tokenization_spaces=True)
             gen_resp.extend(resp_batch)
 
     # hit1, hit3, hit5, hit1_new, hit3_new, hit5_new = utils.know_hit_ratio(args, pred_pt=top5_docs, gold_pt=label_gold_knowledges, new_knows=new_knows, types=types)
