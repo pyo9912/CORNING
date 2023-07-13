@@ -183,10 +183,40 @@ def main(args=None):
 
     logger.info("Finish Data Augment with Goal-Topic_pred_conf")
 
+    if "dsi" in args.task:
+        make_dsi_input(args.output_dir, train_dataset_raw, input_setting='dialog', knowledgeDB=all_knowledgeDB, mode='train')
+        make_dsi_input(args.output_dir, test_dataset_raw, input_setting='dialog', knowledgeDB=all_knowledgeDB, mode='test')
+
+
     if 'know' in args.task:
         train_know_retrieve.train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB, bert_model, tokenizer)
         # train_know_retrieve.train_know(args, train_dataloader, valid_dataloader, retriever, train_knowledge_data, train_knowledgeDB, all_knowledge_data, all_knowledgeDB, tokenizer)
         # eval_know_retrieve.eval_know(args, test_dataloader, retriever, all_knowledge_data, all_knowledgeDB, tokenizer, write=False)  # HJ: Knowledge text top-k 뽑아서 output만들어 체크하던 코드 분리
+
+
+def make_dsi_input(save_dir, dataset_raw, input_setting='dialog', knowledgeDB=[], mode='train'):
+    class TEMPTokenizer:
+        def __init__(self): self.eos_token = '</s>'
+    knowledge_dic = {k: i for i, k in enumerate(knowledgeDB)}
+    lines = []
+    tokenizer = TEMPTokenizer()
+    auged_dataset = process_augment_sample(dataset_raw, tokenizer=tokenizer)
+    for data in auged_dataset:
+        dialog = data['dialog']
+        response = data['response']
+        target_knowledge = data['candidate_knowledges'][0]
+        input = ""
+        if "dialog" in input_setting: input += dialog
+        if "goal" in input_setting: input += f"<goal> {data['goal']} "  ## Gold goal
+        if 'topic' in input_setting: input += f"<topic> {data['topic']} "  ## Gold topic
+
+        lines.append({input: knowledge_dic[target_knowledge]})
+
+    with open(os.path.join(save_dir, f"mgcrs_{mode}_dataset.json"), 'w', encoding='utf-8') as f:
+        f.write(json.dumps(lines))
+    with open(os.path.join(save_dir, f"mgcrs_allknowledges.json"), 'w', encoding='utf-8') as f:
+        f.write(json.dumps(knowledge_dic))
+    return
 
 
 def split_validation(train_dataset_raw, train_ratio=1.0):
