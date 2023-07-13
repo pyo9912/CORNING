@@ -133,6 +133,7 @@ def main(our_args, our_tokenizer=None, our_question_encoder=None, our_ctx_encode
         # model.retriever.question_encoder_tokenizer
         model.question_encoder.question_encoder.bert_model = our_question_encoder
         model.question_encoder.question_encoder.base_model = our_question_encoder
+        model.resize_token_embeddings(len(tokenizer))
         pass
     else: model.set_context_encoder_for_training(ctx_encoder)
 
@@ -210,7 +211,7 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, epoch, faiss_data
         retrieved_docs_pt = outputs.retrieved_doc_ids.data
         loss = outputs['loss'].mean()
         epoch_loss += loss.item()
-
+        #question_encoder.
         if mode == 'train':
             optimizer.zero_grad()
             loss.backward()
