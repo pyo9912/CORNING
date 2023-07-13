@@ -198,10 +198,9 @@ def make_dsi_input(save_dir, dataset_raw, input_setting='dialog', knowledgeDB=[]
     class TEMPTokenizer:
         def __init__(self): self.eos_token = '</s>'
     knowledge_dic = {k: i for i, k in enumerate(knowledgeDB)}
-    eos_token = "</s>"
     lines = []
     tokenizer = TEMPTokenizer()
-    auged_dataset = process_augment_sample(dataset_raw, tokenizer=tokenizer, eos_token=eos_token)
+    auged_dataset = process_augment_sample(dataset_raw, tokenizer=tokenizer)
     for data in auged_dataset:
         dialog = data['dialog']
         response = data['response']
