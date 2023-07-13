@@ -4,6 +4,7 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from data_model_know import KnowledgeDataset
 from utils import write_pkl, save_json
 import numpy as np
 import pickle
@@ -37,7 +38,7 @@ def knowledge_reindexing(args, knowledge_data, retriever, stage):
     return knowledge_index
 
 
-def eval_know(args, test_dataloader, retriever, knowledge_data, knowledgeDB, tokenizer, write=None, retrieve=None, data_type='test'):
+def eval_know(args, test_dataloader, retriever, knowledgeDB, tokenizer, write=None, retrieve=None, data_type='test'):
     logger.info(args.stage)
     retriever.eval()
     # Read knowledge DB
@@ -47,6 +48,7 @@ def eval_know(args, test_dataloader, retriever, knowledge_data, knowledgeDB, tok
     # bert_model = bert_model.to(args.device)
     new_cnt = 0
     logger.info('Knowledge indexing for test')
+    knowledge_data = KnowledgeDataset(args, knowledgeDB, tokenizer)  # knowledge dataset class
 
     knowledge_index_rerank = knowledge_reindexing(args, knowledge_data, retriever, stage='rerank')
     knowledge_index_rerank = knowledge_index_rerank.to(args.device)

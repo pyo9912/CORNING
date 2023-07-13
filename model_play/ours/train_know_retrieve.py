@@ -5,6 +5,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torch import optim
 # from data_temp import DialogDataset_TEMP
+from data_model_know import KnowledgeDataset, DialogDataset
+from data_utils import process_augment_sample
 from model_play.ours.eval_know_retrieve import knowledge_reindexing, eval_know  #### Check
 from metric import EarlyStopping
 from utils import *
@@ -23,7 +25,57 @@ def update_key_bert(key_bert, query_bert):
         ma_params.data = decay * old_weight + (1 - decay) * up_weight
 
 
-def train_know(args, train_dataloader, test_dataloader, retriever, knowledge_data, knowledgeDB, all_knowledge_data, all_knowledgeDB, tokenizer):
+def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB, bert_model, tokenizer):
+    # bert_model = AutoModel.from_pretrained(args.bert_name, cache_dir=os.path.join("cache", args.bert_name))
+    args.know_ablation = 'target'
+    # KNOWLEDGE TASk
+    from models.ours.retriever import Retriever
+    retriever = Retriever(args, bert_model)
+
+    # if args.saved_model_path != '':
+    #     retriever.load_state_dict(torch.load(os.path.join(args.model_dir, f"{args.saved_model_path}.pt"), map_location=args.device))
+
+    retriever = retriever.to(args.device)
+    # train_knowledge_data = KnowledgeDataset(args, train_knowledgeDB, tokenizer)  # knowledge dataset class
+    goal_list = []
+    if 'Movie' in args.goal_list: goal_list.append('Movie recommendation')
+    if 'POI' in args.goal_list: goal_list.append('POI recommendation')
+    if 'Music' in args.goal_list: goal_list.append('Music recommendation')
+    if 'QA' in args.goal_list: goal_list.append('Q&A')
+    if 'Food' in args.goal_list: goal_list.append('Food recommendation')
+    # if 'Chat' in args.goal_list:  goal_list.append('Chat about stars')
+    logger.info(f" Goal List in Knowledge Task : {args.goal_list}")
+
+    # train_dataset_raw, valid_dataset_raw = split_validation(train_dataset_raw, args.train_ratio)
+    train_dataset = process_augment_sample(train_dataset_raw, tokenizer, train_knowledgeDB, goal_list=goal_list)
+    valid_dataset = process_augment_sample(valid_dataset_raw, tokenizer, all_knowledgeDB, goal_list=goal_list)
+    test_dataset = process_augment_sample(test_dataset_raw, tokenizer, all_knowledgeDB, goal_list=goal_list)  # gold-topic
+
+    train_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
+    train_dataset_pred_aug = [data for data in train_dataset_pred_aug if data['target_knowledge'] != '' and data['goal'] in goal_list]
+    for idx, data in enumerate(train_dataset):
+        data['predicted_goal'] = train_dataset_pred_aug[idx]['predicted_goal']
+        data['predicted_topic'] = train_dataset_pred_aug[idx]['predicted_topic']
+        data['predicted_topic_confidence'] = train_dataset_pred_aug[idx]['predicted_topic_confidence']
+
+    # test_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
+    # test_dataset_pred_aug = [data for data in test_dataset_pred_aug if data['target_knowledge'] != '' and data['goal'] in goal_list]
+    #
+    # for idx, data in enumerate(test_dataset):
+    #     data['predicted_goal'] = test_dataset_pred_aug[idx]['predicted_goal']
+    #     data['predicted_topic'] = test_dataset_pred_aug[idx]['predicted_topic']
+
+    test_dataset = read_pkl(os.path.join(args.data_dir, 'pred_aug', "gt_test_pred_aug_dataset.pkl"))
+
+    train_datamodel_know = DialogDataset(args, train_dataset, train_knowledgeDB, train_knowledgeDB, tokenizer, mode='train', task='know')
+    valid_datamodel_know = DialogDataset(args, valid_dataset, all_knowledgeDB, train_knowledgeDB, tokenizer, mode='test', task='know')
+    test_datamodel_know = DialogDataset(args, test_dataset, all_knowledgeDB, train_knowledgeDB, tokenizer, mode='test', task='know')
+
+    train_dataloader = DataLoader(train_datamodel_know, batch_size=args.batch_size, shuffle=True)
+    train_dataloader_retrieve = DataLoader(train_datamodel_know, batch_size=args.batch_size, shuffle=False)
+    valid_dataloader = DataLoader(test_datamodel_know, batch_size=args.batch_size, shuffle=False)
+    test_dataloader = DataLoader(test_datamodel_know, batch_size=1, shuffle=False)
+
     criterion = torch.nn.CrossEntropyLoss(reduction='none', ignore_index=0)
     optimizer = optim.AdamW(retriever.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_dc_step, gamma=args.lr_dc)
@@ -63,7 +115,8 @@ def train_know(args, train_dataloader, test_dataloader, retriever, knowledge_dat
                 # logit = retriever.compute_know_score(dialog_token, dialog_mask, knowledge_index, goal_idx)
                 logit_pos, logit_neg = retriever.knowledge_retrieve(dialog_token, dialog_mask, candidate_indice, candidate_knowledge_token, candidate_knowledge_mask)  # [B, 2]
                 logit = torch.cat([logit_pos, logit_neg], dim=-1)
-                loss = torch.mean(criterion(logit, target_knowledge_idx[:, 0]))  # For MLP predict
+                loss = (-torch.log_softmax(logit, dim=1).select(dim=1, index=0)).mean()
+
             else:
                 logit_pos, logit_neg = retriever.knowledge_retrieve(dialog_token, dialog_mask, candidate_indice, candidate_knowledge_token, candidate_knowledge_mask)  # [B, 2]
                 cumsum_logit = torch.cumsum(logit_pos, dim=1)  # [B, K]  # Grouping
@@ -96,13 +149,9 @@ def train_know(args, train_dataloader, test_dataloader, retriever, knowledge_dat
         #     knowledge_index = knowledge_reindexing(args, knowledge_data, retriever)
         #     knowledge_index = knowledge_index.to(args.device)
 
-        knowledge_index = knowledge_reindexing(args, knowledge_data, retriever, args.stage)
-        knowledge_index = knowledge_index.to(args.device)
-        # retriever.init_know_proj(knowledge_index)
-
         logger.info(f"Epoch: {epoch}\nTrain Loss: {train_epoch_loss}")
 
-        hit1, hit3, hit5, hit10, hit20, hit_movie_result, hit_music_result, hit_qa_result, hit_poi_result, hit_food_result, hit_chat_result, hit1_new, hit3_new, hit5_new, hit10_new, hit20_new = eval_know(args, test_dataloader, retriever, all_knowledge_data, all_knowledgeDB,
+        hit1, hit3, hit5, hit10, hit20, hit_movie_result, hit_music_result, hit_qa_result, hit_poi_result, hit_food_result, hit_chat_result, hit1_new, hit3_new, hit5_new, hit10_new, hit20_new = eval_know(args, test_dataloader, retriever, all_knowledgeDB,
                                                                                                                                                                                                             tokenizer)  # HJ: Knowledge text top-k 뽑아서 output만들어 체크하던 코드 분리
 
         logger.info("Results")

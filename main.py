@@ -9,7 +9,8 @@ from data_utils import *
 from utils import *
 from config import *
 from models.ours.retriever import Retriever  # KEMGCRS
-from data_model import GenerationDataset, DialogDataset, KnowledgeDataset
+from data_model import GenerationDataset
+from data_model_know import DialogDataset, KnowledgeDataset
 from rank_bm25 import BM25Okapi
 from model_play.ours.train_bert_goal_topic import train_goal_topic_bert, pred_goal_topic_aug, eval_goal_topic_model
 from model_play.ours import train_know_retrieve, eval_know_retrieve
@@ -183,59 +184,9 @@ def main(args=None):
     logger.info("Finish Data Augment with Goal-Topic_pred_conf")
 
     if 'know' in args.task:
-        # bert_model = AutoModel.from_pretrained(args.bert_name, cache_dir=os.path.join("cache", args.bert_name))
-
-        # KNOWLEDGE TASk
-        retriever = Retriever(args, bert_model)
-
-        # if args.saved_model_path != '':
-        #     retriever.load_state_dict(torch.load(os.path.join(args.model_dir, f"{args.saved_model_path}.pt"), map_location=args.device))
-
-        retriever = retriever.to(args.device)
-        train_knowledge_data = KnowledgeDataset(args, train_knowledgeDB, tokenizer)  # knowledge dataset class
-        all_knowledge_data = KnowledgeDataset(args, all_knowledgeDB, tokenizer)  # knowledge dataset class
-
-        goal_list = []
-        if 'Movie' in args.goal_list: goal_list.append('Movie recommendation')
-        if 'POI' in args.goal_list: goal_list.append('POI recommendation')
-        if 'Music' in args.goal_list: goal_list.append('Music recommendation')
-        if 'QA' in args.goal_list: goal_list.append('Q&A')
-        if 'Food' in args.goal_list: goal_list.append('Food recommendation')
-        # if 'Chat' in args.goal_list:  goal_list.append('Chat about stars')
-        logger.info(f" Goal List in Knowledge Task : {args.goal_list}")
-
-        # train_dataset_raw, valid_dataset_raw = split_validation(train_dataset_raw, args.train_ratio)
-        train_dataset = process_augment_sample(train_dataset_raw, tokenizer, train_knowledgeDB, goal_list=goal_list)
-        valid_dataset = process_augment_sample(valid_dataset_raw, tokenizer, all_knowledgeDB, goal_list=goal_list)
-        test_dataset = process_augment_sample(test_dataset_raw, tokenizer, all_knowledgeDB, goal_list=goal_list)  # gold-topic
-
-        train_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
-        train_dataset_pred_aug = [data for data in train_dataset_pred_aug if data['target_knowledge'] != '' and data['goal'] in goal_list]
-        for idx, data in enumerate(train_dataset):
-            data['predicted_goal'] = train_dataset_pred_aug[idx]['predicted_goal']
-            data['predicted_topic'] = train_dataset_pred_aug[idx]['predicted_topic']
-            data['predicted_topic_confidence'] = train_dataset_pred_aug[idx]['predicted_topic_confidence']
-
-        # test_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
-        # test_dataset_pred_aug = [data for data in test_dataset_pred_aug if data['target_knowledge'] != '' and data['goal'] in goal_list]
-        #
-        # for idx, data in enumerate(test_dataset):
-        #     data['predicted_goal'] = test_dataset_pred_aug[idx]['predicted_goal']
-        #     data['predicted_topic'] = test_dataset_pred_aug[idx]['predicted_topic']
-
-        test_dataset = read_pkl(os.path.join(args.data_dir, 'pred_aug', "gt_test_pred_aug_dataset.pkl"))
-
-        train_datamodel_know = DialogDataset(args, train_dataset, train_knowledgeDB, train_knowledgeDB, tokenizer, mode='train', task='know')
-        valid_datamodel_know = DialogDataset(args, valid_dataset, all_knowledgeDB, train_knowledgeDB, tokenizer, mode='test', task='know')
-        test_datamodel_know = DialogDataset(args, test_dataset, all_knowledgeDB, train_knowledgeDB, tokenizer, mode='test', task='know')
-
-        train_dataloader = DataLoader(train_datamodel_know, batch_size=args.batch_size, shuffle=True)
-        train_dataloader_retrieve = DataLoader(train_datamodel_know, batch_size=args.batch_size, shuffle=False)
-        valid_dataloader = DataLoader(test_datamodel_know, batch_size=args.batch_size, shuffle=False)
-        test_dataloader = DataLoader(test_datamodel_know, batch_size=1, shuffle=False)
-
-        train_know_retrieve.train_know(args, train_dataloader, valid_dataloader, retriever, train_knowledge_data, train_knowledgeDB, all_knowledge_data, all_knowledgeDB, tokenizer)
-        eval_know_retrieve.eval_know(args, test_dataloader, retriever, all_knowledge_data, all_knowledgeDB, tokenizer, write=False)  # HJ: Knowledge text top-k 뽑아서 output만들어 체크하던 코드 분리
+        train_know_retrieve.train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB, bert_model, tokenizer)
+        # train_know_retrieve.train_know(args, train_dataloader, valid_dataloader, retriever, train_knowledge_data, train_knowledgeDB, all_knowledge_data, all_knowledgeDB, tokenizer)
+        # eval_know_retrieve.eval_know(args, test_dataloader, retriever, all_knowledge_data, all_knowledgeDB, tokenizer, write=False)  # HJ: Knowledge text top-k 뽑아서 output만들어 체크하던 코드 분리
 
 
 def split_validation(train_dataset_raw, train_ratio=1.0):
