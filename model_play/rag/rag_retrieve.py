@@ -155,58 +155,6 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, epoch, faiss_data
     save_preds(args, contexts, top5_docs, label_gold_knowledges, epoch=epoch, new_knows=new_knows, real_resp=real_resps, gen_resps=gen_resp, mode=mode)
     return hitDic, hitdic_ratio, output_str #output_strings, hit1_ratio, total_hit1, total_hit3, total_hit5, total_hit1_new, total_hit3_new, total_hit5_new
 
-def epoch_play_ForOurGenerationDataset(args, tokenizer, model, data_loader, optimizer, epoch, faiss_dataset, mode='train'):
-    epoch_loss = 0
-    torch.cuda.empty_cache()
-    contexts, label_gold_knowledges, label_pseudo_knowledges, top5_docs, real_resps, gen_resp, new_knows = [], [], [], [], [], [], []
-    types = []
-    for batch in tqdm(data_loader, desc=f"Epoch {epoch}__{mode}", bar_format=' {l_bar} | {bar:23} {r_bar}'):
-        source_ids, source_mask, target_ids = batch["input_ids"].to(args.device), batch["attention_mask"].to(args.device), batch["labels"].to(args.device)
-        ### lm_labels = target_ids # response == target_ids ### decoder_input_ids = target_ids[:, :-1].contiguous() ### lm_labels = target_ids[:, 1:].clone()
-        outputs = model(input_ids=source_ids,
-                        attention_mask=source_mask,
-                        labels=target_ids,  # target_ids = response
-                        output_retrieved=True)
-        # decoder_input_ids = decoder_input_ids,
-        retrieved_docs_pt = outputs.retrieved_doc_ids.data
-        loss = outputs['loss'].mean()
-        epoch_loss += loss.item()
-
-        if mode == 'train':
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            loss.detach()
-
-        knowledge_gold_label = batch['knowledge_task_label']
-        knowledge_pseudo_label = batch['knowledge_task_pseudo_label']
-        batch_types = batch['goal']
-
-        batch_top5_docs = [faiss_dataset[i]['text'] for i in retrieved_docs_pt]
-        top5_docs.extend(batch_top5_docs)
-        new_knows.extend([int(i) for i in batch['is_new_knowledge']])
-        contexts.extend(tokenizer.question_encoder.batch_decode(source_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True))
-        real_resps.extend(tokenizer.generator.batch_decode(target_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True))
-        label_gold_knowledges.extend(knowledge_gold_label)
-        label_pseudo_knowledges.extend(knowledge_pseudo_label)
-        types.extend(batch_types)
-
-        if (mode == 'test' or epoch % 5 == 0) and epoch > 1:
-            resp_batch = tokenizer.generator.batch_decode(
-                model.generate(source_ids, min_length=0, max_length=args.max_gen_length, early_stopping=True), skip_special_tokens=True, clean_up_tokenization_spaces=True)
-            gen_resp.extend(resp_batch)
-
-    # hit1, hit3, hit5, hit1_new, hit3_new, hit5_new = utils.know_hit_ratio(args, pred_pt=top5_docs, gold_pt=label_gold_knowledges, new_knows=new_knows, types=types)
-    hitDic = know_hit_ratio(args, pred_pt=top5_docs, gold_pt=label_gold_knowledges, new_knows=new_knows, types=types)
-    hitdic, hitdic_ratio, output_str = know_hit_ratio(args, pred_pt=top5_docs, gold_pt=label_gold_knowledges, new_knows=new_knows, types=types)
-    for i in output_str:
-        logger.info(f"{mode} {i}")
-    # print(f"{mode} New_Knowledge hit / hit_k: {hit1_new}, {hit3_new}, {hit5_new}")
-    # knowledge_task_label, knowledge_task_pseudo_label, is_new_knowledge
-    logger.info(f"{mode} Loss: {epoch_loss}")
-    save_preds(args, contexts, top5_docs, label_gold_knowledges, epoch=epoch, new_knows=new_knows, real_resp=real_resps, gen_resps=gen_resp, mode=mode)
-    return hitDic, hitdic_ratio, output_str #output_strings, hit1_ratio, total_hit1, total_hit3, total_hit5, total_hit1_new, total_hit3_new, total_hit5_new
-
 
 def save_preds(args, context, pred_words, label_words, epoch=None, new_knows=None, real_resp=None, gen_resps=None, mode='train'):
     # HJ: 동일 파일 덮어쓰면서 맨 윗줄에 몇번째 에폭인지만 쓰도록 수정
@@ -266,12 +214,20 @@ def know_hit_ratio(args, pred_pt, gold_pt, new_knows=None, types=None, typelist=
     hitdic_ratio = {goal_type: {'hit1': 0, 'hit3': 0, 'hit5': 0, 'hit1_new':0, 'hit3_new':0, 'hit5_new':0, 'total': 0} for goal_type in typelist + ["Others", 'total']}
     output_str = [f"                         hit1,  hit3,  hit5, hit1_new, hit3_new, hit5_new, total_cnt"]
     for key in hitdic.keys():
-        hitdic_ratio[key]['total'] = hitdic[key]['total']
-        if key=='total': continue
         for hit in ['hit1', 'hit3', 'hit5']:
-            if hitdic[key]['total'] > 0:
+            if hitdic[key]['total']:
                 hitdic_ratio[key][hit] = hitdic[key][hit] / hitdic[key]['total']
+        hitdic_ratio[key]['total'] = hitdic[key]['total']
         output_str.append(f"{key:^22}: {hitdic_ratio[key]['hit1']:.3f}, {hitdic_ratio[key]['hit3']:.3f}, {hitdic_ratio[key]['hit5']:.3f}, {hitdic_ratio[key]['total']}")
+    # for key in hitdic.keys():
+    #     hitdic_ratio[key]['total'] = hitdic[key]['total']
+    #     if key=='total': continue
+    #     for hit in ['hit1', 'hit3', 'hit5']:
+    #         if hitdic[key]['total'] > 0:
+    #             hitdic_ratio[key][hit] = hitdic[key][hit] / hitdic[key]['total']
+    #     output_str.append(f"{key:^22}: {hitdic_ratio[key]['hit1']:.3f}, {hitdic_ratio[key]['hit3']:.3f}, {hitdic_ratio[key]['hit5']:.3f}, {hitdic_ratio[key]['total']}")
+    # hitdic_ratio['total']['hit1'],hitdic_ratio['total']['hit3'], hitdic_ratio['total']['hit5'],
+    # output_str.append(f"{'total':^22}: {hitdic_ratio['total']['hit1']/hitdic_ratio['total']['total']:.3f}, {hitdic_ratio['total']['hit3']/hitdic_ratio['total']['total']:.3f}, {hitdic_ratio['total']['hit5']/hitdic_ratio['total']['total']:.3f}, {hitdic_ratio['total']['total']}")
     return hitdic, hitdic_ratio, output_str
 
 
