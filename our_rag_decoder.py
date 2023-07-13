@@ -27,6 +27,7 @@ def add_rag_specific_args(parser):
     parser.add_argument("--rag_retrieve_input_length", type=int, default=768, help=" Method ")
     parser.add_argument("--rag_batch_size", type=int, default=4, help=" Method ")
     parser.add_argument("--rag_max_target_length", type=int, default=128, help=" Method ")
+    parser.add_argument("--rag_max_input_length", type=int, default=128, help=" Method ")
     parser.add_argument("--rag_num_beams", type=int, default=5, help=" Method ")
     parser.add_argument("--rag_epochs", type=int, default=10, help=" Method ")
     # parser.add_argument("--TopicTask_Train_Prompt_usePredGoal", action='store_true', help="Topic prediction시 Predicted goal 사용여부 (Train)")
@@ -48,9 +49,9 @@ def main(our_args, our_tokenizer=None, our_question_encoder=None, our_ctx_encode
     parser = add_rag_specific_args(parser)
     # default_args.debug=True
     args = parser.parse_args()
-    args.model_name = 'kers'
+    # args.model_name = 'rag'
     # args.max_length = 256 # BERT
-    args.max_gen_length = 256  # knowledge comment들어간경우 무진장 긺
+    # args.max_gen_length = 256  # knowledge comment들어간경우 무진장 긺
     # args.debug=False
     if args.debug: args.rag_batch_size = 1
     # args.usePseudoTrain, args.usePseudoTest = True, False # 230711 TH: Train은 Pseudo_label, Test는 Gold_label이 우리 상황
@@ -138,26 +139,21 @@ def main(our_args, our_tokenizer=None, our_question_encoder=None, our_ctx_encode
     logger.info(model.config)
     log_args(args)
 
-    if 'know' in our_args.task:
-        ## For our - Retrieve task
-        train_dataset_aug_pred = utils.read_pkl(os.path.join(our_args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
-        test_dataset_aug_pred = utils.read_pkl(os.path.join(our_args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
-        # train_dataset_aug = process_augment_rag_sample(args, train_dataset_raw, tokenizer, mode='train',goal_types=['Q&A', 'Movie recommendation','Music recommendation', 'POI recommendation','Food recommendation'])
-        # test_dataset_aug = process_augment_rag_sample(args, test_dataset_raw, tokenizer, mode='test',goal_types=['Q&A', 'Movie recommendation','Music recommendation', 'POI recommendation','Food recommendation'])
-        rag_retrieve.train_retrieve(args, model, tokenizer, train_dataset_aug_pred, test_dataset_aug_pred, train_knowledge_seq_set, faiss_dataset=faiss_dataset)
+    # if 'know' in our_args.task:
+    #     ## For our - Retrieve task
+    #     # train_dataset_aug = process_augment_rag_sample(args, train_dataset_raw, tokenizer, mode='train',goal_types=['Q&A', 'Movie recommendation','Music recommendation', 'POI recommendation','Food recommendation'])
+    #     # test_dataset_aug = process_augment_rag_sample(args, test_dataset_raw, tokenizer, mode='test',goal_types=['Q&A', 'Movie recommendation','Music recommendation', 'POI recommendation','Food recommendation'])
+    #     rag_retrieve.train_retrieve(args, model, tokenizer, train_dataset_aug_pred, test_dataset_aug_pred, train_knowledge_seq_set, faiss_dataset=faiss_dataset)
+
+    train_dataset_aug_pred = utils.read_pkl(os.path.join(our_args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
+    test_dataset_aug_pred = utils.read_pkl(os.path.join(our_args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
+    train_Dataset = data_model.RagDataset(args, train_dataset_aug_pred, tokenizer)
+    test_Dataset = data_model.RagDataset(args, test_dataset_aug_pred, tokenizer)
 
     # For our retrieve-generator task
-    if 'resp' in our_args.task:
-        train_dataset_aug_pred = utils.read_pkl(os.path.join(our_args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
-        test_dataset_aug_pred = utils.read_pkl(os.path.join(our_args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
-        train_Dataset = data_model.GenerationDataset(our_args, train_dataset_aug_pred, train_knowledge_seq_set, our_tokenizer, mode='train', subtask='resp')
-        test_Dataset = data_model.GenerationDataset(our_args, test_dataset_aug_pred, train_knowledge_seq_set, our_tokenizer, mode='test', subtask='resp')
-        train_our_rag_retrieve(args, model, tokenizer, train_dataset_aug=None, test_dataset_aug=None, train_knowledge_seq_set=train_knowledge_seq_set, faiss_dataset=faiss_dataset \
-                               , train_Dataset=train_Dataset, test_Dataset=test_Dataset)
+    train_our_rag_retrieve(args, model, tokenizer, train_dataset_aug=None, test_dataset_aug=None, train_knowledge_seq_set=train_knowledge_seq_set, faiss_dataset=faiss_dataset \
+                           , train_Dataset=train_Dataset, test_Dataset=test_Dataset)
     # TODO: Dialog Dataset을 쓸지, Generation Dataset을 쓸지 등등 결정필요
-    # train_data_loader = DataLoader(train_Dataset, batch_size=args.batch_size, shuffle=True)
-    # test_data_loader = DataLoader(test_Dataset, batch_size=args.batch_size, shuffle=False)
-    # optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.1, eps=5e-9)
 
 
 def train_our_rag_retrieve(args, model, tokenizer, train_dataset_aug=None, test_dataset_aug=None, train_knowledge_seq_set=None, faiss_dataset=None, train_Dataset=None, test_Dataset=None):
@@ -179,8 +175,8 @@ def train_our_rag_retrieve(args, model, tokenizer, train_dataset_aug=None, test_
         # mode='train'
         model.train()
         hitDic, hitdic_ratio, output_str = epoch_play(args, tokenizer, model, train_dataloader, optimizer, epoch, faiss_dataset, 'train')
-        if epoch < 4:
-            model_play.rag.rag_retrieve.index_update(args, model, faiss_dataset)
+        # if epoch < 4:
+        #     model_play.rag.rag_retrieve.index_update(args, model, faiss_dataset)
 
         model.eval()
         with torch.no_grad():

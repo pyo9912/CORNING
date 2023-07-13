@@ -20,6 +20,64 @@ def truncationPadding(input_ids, max_length, prefix=[], suffix=[]):
     return input_ids + [0] * (max_length - len(input_ids))
 
 
+class RagDataset(Dataset):
+    def __init__(self, args, augmented_raw_sample, tokenizer):
+        super(Dataset, self).__init__()
+        self.args = args
+        self.tokenizer = tokenizer
+        self.augmented_raw_sample = augmented_raw_sample
+        self.input_max_length=args.rag_max_input_length
+        self.target_max_length=args.rag_max_target_length
+
+    def __getitem__(self, item):
+        data = self.augmented_raw_sample[item]
+        cbdicKeys = ['dialog', 'user_profile', 'response', 'goal', 'topic', 'situation', 'target_knowledge', 'candidate_knowledges', 'candidate_confidences']
+        dialog, user_profile, response, goal, topic, situation, target_knowledge, candidate_knowledges, candidate_confidences = [data[i] for i in cbdicKeys]
+
+        pad_token_id = self.tokenizer.pad_token_id if self.tokenizer.pad_token_id is not None else self.tokenizer.eos_token_id
+
+        context_batch = defaultdict()
+        predicted_topic_list = deepcopy(data['predicted_topic'][:self.args.topk_topic])
+
+        if self.mode == 'train':
+            # predicted_goal, predicted_topic = goal, topic
+            random.shuffle(predicted_topic_list)
+            predicted_goal, predicted_topic = data['predicted_goal'][0], '|'.join(predicted_topic_list)
+        else:
+            predicted_goal = data['predicted_goal'][0]
+            if data['predicted_topic_confidence'][0] > (1 - self.args.topic_conf):
+                predicted_topic = data['predicted_topic'][0]
+            else:
+                predicted_topic = '|'.join(predicted_topic_list)
+
+        prefix = '<topic>' + predicted_topic + self.tokenizer.sep_token
+
+        prefix_encoding = self.tokenizer.question_encoder.encode(prefix)[1:-1][:30]
+        input_sentence = self.tokenizer.question_encoder('<dialog>' + dialog, add_special_tokens=False).input_ids
+
+        input_sentence = [self.tokenizer.question_encoder.cls_token_id] + prefix_encoding + input_sentence[-(self.input_max_length - len(prefix_encoding) - 1):]
+        input_sentence = input_sentence + [pad_token_id] * (self.input_max_length - len(input_sentence))
+
+        context_batch['input_ids'] = torch.LongTensor(input_sentence).to(self.args.device)
+        attention_mask = context_batch['input_ids'].ne(pad_token_id)
+        context_batch['attention_mask'] = attention_mask
+        with self.tokenizer.as_target_tokenizer():
+            labels = self.tokenizer(response, max_length=self.target_max_length, padding='max_length', truncation=True)['input_ids']
+
+        context_batch['response'] = labels
+        context_batch['goal_idx'] = self.args.goalDic['str'][goal]  # index로 바꿈
+        context_batch['topic_idx'] = self.args.topicDic['str'][topic]  # index로 바꿈
+        context_batch['topic'] = self.tokenizer(topic, truncation=True, padding='max_length', max_length=32).input_ids
+
+        for k, v in context_batch.items():
+            if not isinstance(v, torch.Tensor):
+                context_batch[k] = torch.as_tensor(v, device=self.args.device)
+                # context_batch[k] = torch.as_tensor(v)
+        return context_batch
+
+    def __len__(self):
+        return len(self.augmented_raw_sample)
+
 class GenerationDataset(Dataset):
     """
     goal, topic, 용 dataset
