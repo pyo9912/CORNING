@@ -314,7 +314,12 @@ class DialogDataset(Dataset):
         # pseudo_positive = candidate_positives_idx[self.args.pseudo_pos_rank - 1]
 
         if self.args.know_ablation == 'target':
-            candidate_knowledges_pos = [target_knowledge_idx]
+            if target_knowledge_idx in candidate_knowledges_pos:
+                candidate_confidences_pos.remove(target_knowledge_idx)
+                candidate_confidences_pos.insert(0, target_knowledge_idx)
+            else:
+                candidate_confidences_pos.insert(0, target_knowledge_idx)
+                candidate_confidences_pos = candidate_confidences_pos[:self.args.pseudo_pos_num]
         candidate_indice = candidate_knowledges_pos + pseudo_negative  # [candidate_positives_idx[self.args.pseudo_pos_rank]]
 
         candidate_knowledge_text = [self.knowledgeDB[idx] for idx in candidate_indice]
