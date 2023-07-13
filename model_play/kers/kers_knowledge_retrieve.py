@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader, Dataset  # , RandomSampler, SequentialS
 from tqdm import tqdm
 from collections import defaultdict
 from loguru import logger
+from copy import deepcopy
 
 
 def train_test_pseudo_knowledge_bart(args, model, tokenizer, train_dataset_aug, test_dataset_aug, train_knowledge_seq_set, test_knowledge_seq_set):
@@ -147,13 +148,16 @@ class KersKnowledgeDataset(Dataset):  # knowledge용 데이터셋
         # cbdicKeys = ['dialog', 'user_profile', 'situation', 'response', 'goal', 'last_goal', 'topic', 'related_knowledges', 'augmented_knowledges', 'target_knowledge', 'candidate_knowledges']
         # dialog, user_profile, situation, response, type, last_type, topic, related_knowledges, augmented_knowledges, target_knowledge, candidate_knowledges = [data[i] for i in cbdicKeys]
         cbdicKeys = [ \
-            'dialog', 'user_profile', 'situation', 'response', 'goal', 'last_goal', 'topic', 'target_knowledge', 'candidate_knowledges', 'predicted_goal', 'predicted_topic']
+        'dialog', 'user_profile', 'situation', 'response', 'goal', 'last_goal', 'topic', 'target_knowledge', 'candidate_knowledges', 'predicted_goal', 'predicted_topic']
         dialog, user_profile, situation, response, type, last_type, topic, target_knowledge, candidate_knowledges, predicted_goal, predicted_topic = [data[i] for i in cbdicKeys]
         candidate_knowledge_label = data['candidate_knowledge_label']
         pad_token_id = self.tokenizer.pad_token_id
         type = data['predicted_goal'][0]
+
         context_batch = defaultdict()
 
+        if self.args.gtpred:
+            type, topic = data['predicted_goal'][0], data['predicted_topic'][0]
         # ## Related knowledge 범위 관련 세팅##
         # related_knowledge_text = ""
         # if self.args.n_candidate_knowledges > 0:  ## Pseudo related knowledge 줄 때 (약 60%로 정답포함)
