@@ -131,9 +131,10 @@ def main(our_args, our_tokenizer=None, our_question_encoder=None, our_ctx_encode
         # retriever.generator_tokenizer = our_tokenizer
         retriever.question_encoder_tokenizer = our_tokenizer
         # model.retriever.question_encoder_tokenizer
-        model.question_encoder.question_encoder.bert_model = our_question_encoder
-        model.question_encoder.question_encoder.base_model = our_question_encoder
-        model.resize_token_embeddings(len(tokenizer))
+        model.rag.question_encoder.question_encoder.bert_model = our_question_encoder
+        tokenizer.question_encoder = our_tokenizer
+        # model.question_encoder.question_encoder.bert_model = our_question_encoder # model.question_encoder.question_encoder.base_model = our_question_encoder
+        # model.resize_token_embeddings(len(tokenizer)) ## 구현안됨이슈
         pass
     else: model.set_context_encoder_for_training(ctx_encoder)
 
