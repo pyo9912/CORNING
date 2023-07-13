@@ -208,7 +208,7 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, epoch, faiss_data
 
         knowledge_gold_label = batch['target_knowledge_label']
         # knowledge_pseudo_label = batch['knowledge_task_pseudo_label']
-        batch_types = [args.goalDic['int'][idx] for idx in batch['goal_idx']]
+        batch_types = [args.goalDic['int'][int(idx)] for idx in batch['goal_idx']]
 
 
         batch_top5_docs = [faiss_dataset[i]['text'] for i in retrieved_docs_pt]
