@@ -123,20 +123,19 @@ def main(our_args, our_tokenizer=None, our_question_encoder=None, our_ctx_encode
     print(f"Length of Knowledge knowledge_DB : {len(faiss_dataset)}")
 
     retriever = RagRetriever.from_pretrained('facebook/rag-sequence-nq', index_name='custom', indexed_dataset=faiss_dataset, init_retrieval=True)
-    retriever.set_ctx_encoder_tokenizer(ctx_tokenizer)
+    # retriever.set_ctx_encoder_tokenizer(ctx_tokenizer) # NO TOUCH
     model = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever).to(args.device)
     tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
     if our_tokenizer and our_question_encoder :
         logger.info("model question_encoder changed by ours")
-        # retriever.generator_tokenizer = our_tokenizer
-        retriever.question_encoder_tokenizer = our_tokenizer
-        # model.retriever.question_encoder_tokenizer
         model.rag.question_encoder.question_encoder.bert_model = our_question_encoder
         tokenizer.question_encoder = our_tokenizer
+        # retriever.question_encoder_tokenizer = our_tokenizer
+        # model.retriever.question_encoder_tokenizer
         # model.question_encoder.question_encoder.bert_model = our_question_encoder # model.question_encoder.question_encoder.base_model = our_question_encoder
         # model.resize_token_embeddings(len(tokenizer)) ## 구현안됨이슈
         pass
-    else: model.set_context_encoder_for_training(ctx_encoder)
+
 
     logger.info(model.config)
     log_args(args)
