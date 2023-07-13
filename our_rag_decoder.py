@@ -308,7 +308,7 @@ if __name__ == '__main__':
     args.goal_num = len(goalDic['int'])
     args.taskDic = {'goal': goalDic, 'topic': topicDic}
     retriever = Retriever(args, bert_model)
-    retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"topic_best_model_GP.pt"), map_location=args.device))
+    retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"our_retriever.pt"), map_location=args.device))
 
     our_question_encoder = retriever.query_bert  # Knowledge text 처리를 위한 BERT
     our_ctx_encoder = retriever.rerank_bert
