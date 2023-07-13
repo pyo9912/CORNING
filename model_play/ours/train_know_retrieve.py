@@ -27,7 +27,7 @@ def update_key_bert(key_bert, query_bert):
 
 def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB, bert_model, tokenizer):
     # bert_model = AutoModel.from_pretrained(args.bert_name, cache_dir=os.path.join("cache", args.bert_name))
-    args.know_ablation = 'target'
+    # args.know_ablation = 'target'
     # KNOWLEDGE TASk
     from models.ours.retriever import Retriever
     retriever = Retriever(args, bert_model)

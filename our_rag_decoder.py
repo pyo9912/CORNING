@@ -20,6 +20,7 @@ import data_model
 3. RAG decoder 수행
 """
 
+
 def add_rag_specific_args(parser):
     parser.add_argument("--input_dialog", type=str, default="dialog", help=" Method ")
     parser.add_argument("--method", type=str, default="rag", help=" Method ")
@@ -57,7 +58,6 @@ def main(our_args, our_tokenizer=None, our_question_encoder=None, our_ctx_encode
     args = utils.dir_init(args)
     initLogging(args)
 
-
     topicDic = data_utils.readDic(os.path.join(args.data_dir, "topic2id.txt"))
     goalDic = data_utils.readDic(os.path.join(args.data_dir, "goal2id.txt"))
     args.topicDic = topicDic
@@ -66,9 +66,9 @@ def main(our_args, our_tokenizer=None, our_question_encoder=None, our_ctx_encode
     args.goal_num = len(goalDic['int'])
     args.taskDic = {'goal': goalDic, 'topic': topicDic}
 
-    train_dataset_raw, train_knowledge_seq_set, _= data_utils.dataset_reader(args, 'train')
-    dev_dataset_raw, dev_knowledge_seq_set,_  = data_utils.dataset_reader(args, 'dev')  # TH: 이거 dev_dataset_raw 가 아니라 train_dataset_raw 로 되어 있던데?? 230601
-    test_dataset_raw, test_knowledge_seq_set,_  = data_utils.dataset_reader(args, 'test')
+    train_dataset_raw, train_knowledge_seq_set, _ = data_utils.dataset_reader(args, 'train')
+    dev_dataset_raw, dev_knowledge_seq_set, _ = data_utils.dataset_reader(args, 'dev')  # TH: 이거 dev_dataset_raw 가 아니라 train_dataset_raw 로 되어 있던데?? 230601
+    test_dataset_raw, test_knowledge_seq_set, _ = data_utils.dataset_reader(args, 'test')
 
     logger.info("Knowledge DB 구축")
     train_knowledgeDB, all_knowledgeDB = set(), set()
@@ -81,15 +81,17 @@ def main(our_args, our_tokenizer=None, our_question_encoder=None, our_ctx_encode
     train_knowledgeDB = list(train_knowledgeDB)
     all_knowledgeDB = list(all_knowledgeDB)
 
-    if args.use_test_knows_index: knowledgeDB_list = list(all_knowledgeDB)
-    else: knowledgeDB_list = train_knowledgeDB
+    if args.use_test_knows_index:
+        knowledgeDB_list = list(all_knowledgeDB)
+    else:
+        knowledgeDB_list = train_knowledgeDB
     logger.info(f"Length of Knowledge DB: {len(knowledgeDB_list)}")
     assert isinstance(knowledgeDB_list, list)
 
     ## Create KnowledgeDB
     knowledgeDB_csv_path = os.path.join(args.data_dir, 'rag')  # HOME/data/2/rag/"train_knowledge.csv")
     utils.checkPath(knowledgeDB_csv_path)
-    knowledgeDB_csv_path = os.path.join(knowledgeDB_csv_path, f'my_knowledge_dataset_{args.gpu}'+ ('_debug.csv' if args.debug else '.csv'))
+    knowledgeDB_csv_path = os.path.join(knowledgeDB_csv_path, f'my_knowledge_dataset_{args.gpu}' + ('_debug.csv' if args.debug else '.csv'))
     args.knowledgeDB_csv_path = knowledgeDB_csv_path
     with open(knowledgeDB_csv_path, 'w', encoding='utf-8') as f:
         for know in knowledgeDB_list:
@@ -126,7 +128,7 @@ def main(our_args, our_tokenizer=None, our_question_encoder=None, our_ctx_encode
     retriever.set_ctx_encoder_tokenizer(ctx_tokenizer)
     model = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever).to(args.device)
     tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
-    if our_tokenizer and our_question_encoder :
+    if our_tokenizer and our_question_encoder:
         logger.info("model question_encoder changed by ours")
         # retriever.generator_tokenizer = our_tokenizer
         retriever.question_encoder_tokenizer = our_tokenizer
@@ -135,7 +137,8 @@ def main(our_args, our_tokenizer=None, our_question_encoder=None, our_ctx_encode
         model.question_encoder.question_encoder.base_model = our_question_encoder
         model.resize_token_embeddings(len(tokenizer))
         pass
-    else: model.set_context_encoder_for_training(ctx_encoder)
+    else:
+        model.set_context_encoder_for_training(ctx_encoder)
 
     logger.info(model.config)
     log_args(args)
@@ -150,16 +153,17 @@ def main(our_args, our_tokenizer=None, our_question_encoder=None, our_ctx_encode
 
     # For our retrieve-generator task
     if 'resp' in our_args.task:
-        train_dataset_aug_pred=utils.read_pkl(os.path.join(our_args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
-        test_dataset_aug_pred=utils.read_pkl(os.path.join(our_args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
+        train_dataset_aug_pred = utils.read_pkl(os.path.join(our_args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
+        test_dataset_aug_pred = utils.read_pkl(os.path.join(our_args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
         train_Dataset = data_model.GenerationDataset(our_args, train_dataset_aug_pred, train_knowledge_seq_set, our_tokenizer, mode='train', subtask='resp')
         test_Dataset = data_model.GenerationDataset(our_args, test_dataset_aug_pred, train_knowledge_seq_set, our_tokenizer, mode='test', subtask='resp')
-        train_our_rag_retrieve(args, model, tokenizer, train_dataset_aug=None, test_dataset_aug=None, train_knowledge_seq_set=train_knowledge_seq_set, faiss_dataset=faiss_dataset\
-                                    , train_Dataset=train_Dataset, test_Dataset=test_Dataset)
+        train_our_rag_retrieve(args, model, tokenizer, train_dataset_aug=None, test_dataset_aug=None, train_knowledge_seq_set=train_knowledge_seq_set, faiss_dataset=faiss_dataset \
+                               , train_Dataset=train_Dataset, test_Dataset=test_Dataset)
     # TODO: Dialog Dataset을 쓸지, Generation Dataset을 쓸지 등등 결정필요
     # train_data_loader = DataLoader(train_Dataset, batch_size=args.batch_size, shuffle=True)
     # test_data_loader = DataLoader(test_Dataset, batch_size=args.batch_size, shuffle=False)
     # optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.1, eps=5e-9)
+
 
 def train_our_rag_retrieve(args, model, tokenizer, train_dataset_aug=None, test_dataset_aug=None, train_knowledge_seq_set=None, faiss_dataset=None, train_Dataset=None, test_Dataset=None):
     from torch.utils.data import DataLoader
@@ -173,14 +177,14 @@ def train_our_rag_retrieve(args, model, tokenizer, train_dataset_aug=None, test_
         train_dataloader = DataLoader(train_Dataset, batch_size=args.rag_batch_size, shuffle=True)
         test_dataloader = DataLoader(test_Dataset, batch_size=args.rag_batch_size, shuffle=False)
 
-    best_hitdic_ratio = {'total': {'hit1': 0, 'hit3': 0, 'hit5': 0, 'hit1_new':0, 'hit3_new':0, 'hit5_new':0, 'total': 0}}
+    best_hitdic_ratio = {'total': {'hit1': 0, 'hit3': 0, 'hit5': 0, 'hit1_new': 0, 'hit3_new': 0, 'hit5_new': 0, 'total': 0}}
     best_hitdic_str = None
     logger.info(f"Logging Epoch results:                      hit@1, hit@3, hit@5, hit_new@1, hit_new@3, hit_new@5")
     for epoch in range(args.rag_epochs):
         # mode='train'
         model.train()
         hitDic, hitdic_ratio, output_str = epoch_play(args, tokenizer, model, train_dataloader, optimizer, epoch, faiss_dataset, 'train')
-        if epoch<4:
+        if epoch < 4:
             model_play.rag.rag_retrieve.index_update(args, model, faiss_dataset)
 
         model.eval()
@@ -211,7 +215,7 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, epoch, faiss_data
         retrieved_docs_pt = outputs.retrieved_doc_ids.data
         loss = outputs['loss'].mean()
         epoch_loss += loss.item()
-        #question_encoder.
+        # question_encoder.
         if mode == 'train':
             optimizer.zero_grad()
             loss.backward()
@@ -245,27 +249,29 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, epoch, faiss_data
     # knowledge_task_label, knowledge_task_pseudo_label, is_new_knowledge
     logger.info(f"{mode} Loss: {epoch_loss}")
     model_play.rag.rag_retrieve.save_preds(args, contexts, top5_docs, label_gold_knowledges, epoch=epoch, new_knows=new_knows, real_resp=real_resps, gen_resps=gen_resp, mode=mode)
-    return hitDic, hitdic_ratio, output_str #output_strings, hit1_ratio, total_hit1, total_hit3, total_hit5, total_hit1_new, total_hit3_new, total_hit5_new
+    return hitDic, hitdic_ratio, output_str  # output_strings, hit1_ratio, total_hit1, total_hit3, total_hit5, total_hit1_new, total_hit3_new, total_hit5_new
 
 
-def process_augment_rag_sample(args, raw_data, tokenizer=None, mode='train', goal_types=['Q&A', 'Movie recommendation','Music recommendation', 'POI recommendation','Food recommendation']):
+def process_augment_rag_sample(args, raw_data, tokenizer=None, mode='train', goal_types=['Q&A', 'Movie recommendation', 'Music recommendation', 'POI recommendation', 'Food recommendation']):
     from tqdm import tqdm
     from copy import deepcopy
     train_sample = []
     logger.info(f"{mode} Data Goal types: {goal_types}")
     if tokenizer:
         try:
-            if tokenizer.eos_token is not None: eos_token = tokenizer.eos_token
-            else: eos_token = tokenizer.sep_token
+            if tokenizer.eos_token is not None:
+                eos_token = tokenizer.eos_token
+            else:
+                eos_token = tokenizer.sep_token
         except:
             eos_token = tokenizer.generator.eos_token
     else:
-        eos_token='</s>'
+        eos_token = '</s>'
     for ij in tqdm(range(len(raw_data)), desc="Dataset Augment", bar_format='{l_bar} | {bar:23} {r_bar}'):
         conversation = raw_data[ij]
         augmented_dialog = []
         augmented_knowledge = []
-        last_type=""
+        last_type = ""
         for i in range(len(conversation['dialog'])):
             role = conversation['role_seq'][i]
             utterance = conversation['dialog'][i] + eos_token
@@ -273,34 +279,35 @@ def process_augment_rag_sample(args, raw_data, tokenizer=None, mode='train', goa
             # if goal == 'Movie recommendation' or goal == 'POI recommendation' or goal == 'Music recommendation' or goal == 'Q&A': # TH 230601
             # if goal == 'Q&A': # QA에 대해서만 볼 때
             if goal in goal_types:
-                if role == 'System' and len(augmented_dialog) > 0 and len(conversation['pseudo_knowledge_seq'][i]) != 0: # Test 3360 Setting
+                if role == 'System' and len(augmented_dialog) > 0 and len(conversation['pseudo_knowledge_seq'][i]) != 0:  # Test 3360 Setting
                     flatten_dialog = ''.join(augmented_dialog)
                     train_sample.append({'dialog': flatten_dialog,
                                          'user_profile': conversation['user_profile'],
                                          'response': utterance,
                                          'goal': conversation['goal'][i],
-                                         'last_goal': conversation['goal'][i-1],
+                                         'last_goal': conversation['goal'][i - 1],
                                          'topic': conversation['topic'][i],
                                          'situation': conversation['situation'],
                                          'target_knowledge': conversation['knowledge_seq'][i],
                                          'candidate_knowledges': conversation['pseudo_knowledge_seq'][i],
                                          'candidate_confidences': conversation['pseudo_confidence_seq'][i]  # prob
                                          })
-            if role=='system': last_type = conversation['goal'][i]
+            if role == 'system': last_type = conversation['goal'][i]
             augmented_dialog.append(utterance)
             augmented_knowledge.append(conversation['knowledge_seq'][i])
     return train_sample
 
 
-if __name__=='__main__':
+if __name__ == '__main__':
     ## TEMP For our
     from transformers import AutoTokenizer, AutoModel, AutoConfig
     from config import bert_special_tokens_dict
+
     parser = argparse.ArgumentParser(description="ours_main.py")
     parser = utils.default_parser(parser)
     parser = add_ours_specific_args(parser)
     args = parser.parse_args()
-    args.task='resp'
+    args.task = 'resp'
     args = utils.dir_init(args)
     bert_model = AutoModel.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
     bert_config = AutoConfig.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
