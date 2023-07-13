@@ -313,6 +313,8 @@ class DialogDataset(Dataset):
         # pseudo_positive = random.choice(candidate_positives_idx)
         # pseudo_positive = candidate_positives_idx[self.args.pseudo_pos_rank - 1]
 
+        if self.args.know_ablation == 'target':
+            candidate_knowledges_pos = [target_knowledge_idx]
         candidate_indice = candidate_knowledges_pos + pseudo_negative  # [candidate_positives_idx[self.args.pseudo_pos_rank]]
 
         candidate_knowledge_text = [self.knowledgeDB[idx] for idx in candidate_indice]
