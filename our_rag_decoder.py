@@ -37,6 +37,7 @@ def add_rag_specific_args(parser):
     parser.add_argument("--usePseudoTest", action='store_true', help="Knowledge Pseudo label을 label로 사용할지 여부 (Test)")
 
     parser.add_argument("--use_test_knows_index", action='store_true', help="All knowledge를 index로 활용할지 여부")
+    parser.add_argument("--scratch", action='store_true', help="우리의 retriever모델을 쓸지 말지")
     # parser.add_argument("--inputWithKnowledge", action='store_true', help="Input으로 Dialog 외의 정보들도 줄지 여부")
     # parser.add_argument("--inputWithTopic", action='store_true', help="Input에 Topic도 넣어줄지 여부")
 
@@ -103,7 +104,8 @@ def main(our_args, our_tokenizer=None, our_question_encoder=None, our_ctx_encode
     utils.checkPath(MODEL_CACHE_DIR)
     ctx_encoder = DPRContextEncoder.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR).to(device=args.device)
     ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR)
-    if our_ctx_encoder and our_tokenizer:
+    if our_ctx_encoder and our_tokenizer and args.scratch:
+        logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use Our Trained Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
         ctx_encoder.ctx_encoder.bert_model = our_ctx_encoder
         ctx_tokenizer = our_tokenizer
     new_features = Features({"text": Value("string"), "title": Value("string"), "embeddings": Sequence(Value("float32"))})  # optional, save as float32 instead of float64 to save space
@@ -128,8 +130,8 @@ def main(our_args, our_tokenizer=None, our_question_encoder=None, our_ctx_encode
     # retriever.set_ctx_encoder_tokenizer(ctx_tokenizer) # NO TOUCH
     model = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever).to(args.device)
     tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
-    if our_tokenizer and our_question_encoder :
-        logger.info("model question_encoder changed by ours")
+    if our_tokenizer and our_question_encoder and args.scratch:
+        logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@ Model question_encoder changed by ours @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
         model.rag.question_encoder.question_encoder.bert_model = our_question_encoder
         tokenizer.question_encoder = our_tokenizer
         pass
@@ -164,10 +166,9 @@ def train_our_rag_retrieve(args, model, tokenizer, train_dataset_aug=None, test_
     best_hitdic_str = None
     logger.info(f"Logging Epoch results:                      hit@1, hit@3, hit@5, hit_new@1, hit_new@3, hit_new@5")
     for epoch in range(args.rag_epochs):
-        # mode='train'
 
-        # model.train()
-        # hitDic, hitdic_ratio, output_str = epoch_play(args, tokenizer, model, train_dataloader, optimizer, epoch, faiss_dataset, mode = 'train')
+        model.train()
+        hitDic, hitdic_ratio, output_str = epoch_play(args, tokenizer, model, train_dataloader, optimizer, epoch, faiss_dataset, mode = 'train')
 
 
         model.eval()
