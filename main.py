@@ -13,7 +13,7 @@ from data_model import GenerationDataset
 from data_model_know import DialogDataset, KnowledgeDataset
 from rank_bm25 import BM25Okapi
 from model_play.ours.train_bert_goal_topic import train_goal_topic_bert, pred_goal_topic_aug, eval_goal_topic_model
-from model_play.ours import train_know_retrieve, eval_know_retrieve#, train_our_rag_retrieve_gen
+from model_play.ours import train_know_retrieve, eval_know_retrieve  # , train_our_rag_retrieve_gen
 # from model_play.ours.eval_know import *
 
 from loguru import logger
@@ -42,7 +42,7 @@ def add_ours_specific_args(parser):
     parser.add_argument("--rag_num_beams", type=int, default=5, help=" Method ")
     parser.add_argument("--rag_epochs", type=int, default=10, help=" Method ")
     parser.add_argument('--rag_lr', type=float, default=1e-6, help='RAG Learning rate')
-    parser.add_argument("--rag_scratch", action='store_false', help="우리의 retriever모델을 쓸지 말지") # --rag_scratch하면 scratch모델 사용하게됨
+    parser.add_argument("--rag_scratch", action='store_false', help="우리의 retriever모델을 쓸지 말지")  # --rag_scratch하면 scratch모델 사용하게됨
     # parser.add_argument( "--method", type=str, default="ours", help=" Method " )
     return parser
 
@@ -194,11 +194,12 @@ def main(args=None):
         logger.info("Finish Data Augment with Goal-Topic_pred_conf")
         pass
 
+    if "cotmae" in args.task:
+        make_cotmae_input(args.output_dir, train_dataset_raw)
 
     if "dsi" in args.task:
         make_dsi_input(args.output_dir, train_dataset_raw, input_setting='dialog', knowledgeDB=all_knowledgeDB, mode='train')
         make_dsi_input(args.output_dir, test_dataset_raw, input_setting='dialog', knowledgeDB=all_knowledgeDB, mode='test')
-
 
     if 'know' in args.task:
         train_know_retrieve.train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB, bert_model, tokenizer)
@@ -230,25 +231,23 @@ def main(args=None):
                 f.write(f" \t{know}\n")
         faiss_dataset = load_dataset("csv", data_files=[knowledgeDB_csv_path], split="train", delimiter="\t", column_names=["title", "text"])
         faiss_dataset = faiss_dataset.map(rag_retrieve.split_documents, batched=True, num_proc=4)
-        
+
         MODEL_CACHE_DIR = os.path.join(args.home, 'model_cache', 'facebook/dpr-ctx_encoder-multiset-base')
-        
 
         ctx_encoder = DPRContextEncoder.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR).to(device=args.device)
         ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR)
-        
+
         if args.rag_scratch:
             logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use Our Trained Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
             ctx_encoder.ctx_encoder.bert_model = our_ctx_encoder
             ctx_tokenizer = tokenizer
 
-
         logger.info("Create Knowledge Dataset")
         new_features = Features({"text": Value("string"), "title": Value("string"), "embeddings": Sequence(Value("float32"))})  # optional, save as float32 instead of float64 to save space
         faiss_dataset = faiss_dataset.map(
-                        partial(rag_retrieve.embed, ctx_encoder=ctx_encoder, ctx_tokenizer=ctx_tokenizer, args=args),
-                        batched=True, batch_size=args.rag_batch_size, features=new_features, )
-        
+            partial(rag_retrieve.embed, ctx_encoder=ctx_encoder, ctx_tokenizer=ctx_tokenizer, args=args),
+            batched=True, batch_size=args.rag_batch_size, features=new_features, )
+
         passages_path = os.path.join(args.data_dir, 'rag', f"my_knowledge_dataset_{args.gpu}")
         if args.debug: passages_path += '_debug'
         args.passages_path = passages_path
@@ -264,7 +263,7 @@ def main(args=None):
         # retriever.set_ctx_encoder_tokenizer(ctx_tokenizer) # NO TOUCH
         rag_model = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever).to(args.device)
         rag_tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
-        
+
         if args.rag_scratch:
             logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@ Model question_encoder changed by ours @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
             rag_model.rag.question_encoder.question_encoder.bert_model = our_question_encoder
@@ -276,20 +275,53 @@ def main(args=None):
         train_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
         test_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
         if args.debug:
-            train_dataset_aug_pred , test_dataset_aug_pred = train_dataset_aug_pred[:50], test_dataset_aug_pred[:50]
+            train_dataset_aug_pred, test_dataset_aug_pred = train_dataset_aug_pred[:50], test_dataset_aug_pred[:50]
         train_Dataset = data_model.RagDataset(args, train_dataset_aug_pred, rag_tokenizer, all_knowledgeDB, mode='train')
         test_Dataset = data_model.RagDataset(args, test_dataset_aug_pred, rag_tokenizer, all_knowledgeDB, mode='test')
         train_our_rag_retrieve_gen.train_our_rag(args, rag_model, rag_tokenizer, faiss_dataset, train_Dataset, test_Dataset)
 
 
+def make_cotmae_input(save_dir, dataset_raw):
+    lines = []
+    tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+
+    for data in dataset_raw:
+        dialog = data['dialog']
+        split_point = random.randint(1, len(dialog) - 1)
+        samples = []
+        for t in range(4):
+            anchor = tokenizer.encode(tokenizer.sep_token.join(dialog[:split_point]))[1:-1]
+            nearby = tokenizer.encode(tokenizer.sep_token.join(dialog[split_point:]))[1:-1]
+            samples.append({"anchor": anchor, "nearby": nearby, "random_sampled": nearby, "overlap": nearby})
+        lines.append({"spans": samples})
+    with open("../ir-main/ir-main/cotmae/DuRecDial2_COTMAE.json", 'w', encoding='utf-8') as wf:
+        for line in lines:
+            wf.write(json.dumps(line) + "\n")
+
+    # logger.info(f"input dialog count: {len(lines)}")
+    # logger.info(f"Train knowledge index count: {len(train_knowledge_idx_set)}")
+    # logger.info(f"All knowledge count: {len(knowledge_dic)}")
+    #
+    # with open(os.path.join(save_dir, f"mgcrs_{mode}_dataset.json"), 'w', encoding='utf-8') as f:
+    #     f.write(json.dumps(lines))
+    # with open(os.path.join(save_dir, f"mgcrs_allknowledges.json"), 'w', encoding='utf-8') as f:
+    #     f.write(json.dumps(knowledge_dic))
+    # if mode == 'train':
+    #     with open(os.path.join(save_dir, f"train_knowledge_idx_list.json"), 'w', encoding='utf-8') as f:
+    #         f.write(json.dumps(knowledge_dic))
+
+    return
+
+
 def make_dsi_input(save_dir, dataset_raw, input_setting='dialog', knowledgeDB=[], mode='train'):
     class TEMPTokenizer:
         def __init__(self): self.eos_token = '</s>'
+
     knowledge_dic = {k: i for i, k in enumerate(knowledgeDB)}
     lines = []
     tokenizer = TEMPTokenizer()
     auged_dataset = process_augment_sample(dataset_raw, tokenizer=tokenizer)
-    train_knowledge_idx_set=list()
+    train_knowledge_idx_set = list()
     for data in auged_dataset:
         dialog = data['dialog']
         response = data['response']
@@ -298,7 +330,7 @@ def make_dsi_input(save_dir, dataset_raw, input_setting='dialog', knowledgeDB=[]
         if "dialog" in input_setting: input += dialog
         if "goal" in input_setting: input += f"<goal> {data['goal']} "  ## Gold goal
         if 'topic' in input_setting: input += f"<topic> {data['topic']} "  ## Gold topic
-        if mode=='train': train_knowledge_idx_set.append(knowledge_dic[target_knowledge])
+        if mode == 'train': train_knowledge_idx_set.append(knowledge_dic[target_knowledge])
 
         lines.append({input: knowledge_dic[target_knowledge]})
     logger.info(f"input dialog count: {len(lines)}")
@@ -309,7 +341,7 @@ def make_dsi_input(save_dir, dataset_raw, input_setting='dialog', knowledgeDB=[]
         f.write(json.dumps(lines))
     with open(os.path.join(save_dir, f"mgcrs_allknowledges.json"), 'w', encoding='utf-8') as f:
         f.write(json.dumps(knowledge_dic))
-    if mode=='train':
+    if mode == 'train':
         with open(os.path.join(save_dir, f"train_knowledge_idx_list.json"), 'w', encoding='utf-8') as f:
             f.write(json.dumps(knowledge_dic))
 
