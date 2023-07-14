@@ -19,6 +19,7 @@ from model_play.ours import train_know_retrieve, eval_know_retrieve#, train_our_
 from loguru import logger
 import utils
 import data_utils
+import data_model
 
 
 def add_ours_specific_args(parser):
@@ -40,7 +41,8 @@ def add_ours_specific_args(parser):
     parser.add_argument("--rag_max_target_length", type=int, default=128, help=" Method ")
     parser.add_argument("--rag_num_beams", type=int, default=5, help=" Method ")
     parser.add_argument("--rag_epochs", type=int, default=10, help=" Method ")
-    parser.add_argument('--rag_lr', type=float, default=1e-5, help='RAG Learning rate')
+    parser.add_argument('--rag_lr', type=float, default=1e-6, help='RAG Learning rate')
+    parser.add_argument("--rag_scratch", action='store_false', help="우리의 retriever모델을 쓸지 말지") # --rag_scratch하면 scratch모델 사용하게됨
     # parser.add_argument( "--method", type=str, default="ours", help=" Method " )
     return parser
 
@@ -204,8 +206,79 @@ def main(args=None):
         # eval_know_retrieve.eval_know(args, test_dataloader, retriever, all_knowledge_data, all_knowledgeDB, tokenizer, write=False)  # HJ: Knowledge text top-k 뽑아서 output만들어 체크하던 코드 분리
 
     if 'resp' in args.task:
-        from CRSTEST.KEMGCRS.model_play.ours import train_our_rag_retrieve_gen
-        train_our_rag_retrieve_gen.train_resp(args)
+        logger.info("OUR Retriever model For resp")
+        from model_play.ours import train_our_rag_retrieve_gen
+        from model_play.rag import rag_retrieve
+        from datasets import Features, Sequence, Value, load_dataset
+        from transformers import DPRContextEncoder, DPRContextEncoderTokenizerFast, RagRetriever, RagSequenceForGeneration, RagTokenizer
+        from functools import partial
+        import faiss
+
+        our_best_model = Retriever(args, bert_model)
+        our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"ours_retriever.pt"), map_location=args.device))
+        our_best_model.to(args.device)
+        our_question_encoder = our_best_model.query_bert
+        our_ctx_encoder = our_best_model.rerank_bert
+
+        knowledgeDB_list = list(all_knowledgeDB)
+        knowledgeDB_csv_path = os.path.join(args.data_dir, 'rag')  # HOME/data/2/rag/"train_knowledge.csv")
+        checkPath(knowledgeDB_csv_path)
+        knowledgeDB_csv_path = os.path.join(knowledgeDB_csv_path, f'my_knowledge_dataset_{args.gpu}' + ('_debug.csv' if args.debug else '.csv'))
+        args.knowledgeDB_csv_path = knowledgeDB_csv_path
+        with open(knowledgeDB_csv_path, 'w', encoding='utf-8') as f:
+            for know in knowledgeDB_list:
+                f.write(f" \t{know}\n")
+        faiss_dataset = load_dataset("csv", data_files=[knowledgeDB_csv_path], split="train", delimiter="\t", column_names=["title", "text"])
+        faiss_dataset = faiss_dataset.map(rag_retrieve.split_documents, batched=True, num_proc=4)
+        
+        MODEL_CACHE_DIR = os.path.join(args.home, 'model_cache', 'facebook/dpr-ctx_encoder-multiset-base')
+        
+
+        ctx_encoder = DPRContextEncoder.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR).to(device=args.device)
+        ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR)
+        
+        if args.rag_scratch:
+            logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use Our Trained Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+            ctx_encoder.ctx_encoder.bert_model = our_ctx_encoder
+            ctx_tokenizer = tokenizer
+
+
+        logger.info("Create Knowledge Dataset")
+        new_features = Features({"text": Value("string"), "title": Value("string"), "embeddings": Sequence(Value("float32"))})  # optional, save as float32 instead of float64 to save space
+        faiss_dataset = faiss_dataset.map(
+                        partial(rag_retrieve.embed, ctx_encoder=ctx_encoder, ctx_tokenizer=ctx_tokenizer, args=args),
+                        batched=True, batch_size=args.rag_batch_size, features=new_features, )
+        
+        passages_path = os.path.join(args.data_dir, 'rag', f"my_knowledge_dataset_{args.gpu}")
+        if args.debug: passages_path += '_debug'
+        args.passages_path = passages_path
+        faiss_dataset.save_to_disk(passages_path)
+
+        index = faiss.IndexHNSWFlat(768, 128, faiss.METRIC_INNER_PRODUCT)
+        faiss_dataset.add_faiss_index('embeddings', custom_index=index)
+        # faiss_dataset.add_faiss_index(column='embeddings', index_name = 'embeddings', custom_index=index, faiss_verbose=True)
+        print(f"Length of Knowledge knowledge_DB : {len(faiss_dataset)}")
+
+        ### MODEL CALL
+        retriever = RagRetriever.from_pretrained('facebook/rag-sequence-nq', index_name='custom', indexed_dataset=faiss_dataset, init_retrieval=True)
+        # retriever.set_ctx_encoder_tokenizer(ctx_tokenizer) # NO TOUCH
+        rag_model = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever).to(args.device)
+        rag_tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
+        
+        if args.rag_scratch:
+            logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@ Model question_encoder changed by ours @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+            rag_model.rag.question_encoder.question_encoder.bert_model = our_question_encoder
+            rag_tokenizer.question_encoder = tokenizer
+
+        train_aug_pred_path = os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl')
+        test_aug_pred_path = os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl')
+        assert os.path.exists(train_aug_pred_path) and os.path.exists(test_aug_pred_path), f"Goal,Topic Predicted file doesn't exist! {train_aug_pred_path}"
+        train_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
+        test_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
+        train_Dataset = data_model.RagDataset(args, train_dataset_aug_pred, rag_tokenizer, all_knowledgeDB, mode='train')
+        test_Dataset = data_model.RagDataset(args, test_dataset_aug_pred, rag_tokenizer, all_knowledgeDB, mode='test')
+        train_our_rag_retrieve_gen.train_our_rag(args, rag_model, rag_tokenizer, faiss_dataset, train_Dataset, test_Dataset)
+
 
 def make_dsi_input(save_dir, dataset_raw, input_setting='dialog', knowledgeDB=[], mode='train'):
     class TEMPTokenizer:
