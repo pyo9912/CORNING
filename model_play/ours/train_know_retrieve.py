@@ -97,7 +97,7 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
     train_dataloader = DataLoader(train_datamodel_know, batch_size=args.batch_size, shuffle=True)
     train_dataloader_retrieve = DataLoader(train_datamodel_know, batch_size=args.batch_size, shuffle=False)
     valid_dataloader = DataLoader(test_datamodel_know, batch_size=args.batch_size, shuffle=False)
-    test_dataloader = DataLoader(test_datamodel_know, batch_size=1, shuffle=False)
+    test_dataloader = DataLoader(test_datamodel_know, batch_size=args.batch_size, shuffle=False)
 
     criterion = torch.nn.CrossEntropyLoss(reduction='none', ignore_index=0)
     optimizer = optim.AdamW(retriever.parameters(), lr=args.lr)
