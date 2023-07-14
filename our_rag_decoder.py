@@ -146,11 +146,10 @@ def main(our_args, our_tokenizer=None, our_question_encoder=None, our_ctx_encode
     test_Dataset = data_model.RagDataset(args, test_dataset_aug_pred, tokenizer, all_knowledgeDB, mode='test')
 
     # For our retrieve-generator task
-    train_our_rag_retrieve(args, model, tokenizer, train_dataset_aug=None, test_dataset_aug=None, train_knowledge_seq_set=train_knowledge_seq_set, faiss_dataset=faiss_dataset \
-                           , train_Dataset=train_Dataset, test_Dataset=test_Dataset)
+    train_our_rag_retrieve(args, model, tokenizer, faiss_dataset=faiss_dataset, train_Dataset=train_Dataset, test_Dataset=test_Dataset)
 
 
-def train_our_rag_retrieve(args, model, tokenizer, train_dataset_aug=None, test_dataset_aug=None, train_knowledge_seq_set=None, faiss_dataset=None, train_Dataset=None, test_Dataset=None):
+def train_our_rag_retrieve(args, model, tokenizer, faiss_dataset=None, train_Dataset=None, test_Dataset=None):
     from torch.utils.data import DataLoader
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.1, eps=5e-9)
     # if train_dataset_aug and test_dataset_aug:
@@ -226,13 +225,11 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, epoch, faiss_data
                 model.generate(source_ids, min_length=0, max_length=args.rag_max_target_length, early_stopping=True), skip_special_tokens=True, clean_up_tokenization_spaces=True)
             gen_resp.extend(resp_batch)
 
-    # hit1, hit3, hit5, hit1_new, hit3_new, hit5_new = utils.know_hit_ratio(args, pred_pt=top5_docs, gold_pt=label_gold_knowledges, new_knows=new_knows, types=types)
     hitDic = model_play.rag.rag_retrieve.know_hit_ratio(args, pred_pt=top5_docs, gold_pt=label_gold_knowledges, new_knows=new_knows, types=types)
     hitdic, hitdic_ratio, output_str = model_play.rag.rag_retrieve.know_hit_ratio(args, pred_pt=top5_docs, gold_pt=label_gold_knowledges, new_knows=new_knows, types=types)
-    for i in output_str:
-        logger.info(f"{mode} {i}")
-    # print(f"{mode} New_Knowledge hit / hit_k: {hit1_new}, {hit3_new}, {hit5_new}")
-    # knowledge_task_label, knowledge_task_pseudo_label, is_new_knowledge
+    if mode == 'test':
+        for i in output_str:
+            logger.info(f"{mode}_{epoch} {i}")
     logger.info(f"{mode} Loss: {epoch_loss}")
     model_play.rag.rag_retrieve.save_preds(args, contexts, top5_docs, label_gold_knowledges, epoch=epoch, new_knows=new_knows, real_resp=real_resps, gen_resps=gen_resp, mode=mode)
     return hitDic, hitdic_ratio, output_str  # output_strings, hit1_ratio, total_hit1, total_hit3, total_hit5, total_hit1_new, total_hit3_new, total_hit5_new
