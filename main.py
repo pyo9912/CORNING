@@ -33,6 +33,9 @@ def add_ours_specific_args(parser):
     parser.add_argument("--alltype", action='store_true', help="AllType Check 여부, AllType아닐시 knowledge용으로 3711세팅들어감")
     parser.add_argument("--scratch", action='store_true', help="RAG_Response 모델에 scratch 를 해줄지 말지 체크여부 필요")
 
+    ## For know
+    parser.add_argument("--cotmae", action='store_true', help="Initialize the retriever from pretrained CoTMAE")
+
     ## For resp
     # parser.add_argument("--rag_retrieve_input_length", type=int, default=768, help=" Method ")
     parser.add_argument("--rag_batch_size", type=int, default=4, help=" Method ")

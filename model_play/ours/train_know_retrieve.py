@@ -5,10 +5,13 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torch import optim
 # from data_temp import DialogDataset_TEMP
+from transformers import AutoConfig, AutoTokenizer, AutoModel
+
 from data_model_know import KnowledgeDataset, DialogDataset
 from data_utils import process_augment_sample
 from model_play.ours.eval_know_retrieve import knowledge_reindexing, eval_know  #### Check
 from metric import EarlyStopping
+from models.ours.cotmae import BertForCotMAE
 from utils import *
 # from models import *
 import logging
@@ -30,6 +33,25 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
     # args.know_ablation = 'target'
     # KNOWLEDGE TASk
     from models.ours.retriever import Retriever
+    saved_model_path = os.path.join(args.saved_model_path, 'cotmae')
+    if args.cotmae:
+        model_cache_dir = os.path.join(args.home, 'model_cache', 'cotmae')
+        cotmae_config = AutoConfig.from_pretrained(saved_model_path, cache_dir=model_cache_dir)
+        # cotmae_tokenizer = AutoTokenizer.from_pretrained(
+        #     saved_model_path, cache_dir=model_cache_dir, use_fast=False
+        # )
+        cotmae_model = BertForCotMAE.from_pretrained(
+            pretrained_model_name_or_path=saved_model_path,
+            from_tf=bool(".ckpt" in saved_model_path),
+            config=cotmae_config,
+            cache_dir=model_cache_dir,
+            use_decoder_head=True,
+            n_head_layers=2,
+            enable_head_mlm=True,
+            head_mlm_coef=1.0,
+        )
+        cotmae_model.bert.resize_token_embeddings(len(tokenizer))
+        bert_model = cotmae_model.bert
     retriever = Retriever(args, bert_model)
 
     # if args.saved_model_path != '':
