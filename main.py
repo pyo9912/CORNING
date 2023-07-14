@@ -13,7 +13,7 @@ from data_model import GenerationDataset
 from data_model_know import DialogDataset, KnowledgeDataset
 from rank_bm25 import BM25Okapi
 from model_play.ours.train_bert_goal_topic import train_goal_topic_bert, pred_goal_topic_aug, eval_goal_topic_model
-from model_play.ours import train_know_retrieve, eval_know_retrieve, train_our_rag_retrieve_gen
+from model_play.ours import train_know_retrieve, eval_know_retrieve#, train_our_rag_retrieve_gen
 # from model_play.ours.eval_know import *
 
 from loguru import logger
@@ -204,6 +204,7 @@ def main(args=None):
         # eval_know_retrieve.eval_know(args, test_dataloader, retriever, all_knowledge_data, all_knowledgeDB, tokenizer, write=False)  # HJ: Knowledge text top-k 뽑아서 output만들어 체크하던 코드 분리
 
     if 'resp' in args.task:
+        from CRSTEST.KEMGCRS.model_play.ours import train_our_rag_retrieve_gen
         train_our_rag_retrieve_gen.train_resp(args)
 
 def make_dsi_input(save_dir, dataset_raw, input_setting='dialog', knowledgeDB=[], mode='train'):
@@ -213,6 +214,7 @@ def make_dsi_input(save_dir, dataset_raw, input_setting='dialog', knowledgeDB=[]
     lines = []
     tokenizer = TEMPTokenizer()
     auged_dataset = process_augment_sample(dataset_raw, tokenizer=tokenizer)
+    train_knowledge_idx_set=list()
     for data in auged_dataset:
         dialog = data['dialog']
         response = data['response']
@@ -221,13 +223,21 @@ def make_dsi_input(save_dir, dataset_raw, input_setting='dialog', knowledgeDB=[]
         if "dialog" in input_setting: input += dialog
         if "goal" in input_setting: input += f"<goal> {data['goal']} "  ## Gold goal
         if 'topic' in input_setting: input += f"<topic> {data['topic']} "  ## Gold topic
+        if mode=='train': train_knowledge_idx_set.append(knowledge_dic[target_knowledge])
 
         lines.append({input: knowledge_dic[target_knowledge]})
+    logger.info(f"input dialog count: {len(lines)}")
+    logger.info(f"Train knowledge index count: {len(train_knowledge_idx_set)}")
+    logger.info(f"All knowledge count: {len(knowledge_dic)}")
 
     with open(os.path.join(save_dir, f"mgcrs_{mode}_dataset.json"), 'w', encoding='utf-8') as f:
         f.write(json.dumps(lines))
     with open(os.path.join(save_dir, f"mgcrs_allknowledges.json"), 'w', encoding='utf-8') as f:
         f.write(json.dumps(knowledge_dic))
+    if mode=='train':
+        with open(os.path.join(save_dir, f"train_knowledge_idx_list.json"), 'w', encoding='utf-8') as f:
+            f.write(json.dumps(knowledge_dic))
+
     return
 
 

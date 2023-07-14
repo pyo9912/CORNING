@@ -1,12 +1,16 @@
 import sys
-
+import os
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torch import optim
 from loguru import logger
-
+from ...utils import read_pkl
 def train_resp(args, auged_dataset, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB):
+    # knowledgeDB생성....
+    
+    train_auged=read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
+    test_auged =read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
     
     pass
 
