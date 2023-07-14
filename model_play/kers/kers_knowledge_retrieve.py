@@ -33,11 +33,11 @@ def train_test_pseudo_knowledge_bart(args, model, tokenizer, train_dataset_aug, 
 
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=5e-4, eps=5e-9)
     beam_temp = args.num_beams
-    args.num_beams = 1
+    # args.num_beams = 1
     logger.info(f"Train with Pseudo knowledge label: {args.usePseudoTrain}, Test with Pseudo knowledge label: {args.usePseudoTest}")
     # Fine-tune
     for epoch in range(args.num_epochs):
-        if epoch == args.num_epochs - 1: args.num_beams = beam_temp
+        # if epoch == args.num_epochs - 1: args.num_beams = beam_temp
         train_loss, dev_loss, test_loss = 0, 0, 0
         args.data_mode = 'train'
         context_words, pred_words, label_words = [], [], []
