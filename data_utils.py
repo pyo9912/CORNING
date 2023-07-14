@@ -268,6 +268,6 @@ def make_dsi_input(save_dir, dataset_raw, input_setting='dialog', knowledgeDB=[]
         with open(os.path.join(save_dir, f"train_knowledge_idx_list.json"), 'w', encoding='utf-8') as f:
             f.write(json.dumps(train_knowledge_idx_set))
     if mode=='test':
-        with open(os.path.join(save_dir, f"test_dataset_pseudo_text_.json"), 'w', encoding='utf-8') as f:
+        with open(os.path.join(save_dir, f"test_dataset_gold_text_.json"), 'w', encoding='utf-8') as f:
             f.write(json.dumps(text2text))
     return
