@@ -263,10 +263,10 @@ def main(args=None):
 
         ### MODEL CALL
         retriever = RagRetriever.from_pretrained('facebook/rag-sequence-nq', index_name='custom', indexed_dataset=faiss_dataset, init_retrieval=True)
-        # retriever.set_ctx_encoder_tokenizer(ctx_tokenizer) # NO TOUCH
+        retriever.set_ctx_encoder_tokenizer(ctx_tokenizer) # NO TOUCH
         rag_model = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever).to(args.device)
         rag_tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
-
+        rag_model.set_context_encoder_for_training(ctx_encoder)
         if args.rag_scratch:
             logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@ Model question_encoder changed by ours @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
             rag_model.rag.question_encoder.question_encoder.bert_model = our_question_encoder
@@ -278,7 +278,7 @@ def main(args=None):
         train_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
         test_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
         if args.debug:
-            train_dataset_aug_pred, test_dataset_aug_pred = train_dataset_aug_pred[:50], test_dataset_aug_pred[:50]
+            train_dataset_aug_pred , test_dataset_aug_pred = train_dataset_aug_pred[:50], test_dataset_aug_pred[:50]
         train_Dataset = data_model.RagDataset(args, train_dataset_aug_pred, rag_tokenizer, all_knowledgeDB, mode='train')
         test_Dataset = data_model.RagDataset(args, test_dataset_aug_pred, rag_tokenizer, all_knowledgeDB, mode='test')
         train_our_rag_retrieve_gen.train_our_rag(args, rag_model, rag_tokenizer, faiss_dataset, train_Dataset, test_Dataset)
@@ -319,21 +319,21 @@ def make_cotmae_input(save_dir, dataset_raw):
 def make_dsi_input(save_dir, dataset_raw, input_setting='dialog', knowledgeDB=[], mode='train'):
     class TEMPTokenizer:
         def __init__(self): self.eos_token = '</s>'
-
     knowledge_dic = {k: i for i, k in enumerate(knowledgeDB)}
     lines = []
     tokenizer = TEMPTokenizer()
     auged_dataset = process_augment_sample(dataset_raw, tokenizer=tokenizer)
-    train_knowledge_idx_set = list()
+    train_knowledge_idx_set=list()
     for data in auged_dataset:
         dialog = data['dialog']
         response = data['response']
-        target_knowledge = data['candidate_knowledges'][0]
+        if mode=='train': target_knowledge = data['candidate_knowledges'][0]
+        else:  target_knowledge = data['target_knowledge']
         input = ""
         if "dialog" in input_setting: input += dialog
         if "goal" in input_setting: input += f"<goal> {data['goal']} "  ## Gold goal
         if 'topic' in input_setting: input += f"<topic> {data['topic']} "  ## Gold topic
-        if mode == 'train': train_knowledge_idx_set.append(knowledge_dic[target_knowledge])
+        if mode=='train': train_knowledge_idx_set.append(knowledge_dic[target_knowledge])
 
         lines.append({input: knowledge_dic[target_knowledge]})
     logger.info(f"input dialog count: {len(lines)}")
@@ -344,11 +344,12 @@ def make_dsi_input(save_dir, dataset_raw, input_setting='dialog', knowledgeDB=[]
         f.write(json.dumps(lines))
     with open(os.path.join(save_dir, f"mgcrs_allknowledges.json"), 'w', encoding='utf-8') as f:
         f.write(json.dumps(knowledge_dic))
-    if mode == 'train':
+    if mode=='train':
         with open(os.path.join(save_dir, f"train_knowledge_idx_list.json"), 'w', encoding='utf-8') as f:
             f.write(json.dumps(knowledge_dic))
 
     return
+
 
 
 def split_validation(train_dataset_raw, train_ratio=1.0):
