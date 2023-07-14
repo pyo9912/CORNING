@@ -232,3 +232,42 @@ def dataset_reader(args, data_name='train'):
             })
 
     return conversation_sample, list(all_knowledge), all_knowledge_topic
+
+
+def make_dsi_input(save_dir, dataset_raw, input_setting='dialog', knowledgeDB=[], mode='train'):
+    class TEMPTokenizer:
+        def __init__(self): self.eos_token = '</s>'
+    knowledge_dic = {k: i for i, k in enumerate(knowledgeDB)}
+    lines = []
+    text2text=[]
+    tokenizer = TEMPTokenizer()
+    auged_dataset = process_augment_sample(dataset_raw, tokenizer=tokenizer)
+    train_knowledge_idx_set=list()
+    for data in auged_dataset:
+        dialog = data['dialog']
+        response = data['response']
+        if mode=='train': target_knowledge = data['candidate_knowledges'][0]
+        else:  target_knowledge = data['target_knowledge']
+        input = ""
+        if "dialog" in input_setting: input += dialog
+        if "goal" in input_setting: input += f"<goal> {data['goal']} "  ## Gold goal
+        if 'topic' in input_setting: input += f"<topic> {data['topic']} "  ## Gold topic
+        if mode=='train': train_knowledge_idx_set.append(knowledge_dic[target_knowledge])
+        if mode=='test': text2text.append(knowledge_dic[target_knowledge])
+
+        lines.append({input: knowledge_dic[target_knowledge]})
+    logger.info(f"input dialog count: {len(lines)}")
+    logger.info(f"Train knowledge index count: {len(train_knowledge_idx_set)}")
+    logger.info(f"All knowledge count: {len(knowledge_dic)}")
+
+    with open(os.path.join(save_dir, f"mgcrs_{mode}_dataset.json"), 'w', encoding='utf-8') as f:
+        f.write(json.dumps(lines))
+    with open(os.path.join(save_dir, f"mgcrs_allknowledges.json"), 'w', encoding='utf-8') as f:
+        f.write(json.dumps(knowledge_dic))
+    if mode=='train':
+        with open(os.path.join(save_dir, f"train_knowledge_idx_list.json"), 'w', encoding='utf-8') as f:
+            f.write(json.dumps(train_knowledge_idx_set))
+    if mode=='test':
+        with open(os.path.join(save_dir, f"test_dataset_pseudo_text_.json"), 'w', encoding='utf-8') as f:
+            f.write(json.dumps(text2text))
+    return
