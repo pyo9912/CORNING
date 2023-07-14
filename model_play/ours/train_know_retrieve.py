@@ -35,6 +35,7 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
     from models.ours.retriever import Retriever
     saved_model_path = os.path.join(args.saved_model_path, 'cotmae')
     if args.cotmae:
+        logger.info("Initialize with pre-trained CoTMAE")
         model_cache_dir = os.path.join(args.home, 'model_cache', 'cotmae')
         cotmae_config = AutoConfig.from_pretrained(saved_model_path, cache_dir=model_cache_dir)
         # cotmae_tokenizer = AutoTokenizer.from_pretrained(
