@@ -17,34 +17,34 @@ from typing import List
 
 def train_our_rag(args, model, tokenizer, faiss_dataset=None, train_Dataset=None, test_Dataset=None):
     from torch.utils.data import DataLoader
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.rag_lr, weight_decay=0.1, eps=5e-9)
-    
     train_dataloader = DataLoader(train_Dataset, batch_size=args.rag_batch_size, shuffle=True)
     test_dataloader = DataLoader(test_Dataset, batch_size=args.rag_batch_size, shuffle=False)
 
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.rag_lr, weight_decay=0.1, eps=5e-9)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = args.rag_epochs * len(train_dataloader), eta_min= args.rag_lr * 0.1)
     best_hitdic_ratio = {'total': {'hit1': 0, 'hit3': 0, 'hit5': 0, 'hit1_new': 0, 'hit3_new': 0, 'hit5_new': 0, 'total': 0}}
     best_hitdic_str = None
     logger.info(f"Logging Epoch results:                      hit@1, hit@3, hit@5, hit_new@1, hit_new@3, hit_new@5")
     for epoch in range(args.rag_epochs):
         # if not args.debug:
         model.train()
-        hitDic, hitdic_ratio, output_str = epoch_play(args, tokenizer, model, train_dataloader, optimizer, epoch, faiss_dataset, mode = 'train')
+        hitDic, hitdic_ratio, output_str = epoch_play(args, tokenizer, model, train_dataloader, optimizer, scheduler, epoch, faiss_dataset, mode = 'train')
 
         model.eval()
         with torch.no_grad():
-            hitDic, hitdic_ratio, output_str = epoch_play(args, tokenizer, model, test_dataloader, optimizer, epoch, faiss_dataset, mode='test')
+            hitDic, hitdic_ratio, output_str = epoch_play(args, tokenizer, model, test_dataloader, optimizer, scheduler, epoch, faiss_dataset, mode='test')
             if best_hitdic_ratio['total']['hit1'] <= hitdic_ratio['total']['hit1']:
                 best_hitdic_ratio = hitdic_ratio
                 best_hitdic_str = output_str
         if epoch<3: 
-            index_update(args, model, faiss_dataset)
+            index_update(args, model, tokenizer, faiss_dataset)
     for i in best_hitdic_str:
         logger.info(f"Test_best {i}")
 
-def epoch_play(args, tokenizer, model, data_loader, optimizer, epoch, faiss_dataset, mode='train'):
+def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch, faiss_dataset, mode='train'):
     from tqdm import tqdm
     # data_loader
-    epoch_loss = 0
+    epoch_loss, steps = 0, 0
     torch.cuda.empty_cache()
     contexts, label_gold_knowledges, label_pseudo_knowledges, top5_docs, real_resps, gen_resp, new_knows = [], [], [], [], [], [], []
     types = []
@@ -65,7 +65,7 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, epoch, faiss_data
             loss.backward()
             optimizer.step()
             loss.detach()
-
+        steps+=1
         knowledge_gold_label = batch['target_knowledge_label']
         # knowledge_pseudo_label = batch['knowledge_task_pseudo_label']
         batch_types = [args.goalDic['int'][int(idx)] for idx in batch['goal_idx']]
@@ -79,12 +79,13 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, epoch, faiss_data
         label_gold_knowledges.extend(knowledge_gold_label)
         # label_pseudo_knowledges.extend(knowledge_pseudo_label)
         types.extend(batch_types)
-
+        
         if mode == 'test' :
             resp_batch = tokenizer.generator.batch_decode(
                 model.generate(source_ids, min_length=0, max_length=args.rag_max_target_length, early_stopping=True), skip_special_tokens=True, clean_up_tokenization_spaces=True)
             gen_resp.extend(resp_batch)
-
+    if mode=='train': scheduler.step()
+    perplexity = torch.exp(torch.tensor(epoch_loss/steps))
     hitdic, hitdic_ratio, output_str = know_hit_ratio(args, pred_pt=top5_docs, gold_pt=label_gold_knowledges, new_knows=new_knows, types=types)
     if mode == 'test':
         for i in output_str:
@@ -94,6 +95,7 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, epoch, faiss_data
         logger.info(f"Bleu_score, Bleu_1, Bleu_2: {bleu:.3f}, {bleu1:.3f}, {bleu2:.3f}")
         logger.info(f"intra_dist1, intra_dist2, inter_dist1, inter_dist2 : {intra_dist1:.3f}, {intra_dist2:.3f}, {inter_dist1:.3f}, {inter_dist2:.3f}")
         output_str.append(f"Bleu_score, Bleu_1, Bleu_2: {bleu:.3f}, {bleu1:.3f}, {bleu2:.3f}")
+        output_str.append(f"PPL, Bleu_score, Bleu_1, Bleu_2: {perplexity:.3f}, {bleu:.3f}, {bleu1:.3f}, {bleu2:.3f}")
         output_str.append(f"intra_dist1, intra_dist2, inter_dist1, inter_dist2 : {intra_dist1:.3f}, {intra_dist2:.3f}, {inter_dist1:.3f}, {inter_dist2:.3f}")
     logger.info(f"{mode} Loss: {epoch_loss}")
     save_preds(args, contexts, top5_docs, label_gold_knowledges, epoch=epoch, new_knows=new_knows, real_resp=real_resps, gen_resps=gen_resp, mode=mode)
@@ -201,11 +203,11 @@ def distinct(candidates): # From UniMIND
     intra_dist2 = np.average(intra_dist2) # Dist
     return intra_dist1, intra_dist2, inter_dist1, inter_dist2
 
-def index_update(args, model=None, dataset=None):
+def index_update(args, model=None, tokenizer=None, dataset=None):
     if model: ctx_encoder = model.rag.ctx_encoder
     else: ctx_encoder = DPRContextEncoder.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=os.path.join(args.home,'model_cache')).to(device=args.device)
-    ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=os.path.join(args.home,'model_cache'))
-    ctx_encoder = ctx_encoder.to(device=args.device)
+    # ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=os.path.join(args.home,'model_cache'))
+    ctx_tokenizer = tokenizer
     # knowledgeDB_csv_path=os.path.join(args.home, 'data', 'rag', 'my_knowledge_dataset.csv')
     dataset = load_dataset("csv", data_files=[args.knowledgeDB_csv_path], split="train", delimiter="\t", column_names=["title", "text"])
     dataset = dataset.map(split_documents, batched=True, num_proc = 4)
@@ -213,14 +215,14 @@ def index_update(args, model=None, dataset=None):
     new_features = Features({"text": Value("string"), "title": Value("string"), "embeddings": Sequence(Value("float32"))})  # optional, save as float32 instead of float64 to save space
     logger.info("Create Knowledge Dataset")
     new_dataset = dataset.map(
-        partial(embed, ctx_encoder=ctx_encoder, ctx_tokenizer=ctx_tokenizer),
+        partial(embed, ctx_encoder=ctx_encoder, ctx_tokenizer=ctx_tokenizer, args=args),
         batched=True, batch_size = args.batch_size, features=new_features,)
 
     new_dataset.save_to_disk(args.passages_path)
 
     index = faiss.IndexHNSWFlat(768, 128, faiss.METRIC_INNER_PRODUCT)
     new_dataset.add_faiss_index("embeddings", custom_index=index)
-    model.rag.retriever.re_load()
+    # model.rag.retriever.re_load() # Error
     model.rag.retriever.init_retrieval()
     
 
