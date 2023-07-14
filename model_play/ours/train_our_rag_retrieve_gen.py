@@ -5,7 +5,9 @@ from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 from torch import optim
 from loguru import logger
-
+from collections import Counter
+import numpy as np
+from nltk.translate.bleu_score import corpus_bleu
 
 def train_our_rag(args, model, tokenizer, faiss_dataset=None, train_Dataset=None, test_Dataset=None):
     from torch.utils.data import DataLoader
@@ -18,9 +20,9 @@ def train_our_rag(args, model, tokenizer, faiss_dataset=None, train_Dataset=None
     best_hitdic_str = None
     logger.info(f"Logging Epoch results:                      hit@1, hit@3, hit@5, hit_new@1, hit_new@3, hit_new@5")
     for epoch in range(args.rag_epochs):
-        
-        model.train()
-        hitDic, hitdic_ratio, output_str = epoch_play(args, tokenizer, model, train_dataloader, optimizer, epoch, faiss_dataset, mode = 'train')
+        if not args.debug:
+            model.train()
+            hitDic, hitdic_ratio, output_str = epoch_play(args, tokenizer, model, train_dataloader, optimizer, epoch, faiss_dataset, mode = 'train')
 
         model.eval()
         with torch.no_grad():
@@ -80,6 +82,12 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, epoch, faiss_data
     if mode == 'test':
         for i in output_str:
             logger.info(f"{mode}_{epoch} {i}")
+        bleu, bleu1, bleu2 = get_bleu(contexts, gen_resp)
+        intra_dist1, intra_dist2, inter_dist1, inter_dist2 = distinct(gen_resp)
+        logger.info(f"Bleu_score, Bleu_1, Bleu_2: {bleu:.3f}, {bleu1:.3f}, {bleu2:.3f}")
+        logger.info(f"intra_dist1, intra_dist2, inter_dist1, inter_dist2 : {intra_dist1:.3f}, {intra_dist2:.3f}, {inter_dist1:.3f}, {inter_dist2:.3f}")
+        output_str.append(f"Bleu_score, Bleu_1, Bleu_2: {bleu:.3f}, {bleu1:.3f}, {bleu2:.3f}")
+        output_str.append(f"intra_dist1, intra_dist2, inter_dist1, inter_dist2 : {intra_dist1:.3f}, {intra_dist2:.3f}, {inter_dist1:.3f}, {inter_dist2:.3f}")
     logger.info(f"{mode} Loss: {epoch_loss}")
     save_preds(args, contexts, top5_docs, label_gold_knowledges, epoch=epoch, new_knows=new_knows, real_resp=real_resps, gen_resps=gen_resp, mode=mode)
     return hitdic, hitdic_ratio, output_str  # output_strings, hit1_ratio, total_hit1, total_hit3, total_hit5, total_hit1_new, total_hit3_new, total_hit5_new
@@ -138,75 +146,6 @@ def know_hit_ratio(args, pred_pt, gold_pt, new_knows=None, types=None, typelist=
     # output_str.append(f"{'total':^22}: {hitdic_ratio['total']['hit1']/hitdic_ratio['total']['total']:.3f}, {hitdic_ratio['total']['hit3']/hitdic_ratio['total']['total']:.3f}, {hitdic_ratio['total']['hit5']/hitdic_ratio['total']['total']:.3f}, {hitdic_ratio['total']['total']}")
     return hitdic, hitdic_ratio, output_str
 
-class RAG_KnowledgeDataset(Dataset):  # knowledge용 데이터셋
-    def __init__(self, args, data_sample, train_knowledge_seq_set, tokenizer, input_dialog='dialog',mode='train'):
-        super(Dataset, self).__init__()
-        self.args = args
-        self.train_knowledge_seq_set = train_knowledge_seq_set
-        self.tokenizer = tokenizer
-        self.augmented_raw_sample = data_sample
-        self.mode = mode
-        self.input_dialog = input_dialog
-        logger.info(f"Input Dialog With type topic ?? : {self.input_dialog}")
-        # self.generate_prompt_ids = self.tokenizer.convert_tokens_to_ids(self.tokenizer.tokenize('System:'))
-
-    def __len__(self):
-        return len(self.augmented_raw_sample)
-
-    def __getitem__(self, idx):  # TODO 구현 전
-        data = self.augmented_raw_sample[idx]
-        cbdicKeys = ['dialog', 'user_profile', 'situation', 'response', 'goal', 'last_goal', 'topic',  'target_knowledge', 'candidate_knowledges']
-        dialog, user_profile, situation, response, type, last_type, topic,  target_knowledge, candidate_knowledges = [data[i] for i in cbdicKeys]
-
-        # Pad source and target to the right
-        source_tokenizer = (self.tokenizer.question_encoder if isinstance(self.tokenizer, RagTokenizer) else self.tokenizer)
-        target_tokenizer = self.tokenizer.generator if isinstance(self.tokenizer, RagTokenizer) else self.tokenizer
-
-        pad_token_id = source_tokenizer.pad_token_id
-
-        # max_knowledge_length = self.args.max_length*5//10 # 768의 50%까지 knowledge데이터 넣어주기
-
-        # type_token = source_tokenizer('<type>' + type , max_length=max_knowledge_length//20, truncation=True).input_ids
-        # last_type_token = source_tokenizer('<last_type>' + last_type, max_length=max_knowledge_length//20, truncation=True).input_ids
-        # topic_token = source_tokenizer('<topic>' + topic , max_length=max_knowledge_length//20, truncation=True).input_ids
-
-        # if self.args.inputWithTopic:
-        #     input = source_tokenizer('<dialog>' + dialog, max_length=self.args.max_length - len(type_token)-len(last_type_token) - len(topic_token) ,padding='max_length' ,truncation=True).input_ids
-        #     input = input + type_token + last_type_token + topic_token
-        # else:
-        #     input = source_tokenizer('<dialog>' + dialog, max_length=self.args.max_length - len(type_token)-len(last_type_token) ,padding='max_length' ,truncation=True).input_ids
-        #     input = input + type_token + last_type_token
-
-        if 'topic' in self.args.input_dialog and 'goal' in self.args.input_dialog:
-            input_dialog = dialog + "<type>" + type + " <topic>" + topic
-        elif 'topic' in self.args.input_dialog:
-            input_dialog = dialog + " <topic>" + topic
-        elif 'goal' in self.args.input_dialog:
-            input_dialog = dialog + "<type>" + type
-        else:
-            input_dialog = dialog
-
-        source_input = source_tokenizer(input_dialog, max_length=self.args.max_length, padding='max_length', truncation=True)
-        input = source_input.input_ids
-        input_mask = source_input.attention_mask
-
-        input_ids = torch.LongTensor(input)
-        input_masks = torch.LongTensor(input_mask)
-        target_ids = torch.LongTensor(target_tokenizer(response, max_length=self.args.rag_max_target_length, padding='max_length', truncation=True).input_ids)
-        # response 만 target_tokenizer로 토크나이징
-        # label = source_tokenizer(target_knowledge, max_length=self.args.max_gen_length, padding='max_length', truncation=True).input_ids
-        # pseudo_label = source_tokenizer(candidate_knowledges[0], max_length=self.args.max_gen_length, padding='max_length', truncation=True).input_ids
-        return {
-            "input_ids": input_ids,
-            "attention_mask": input_masks,
-            "labels": target_ids,  # response
-            'goal': type,
-            'knowledge_task_label': target_knowledge,
-            'knowledge_task_pseudo_label': candidate_knowledges[0],
-            'is_new_knowledge': 1 if target_knowledge not in self.train_knowledge_seq_set else 0,
-        }
-            # 'knowledge_task_label': torch.LongTensor(label), # tensor
-            # 'knowledge_task_pseudo_label': torch.LongTensor(pseudo_label), # tensor
 
 def save_preds(args, context, pred_words, label_words, epoch=None, new_knows=None, real_resp=None, gen_resps=None, mode='train'):
     # HJ: 동일 파일 덮어쓰면서 맨 윗줄에 몇번째 에폭인지만 쓰도록 수정
@@ -227,3 +166,30 @@ def save_preds(args, context, pred_words, label_words, epoch=None, new_knows=Non
             f.write(f"\n")
     logger.info(f"Save {mode}, Epoch: {str(epoch)}, generated results in {path}")
     return
+
+def get_bleu(references, candidates): # From UNIMIND
+    preds = [pred.split(' ') for pred in candidates]
+    ref = [ctx.split(' ') for ctx in references]
+    bleu_score = corpus_bleu(ref, preds)
+    bleu1 = corpus_bleu(ref, preds, weights=(1, 0, 0, 0))
+    bleu2 = corpus_bleu(ref, preds, weights=(0.5, 0.5, 0, 0))
+    return bleu_score, bleu1, bleu2
+
+def distinct(candidates): # From UniMIND
+    seqs = [pred.split(' ') for pred in candidates]
+    intra_dist1, intra_dist2 = [], []
+    unigrams_all, bigrams_all = Counter(), Counter()
+    for seq in seqs:
+        unigrams = Counter(seq)
+        bigrams = Counter(zip(seq, seq[1:]))
+        intra_dist1.append((len(unigrams) + 1e-12) / (len(seq) + 1e-5))
+        intra_dist2.append((len(bigrams) + 1e-12) / (max(0, len(seq) - 1) + 1e-5))
+
+        unigrams_all.update(unigrams)
+        bigrams_all.update(bigrams)
+
+    inter_dist1 = (len(unigrams_all) + 1e-12) / (sum(unigrams_all.values()) + 1e-5)
+    inter_dist2 = (len(bigrams_all) + 1e-12) / (sum(bigrams_all.values()) + 1e-5)
+    intra_dist1 = np.average(intra_dist1) # Dist
+    intra_dist2 = np.average(intra_dist2) # Dist
+    return intra_dist1, intra_dist2, inter_dist1, inter_dist2
