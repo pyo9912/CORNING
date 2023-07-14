@@ -14,68 +14,11 @@ import torch
 from tqdm import tqdm
 from loguru import logger
 
-def split_documents(documents: dict) -> dict:
-    """Split documents into passages"""
-    titles, texts = [], []
-    for title, text in zip(documents["title"], documents["text"]):
-        if text is not None:
-            for passage in split_text(text):
-                titles.append(title if title is not None else "")
-                texts.append(passage)
-    return {"title": titles, "text": texts}
-
-
-def split_text(text: str, n=100, character=" ") -> List[str]:
-    """Split the text every ``n``-th occurrence of ``character``"""
-    text = text.split(character)
-    return [character.join(text[i: i + n]).strip() for i in range(0, len(text), n)]
-
-
-def embed(documents: dict, ctx_encoder: DPRContextEncoder, ctx_tokenizer: DPRContextEncoderTokenizerFast, args) -> dict:
-    """Compute the DPR embeddings of document passages"""
-    input_ids = ctx_tokenizer(documents["title"], documents["text"], truncation=True, padding="longest", return_tensors="pt")["input_ids"]
-    embeddings = ctx_encoder(input_ids.to(device=args.device), return_dict=True).pooler_output
-    return {"embeddings": embeddings.detach().cpu().numpy()}
-
-
-def index_update(args, model=None, dataset=None):
-    MODEL_CACHE_DIR=os.path.join(args.home, 'model_cache', "facebook/dpr-ctx_encoder-multiset-base")
-    # Model CACHE DIR
-    if model: ctx_encoder = model.rag.ctx_encoder
-    else:
-        ctx_encoder = DPRContextEncoder.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR).to(device=args.device)
-    ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR)
-    ctx_encoder = ctx_encoder.to(device=args.device)
-    # knowledgeDB_csv_path=os.path.join(args.home, 'data', 'rag', 'my_knowledge_dataset.csv')
-    dataset = load_dataset("csv", data_files=[args.knowledgeDB_csv_path], split="train", delimiter="\t", column_names=["title", "text"])
-    dataset = dataset.map(split_documents, batched=True, num_proc=4)
-
-    new_features = Features({"text": Value("string"), "title": Value("string"), "embeddings": Sequence(Value("float32"))})  # optional, save as float32 instead of float64 to save space
-    logger.info("Create Knowledge Dataset")
-    new_dataset = dataset.map(
-        partial(embed, ctx_encoder=ctx_encoder, ctx_tokenizer=ctx_tokenizer, args=args),
-        batched=True, batch_size=args.batch_size, features=new_features, )
-
-    # passages_path = os.path.join(args.home,'data','rag', "my_knowledge_dataset")
-
-    new_dataset.save_to_disk(args.passages_path)
-
-    index = faiss.IndexHNSWFlat(768, 128, faiss.METRIC_INNER_PRODUCT)
-    new_dataset.add_faiss_index("embeddings", custom_index=index)
-    try:
-        model.rag.retriever.re_load()
-        model.rag.retriever.init_retrieval()
-    except:
-        retriever = RagRetriever.from_pretrained('facebook/rag-sequence-nq', index_name='custom', indexed_dataset=new_dataset, init_retrieval=True)
-        retriever.set_ctx_encoder_tokenizer(ctx_tokenizer)
-        model.set_retriever(retriever)
-
-
 def train_retrieve(args, model, tokenizer, train_dataset_aug=None, test_dataset_aug=None, train_knowledge_seq_set=None, faiss_dataset=None, train_Dataset=None, test_Dataset=None):
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.1, eps=5e-9)
     if train_dataset_aug and test_dataset_aug:
-        train_Dataset = RAG_KnowledgeDataset(args, train_dataset_aug, train_knowledge_seq_set, tokenizer, mode='train')
-        test_Dataset = RAG_KnowledgeDataset(args, test_dataset_aug, train_knowledge_seq_set, tokenizer, mode='test')
+        train_Dataset = RAG_KnowledgeDataset(args, train_dataset_aug, train_knowledge_seq_set, tokenizer, input_dialog=args.rag_input_dialog, mode='train')
+        test_Dataset = RAG_KnowledgeDataset(args, test_dataset_aug, train_knowledge_seq_set, tokenizer, input_dialog=args.rag_input_dialog ,mode='test')
         train_dataloader = DataLoader(train_Dataset, batch_size=args.rag_batch_size, shuffle=True)
         test_dataloader = DataLoader(test_Dataset, batch_size=args.rag_batch_size, shuffle=False)
     if train_Dataset and test_Dataset:
@@ -234,13 +177,14 @@ def know_hit_ratio(args, pred_pt, gold_pt, new_knows=None, types=None, typelist=
 
 
 class RAG_KnowledgeDataset(Dataset):  # knowledge용 데이터셋
-    def __init__(self, args, data_sample, train_knowledge_seq_set, tokenizer, mode='train'):
+    def __init__(self, args, data_sample, train_knowledge_seq_set, tokenizer, input_dialog='dialog',mode='train'):
         super(Dataset, self).__init__()
         self.args = args
         self.train_knowledge_seq_set = train_knowledge_seq_set
         self.tokenizer = tokenizer
         self.augmented_raw_sample = data_sample
         self.mode = mode
+        self.input_dialog = input_dialog
         logger.info(f"Input Dialog With type topic ?? : {self.args.input_dialog}")
         # self.generate_prompt_ids = self.tokenizer.convert_tokens_to_ids(self.tokenizer.tokenize('System:'))
 
@@ -302,6 +246,63 @@ class RAG_KnowledgeDataset(Dataset):  # knowledge용 데이터셋
             # 'knowledge_task_label': torch.LongTensor(label), # tensor
             # 'knowledge_task_pseudo_label': torch.LongTensor(pseudo_label), # tensor
 
+
+
+def split_documents(documents: dict) -> dict:
+    """Split documents into passages"""
+    titles, texts = [], []
+    for title, text in zip(documents["title"], documents["text"]):
+        if text is not None:
+            for passage in split_text(text):
+                titles.append(title if title is not None else "")
+                texts.append(passage)
+    return {"title": titles, "text": texts}
+
+
+def split_text(text: str, n=100, character=" ") -> List[str]:
+    """Split the text every ``n``-th occurrence of ``character``"""
+    text = text.split(character)
+    return [character.join(text[i: i + n]).strip() for i in range(0, len(text), n)]
+
+
+def embed(documents: dict, ctx_encoder: DPRContextEncoder, ctx_tokenizer: DPRContextEncoderTokenizerFast, args) -> dict:
+    """Compute the DPR embeddings of document passages"""
+    input_ids = ctx_tokenizer(documents["title"], documents["text"], truncation=True, padding="longest", return_tensors="pt")["input_ids"]
+    embeddings = ctx_encoder(input_ids.to(device=args.device), return_dict=True).pooler_output
+    return {"embeddings": embeddings.detach().cpu().numpy()}
+
+
+def index_update(args, model=None, dataset=None):
+    MODEL_CACHE_DIR=os.path.join(args.home, 'model_cache', "facebook/dpr-ctx_encoder-multiset-base")
+    # Model CACHE DIR
+    if model: ctx_encoder = model.rag.ctx_encoder
+    else:
+        ctx_encoder = DPRContextEncoder.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR).to(device=args.device)
+    ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR)
+    ctx_encoder = ctx_encoder.to(device=args.device)
+    # knowledgeDB_csv_path=os.path.join(args.home, 'data', 'rag', 'my_knowledge_dataset.csv')
+    dataset = load_dataset("csv", data_files=[args.knowledgeDB_csv_path], split="train", delimiter="\t", column_names=["title", "text"])
+    dataset = dataset.map(split_documents, batched=True, num_proc=4)
+
+    new_features = Features({"text": Value("string"), "title": Value("string"), "embeddings": Sequence(Value("float32"))})  # optional, save as float32 instead of float64 to save space
+    logger.info("Create Knowledge Dataset")
+    new_dataset = dataset.map(
+        partial(embed, ctx_encoder=ctx_encoder, ctx_tokenizer=ctx_tokenizer, args=args),
+        batched=True, batch_size=args.batch_size, features=new_features, )
+
+    # passages_path = os.path.join(args.home,'data','rag', "my_knowledge_dataset")
+
+    new_dataset.save_to_disk(args.passages_path)
+
+    index = faiss.IndexHNSWFlat(768, 128, faiss.METRIC_INNER_PRODUCT)
+    new_dataset.add_faiss_index("embeddings", custom_index=index)
+    try:
+        model.rag.retriever.re_load()
+        model.rag.retriever.init_retrieval()
+    except:
+        retriever = RagRetriever.from_pretrained('facebook/rag-sequence-nq', index_name='custom', indexed_dataset=new_dataset, init_retrieval=True)
+        retriever.set_ctx_encoder_tokenizer(ctx_tokenizer)
+        model.set_retriever(retriever)
 
 
 

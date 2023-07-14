@@ -13,7 +13,7 @@ from data_model import GenerationDataset
 from data_model_know import DialogDataset, KnowledgeDataset
 from rank_bm25 import BM25Okapi
 from model_play.ours.train_bert_goal_topic import train_goal_topic_bert, pred_goal_topic_aug, eval_goal_topic_model
-from model_play.ours import train_know_retrieve, eval_know_retrieve
+from model_play.ours import train_know_retrieve, eval_know_retrieve, train_our_rag_retrieve_gen
 # from model_play.ours.eval_know import *
 
 from loguru import logger
@@ -32,7 +32,15 @@ def add_ours_specific_args(parser):
     parser.add_argument("--alltype", action='store_true', help="AllType Check 여부, AllType아닐시 knowledge용으로 3711세팅들어감")
     parser.add_argument("--scratch", action='store_true', help="RAG_Response 모델에 scratch 를 해줄지 말지 체크여부 필요")
 
-
+    ## For resp
+    # parser.add_argument("--rag_retrieve_input_length", type=int, default=768, help=" Method ")
+    parser.add_argument("--rag_batch_size", type=int, default=4, help=" Method ")
+    parser.add_argument("--rag_input_dialog", type=str, default="dialog", help=" Method ")
+    parser.add_argument("--rag_max_input_length", type=int, default=128, help=" Method ")
+    parser.add_argument("--rag_max_target_length", type=int, default=128, help=" Method ")
+    parser.add_argument("--rag_num_beams", type=int, default=5, help=" Method ")
+    parser.add_argument("--rag_epochs", type=int, default=10, help=" Method ")
+    parser.add_argument('--rag_lr', type=float, default=1e-5, help='RAG Learning rate')
     # parser.add_argument( "--method", type=str, default="ours", help=" Method " )
     return parser
 
@@ -195,6 +203,8 @@ def main(args=None):
         # train_know_retrieve.train_know(args, train_dataloader, valid_dataloader, retriever, train_knowledge_data, train_knowledgeDB, all_knowledge_data, all_knowledgeDB, tokenizer)
         # eval_know_retrieve.eval_know(args, test_dataloader, retriever, all_knowledge_data, all_knowledgeDB, tokenizer, write=False)  # HJ: Knowledge text top-k 뽑아서 output만들어 체크하던 코드 분리
 
+    if 'resp' in args.task:
+        train_our_rag_retrieve_gen.train_resp(args)
 
 def make_dsi_input(save_dir, dataset_raw, input_setting='dialog', knowledgeDB=[], mode='train'):
     class TEMPTokenizer:

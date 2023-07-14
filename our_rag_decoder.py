@@ -22,22 +22,23 @@ import data_model
 
 
 def add_rag_specific_args(parser):
-    parser.add_argument("--input_dialog", type=str, default="dialog", help=" Method ")
-    parser.add_argument("--method", type=str, default="rag", help=" Method ")
+    parser.add_argument("--method", type=str, default="our_rag", help=" Method ")
     parser.add_argument("--rag_retrieve_input_length", type=int, default=768, help=" Method ")
     parser.add_argument("--rag_batch_size", type=int, default=4, help=" Method ")
-    parser.add_argument("--rag_max_target_length", type=int, default=128, help=" Method ")
+    parser.add_argument("--rag_input_dialog", type=str, default="dialog", help=" Method ")
     parser.add_argument("--rag_max_input_length", type=int, default=128, help=" Method ")
+    parser.add_argument("--rag_max_target_length", type=int, default=128, help=" Method ")
     parser.add_argument("--rag_num_beams", type=int, default=5, help=" Method ")
     parser.add_argument("--rag_epochs", type=int, default=10, help=" Method ")
+    parser.add_argument('--rag_lr', type=float, default=1e-5, help='RAG Learning rate')
     # parser.add_argument("--TopicTask_Train_Prompt_usePredGoal", action='store_true', help="Topic prediction시 Predicted goal 사용여부 (Train)")
     # parser.add_argument("--TopicTask_Test_Prompt_usePredGoal", action='store_true', help="Topic prediction시 Predicted goal 사용여부 (Test)")
     # parser.add_argument("--gtpred", action='store_true', help="Goal-Topic prediction 해서 label로 추가 할지 여부")
-    parser.add_argument("--usePseudoTrain", action='store_true', help="Knowledge Pseudo label을 label로 사용할지 여부 (Train)")
-    parser.add_argument("--usePseudoTest", action='store_true', help="Knowledge Pseudo label을 label로 사용할지 여부 (Test)")
+    # parser.add_argument("--usePseudoTrain", action='store_true', help="Knowledge Pseudo label을 label로 사용할지 여부 (Train)")
+    # parser.add_argument("--usePseudoTest", action='store_true', help="Knowledge Pseudo label을 label로 사용할지 여부 (Test)")
 
-    parser.add_argument("--use_test_knows_index", action='store_true', help="All knowledge를 index로 활용할지 여부")
-    parser.add_argument("--scratch", action='store_false', help="우리의 retriever모델을 쓸지 말지")
+    # parser.add_argument("--use_test_knows_index", action='store_true', help="All knowledge를 index로 활용할지 여부")
+    parser.add_argument("--rag_scratch", action='store_false', help="우리의 retriever모델을 쓸지 말지")
     # parser.add_argument("--inputWithKnowledge", action='store_true', help="Input으로 Dialog 외의 정보들도 줄지 여부")
     # parser.add_argument("--inputWithTopic", action='store_true', help="Input에 Topic도 넣어줄지 여부")
 
@@ -104,7 +105,7 @@ def main(our_args, our_tokenizer=None, our_question_encoder=None, our_ctx_encode
     utils.checkPath(MODEL_CACHE_DIR)
     ctx_encoder = DPRContextEncoder.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR).to(device=args.device)
     ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR)
-    if our_ctx_encoder and our_tokenizer and args.scratch:
+    if our_ctx_encoder and our_tokenizer and args.rag_scratch:
         logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use Our Trained Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
         ctx_encoder.ctx_encoder.bert_model = our_ctx_encoder
         ctx_tokenizer = our_tokenizer
@@ -130,7 +131,7 @@ def main(our_args, our_tokenizer=None, our_question_encoder=None, our_ctx_encode
     # retriever.set_ctx_encoder_tokenizer(ctx_tokenizer) # NO TOUCH
     model = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever).to(args.device)
     tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
-    if our_tokenizer and our_question_encoder and args.scratch:
+    if our_tokenizer and our_question_encoder and args.rag_scratch:
         logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@ Model question_encoder changed by ours @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
         model.rag.question_encoder.question_encoder.bert_model = our_question_encoder
         tokenizer.question_encoder = our_tokenizer
@@ -165,7 +166,7 @@ def train_our_rag_retrieve(args, model, tokenizer, faiss_dataset=None, train_Dat
     best_hitdic_str = None
     logger.info(f"Logging Epoch results:                      hit@1, hit@3, hit@5, hit_new@1, hit_new@3, hit_new@5")
     for epoch in range(args.rag_epochs):
-
+        
         model.train()
         hitDic, hitdic_ratio, output_str = epoch_play(args, tokenizer, model, train_dataloader, optimizer, epoch, faiss_dataset, mode = 'train')
 
@@ -235,50 +236,50 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, epoch, faiss_data
     return hitDic, hitdic_ratio, output_str  # output_strings, hit1_ratio, total_hit1, total_hit3, total_hit5, total_hit1_new, total_hit3_new, total_hit5_new
 
 
-def process_augment_rag_sample(args, raw_data, tokenizer=None, mode='train', goal_types=['Q&A', 'Movie recommendation', 'Music recommendation', 'POI recommendation', 'Food recommendation']):
-    from tqdm import tqdm
-    from copy import deepcopy
-    train_sample = []
-    logger.info(f"{mode} Data Goal types: {goal_types}")
-    if tokenizer:
-        try:
-            if tokenizer.eos_token is not None:
-                eos_token = tokenizer.eos_token
-            else:
-                eos_token = tokenizer.sep_token
-        except:
-            eos_token = tokenizer.generator.eos_token
-    else:
-        eos_token = '</s>'
-    for ij in tqdm(range(len(raw_data)), desc="Dataset Augment", bar_format='{l_bar} | {bar:23} {r_bar}'):
-        conversation = raw_data[ij]
-        augmented_dialog = []
-        augmented_knowledge = []
-        last_type = ""
-        for i in range(len(conversation['dialog'])):
-            role = conversation['role_seq'][i]
-            utterance = conversation['dialog'][i] + eos_token
-            goal = conversation['goal'][i]
-            # if goal == 'Movie recommendation' or goal == 'POI recommendation' or goal == 'Music recommendation' or goal == 'Q&A': # TH 230601
-            # if goal == 'Q&A': # QA에 대해서만 볼 때
-            if goal in goal_types:
-                if role == 'System' and len(augmented_dialog) > 0 and len(conversation['pseudo_knowledge_seq'][i]) != 0:  # Test 3360 Setting
-                    flatten_dialog = ''.join(augmented_dialog)
-                    train_sample.append({'dialog': flatten_dialog,
-                                         'user_profile': conversation['user_profile'],
-                                         'response': utterance,
-                                         'goal': conversation['goal'][i],
-                                         'last_goal': conversation['goal'][i - 1],
-                                         'topic': conversation['topic'][i],
-                                         'situation': conversation['situation'],
-                                         'target_knowledge': conversation['knowledge_seq'][i],
-                                         'candidate_knowledges': conversation['pseudo_knowledge_seq'][i],
-                                         'candidate_confidences': conversation['pseudo_confidence_seq'][i]  # prob
-                                         })
-            if role == 'system': last_type = conversation['goal'][i]
-            augmented_dialog.append(utterance)
-            augmented_knowledge.append(conversation['knowledge_seq'][i])
-    return train_sample
+# def process_augment_rag_sample(args, raw_data, tokenizer=None, mode='train', goal_types=['Q&A', 'Movie recommendation', 'Music recommendation', 'POI recommendation', 'Food recommendation']):
+#     from tqdm import tqdm
+#     from copy import deepcopy
+#     train_sample = []
+#     logger.info(f"{mode} Data Goal types: {goal_types}")
+#     if tokenizer:
+#         try:
+#             if tokenizer.eos_token is not None:
+#                 eos_token = tokenizer.eos_token
+#             else:
+#                 eos_token = tokenizer.sep_token
+#         except:
+#             eos_token = tokenizer.generator.eos_token
+#     else:
+#         eos_token = '</s>'
+#     for ij in tqdm(range(len(raw_data)), desc="Dataset Augment", bar_format='{l_bar} | {bar:23} {r_bar}'):
+#         conversation = raw_data[ij]
+#         augmented_dialog = []
+#         augmented_knowledge = []
+#         last_type = ""
+#         for i in range(len(conversation['dialog'])):
+#             role = conversation['role_seq'][i]
+#             utterance = conversation['dialog'][i] + eos_token
+#             goal = conversation['goal'][i]
+#             # if goal == 'Movie recommendation' or goal == 'POI recommendation' or goal == 'Music recommendation' or goal == 'Q&A': # TH 230601
+#             # if goal == 'Q&A': # QA에 대해서만 볼 때
+#             if goal in goal_types:
+#                 if role == 'System' and len(augmented_dialog) > 0 and len(conversation['pseudo_knowledge_seq'][i]) != 0:  # Test 3360 Setting
+#                     flatten_dialog = ''.join(augmented_dialog)
+#                     train_sample.append({'dialog': flatten_dialog,
+#                                          'user_profile': conversation['user_profile'],
+#                                          'response': utterance,
+#                                          'goal': conversation['goal'][i],
+#                                          'last_goal': conversation['goal'][i - 1],
+#                                          'topic': conversation['topic'][i],
+#                                          'situation': conversation['situation'],
+#                                          'target_knowledge': conversation['knowledge_seq'][i],
+#                                          'candidate_knowledges': conversation['pseudo_knowledge_seq'][i],
+#                                          'candidate_confidences': conversation['pseudo_confidence_seq'][i]  # prob
+#                                          })
+#             if role == 'system': last_type = conversation['goal'][i]
+#             augmented_dialog.append(utterance)
+#             augmented_knowledge.append(conversation['knowledge_seq'][i])
+#     return train_sample
 
 
 if __name__ == '__main__':
