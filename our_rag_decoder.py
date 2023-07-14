@@ -37,7 +37,7 @@ def add_rag_specific_args(parser):
     parser.add_argument("--usePseudoTest", action='store_true', help="Knowledge Pseudo label을 label로 사용할지 여부 (Test)")
 
     parser.add_argument("--use_test_knows_index", action='store_true', help="All knowledge를 index로 활용할지 여부")
-    parser.add_argument("--scratch", action='store_true', help="우리의 retriever모델을 쓸지 말지")
+    parser.add_argument("--scratch", action='store_false', help="우리의 retriever모델을 쓸지 말지")
     # parser.add_argument("--inputWithKnowledge", action='store_true', help="Input으로 Dialog 외의 정보들도 줄지 여부")
     # parser.add_argument("--inputWithTopic", action='store_true', help="Input에 Topic도 넣어줄지 여부")
 
