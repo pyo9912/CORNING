@@ -21,7 +21,7 @@ def truncationPadding(input_ids, max_length, prefix=[], suffix=[]):
 
 
 class RagDataset(Dataset):
-    def __init__(self, args, augmented_raw_sample, tokenizer, knowledgeDB, mode):
+    def __init__(self, args, augmented_raw_sample, tokenizer=None, knowledgeDB=None, mode='train'):
         super(Dataset, self).__init__()
         self.args = args
         self.mode=mode
@@ -30,6 +30,9 @@ class RagDataset(Dataset):
         self.input_max_length=args.rag_max_input_length
         self.target_max_length=args.rag_max_target_length
         self.knowledgeDB = knowledgeDB
+    
+    def set_tokenizer(self, tokenizer):
+        self.tokenizer = tokenizer
 
     def __getitem__(self, item):
         data = self.augmented_raw_sample[item]
