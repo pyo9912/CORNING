@@ -82,7 +82,10 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
         
         if mode == 'test' :
             resp_batch = tokenizer.generator.batch_decode(
-                model.generate(source_ids, min_length=0, max_length=args.rag_max_target_length, early_stopping=True), skip_special_tokens=True, clean_up_tokenization_spaces=True)
+                model.generate(source_ids, min_length=0, max_length=args.rag_max_target_length, early_stopping=True,
+                               num_beams=1, num_return_sequences=1, n_docs=5
+                               )
+                , skip_special_tokens=True, clean_up_tokenization_spaces=True)
             gen_resp.extend(resp_batch)
     if mode=='train': scheduler.step()
     perplexity = torch.exp(torch.tensor(epoch_loss/steps))
