@@ -98,6 +98,7 @@ def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
     best_hitdic_ratio = {'total': {'hit1': 0, 'hit3': 0, 'hit5': 0, 'hit1_new': 0, 'hit3_new': 0, 'hit5_new': 0, 'total': 0}}
     best_hitdic_str = None
     logger.info(f"Logging Epoch results:                      hit@1, hit@3, hit@5, hit_new@1, hit_new@3, hit_new@5")
+    early_stop_counter, early_stop = 0 , False
     for epoch in range(args.rag_epochs):
         # if not args.debug:
         rag_model.train()
@@ -109,10 +110,19 @@ def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
             if best_hitdic_ratio['total']['hit1'] <= hitdic_ratio['total']['hit1']:
                 best_hitdic_ratio = hitdic_ratio
                 best_hitdic_str = output_str
+            else:
+                early_stop+=1 # 3회 이상 hit1 ratio 떨어지면 그냥 꺼버리기
+
         if epoch<3: 
             index_update(args, rag_model, rag_tokenizer, faiss_dataset)
+
+        ## Early Stopping
+
+
     for i in best_hitdic_str:
         logger.info(f"Test_best {i}")
+
+
 
 def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch, faiss_dataset, mode='train'):
     from tqdm import tqdm
