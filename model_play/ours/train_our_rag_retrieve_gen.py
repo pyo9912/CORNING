@@ -46,7 +46,7 @@ def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
     ctx_encoder = DPRContextEncoder.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR).to(device=args.device)
     ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR)
 
-    if args.rag_scratch:
+    if args.rag_our_bert:
         logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use Our Trained Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
         logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use Our Trained Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
         ctx_encoder.ctx_encoder.bert_model = our_ctx_encoder
@@ -74,7 +74,7 @@ def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
     rag_model = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever).to(args.device)
     rag_tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
     rag_model.set_context_encoder_for_training(ctx_encoder)
-    if args.rag_scratch:
+    if args.rag_our_bert:
         logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@ Model question_encoder changed by ours @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
         logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@ Model question_encoder changed by ours @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
         rag_model.rag.question_encoder.question_encoder.bert_model = our_question_encoder
@@ -91,9 +91,6 @@ def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
     train_Dataset = data_model.RagDataset(args, train_dataset_aug_pred, rag_tokenizer, all_knowledgeDB, mode='train')
     test_Dataset = data_model.RagDataset(args, test_dataset_aug_pred, rag_tokenizer, all_knowledgeDB, mode='test')
 
-    # train_our_rag_retrieve_gen.train_our_rag(args, rag_model, rag_tokenizer, faiss_dataset, train_Dataset, test_Dataset)
-
-    # from torch.utils.data import DataLoader
     train_dataloader = DataLoader(train_Dataset, batch_size=args.rag_batch_size, shuffle=True)
     test_dataloader = DataLoader(test_Dataset, batch_size=args.rag_batch_size, shuffle=False)
 
@@ -102,14 +99,14 @@ def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
     best_hitdic_ratio = {'total': {'hit1': 0, 'hit3': 0, 'hit5': 0, 'hit1_new': 0, 'hit3_new': 0, 'hit5_new': 0, 'total': 0}}
     best_hitdic_str = None
     logger.info(f"Logging Epoch results:                      hit@1, hit@3, hit@5, hit_new@1, hit_new@3, hit_new@5")
-    early_stop_counter, early_stop = 0 , False
+
     for epoch in range(args.rag_epochs):
         # if not args.debug:
         rag_model.train()
         if args.rag_onlyDecoderTune:
             rag_model.eval()
             rag_model.generator.train()
-            hitDic, hitdic_ratio, output_str = epoch_play(args, rag_tokenizer, rag_model, train_dataloader, optimizer, scheduler, epoch, faiss_dataset, mode = 'train')
+        hitDic, hitdic_ratio, output_str = epoch_play(args, rag_tokenizer, rag_model, train_dataloader, optimizer, scheduler, epoch, faiss_dataset, mode = 'train')
 
         rag_model.eval()
         with torch.no_grad():
@@ -117,14 +114,6 @@ def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
             if best_hitdic_ratio['total']['hit1'] <= hitdic_ratio['total']['hit1']:
                 best_hitdic_ratio = hitdic_ratio
                 best_hitdic_str = output_str
-            # else:
-            #     early_stop+=1 # 3회 이상 hit1 ratio 떨어지면 그냥 꺼버리기
-
-        # if epoch<3: 
-        #     index_update(args, rag_model, rag_tokenizer, faiss_dataset)
-
-        ## Early Stopping
-
 
     for i in best_hitdic_str:
         logger.info(f"Test_best {i}")
