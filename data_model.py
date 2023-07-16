@@ -67,8 +67,9 @@ class RagDataset(Dataset):
         context_batch['input_ids'] = torch.LongTensor(input_sentence).to(self.args.device)
         attention_mask = context_batch['input_ids'].ne(pad_token_id)
         context_batch['attention_mask'] = attention_mask
-
-        labels = self.tokenizer.generator(response, max_length=self.target_max_length, padding='max_length', truncation=True)['input_ids']
+        if '[SEP]' in response: # response에서 [SEP] token 제거
+            response = response[:response.index("[SEP]")]
+        labels = self.tokenizer.generator(response, max_length=self.target_max_length, padding='max_length', truncation=True)['input_ids'] 
 
         context_batch['response'] = labels
         context_batch['goal_idx'] = self.args.goalDic['str'][goal]  # index로 바꿈

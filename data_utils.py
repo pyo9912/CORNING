@@ -124,7 +124,7 @@ def process_augment_all_sample(raw_data, tokenizer, knowledgeDB):
             role = conversation['role_seq'][i]
             utterance = conversation['dialog'][i] + eos_token
             goal = conversation['goal'][i]
-            if role == 'System' and len(augmented_dialog) > 0:
+            if role.lower() == 'system' and len(augmented_dialog) > 0:
                 flatten_dialog = ''.join(augmented_dialog)
                 train_sample.append({'dialog': flatten_dialog,
                                      'user_profile': conversation['user_profile'],
@@ -155,7 +155,7 @@ def process_augment_sample(raw_data, tokenizer=None, knowledgeDB=None, goal_list
             utterance = conversation['dialog'][i] + eos_token
             goal = conversation['goal'][i]
             if goal in goal_list:
-                if role == 'System' and len(augmented_dialog) > 0 and len(conversation['pseudo_knowledge_seq'][i]) != 0: # Test 3360 Setting
+                if role.lower() == 'system' and len(augmented_dialog) > 0 and len(conversation['pseudo_knowledge_seq'][i]) != 0: # Test 3360 Setting
                     flatten_dialog = ''.join(augmented_dialog)
                     train_sample.append({'dialog': flatten_dialog,
                                          'user_profile': conversation['user_profile'],

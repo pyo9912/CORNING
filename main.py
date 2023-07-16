@@ -261,6 +261,7 @@ def split_validation(train_dataset_raw, train_ratio=1.0):
 
 
 def initLogging(args):
+    import git ## pip install gitpython
     filename = args.log_name #f'{args.time}_{"DEBUG" if args.debug else args.log_name}_{args.model_name.replace("/", "_")}_log.txt'
     filename = os.path.join(args.log_dir, filename)
     logger.remove()
@@ -268,6 +269,8 @@ def initLogging(args):
     if not args.debug: logger.add(filename, format=fmt, encoding='utf-8')
     logger.add(sys.stdout, format=fmt, level="INFO", colorize=True)
     logger.info(f"FILENAME: {filename}")
+    try: logger.info(f"Git commit massages: {git.Repo(search_parent_directories=True).head.object.hexsha[:7]}")
+    except: pass
     logger.info('Commend: {}'.format(', '.join(map(str, sys.argv))))
     return logger
 

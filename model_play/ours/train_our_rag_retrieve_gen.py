@@ -7,7 +7,7 @@ from torch import optim
 from loguru import logger
 from collections import Counter
 import numpy as np
-from nltk.translate.bleu_score import corpus_bleu
+from nltk.translate.bleu_score import corpus_bleu, sentence_bleu, SmoothingFunction
 # from transformers import DPRContextEncoder,DPRContextEncoderTokenizerFast, RagRetriever
 from transformers import DPRContextEncoder, DPRContextEncoderTokenizerFast, RagRetriever, RagSequenceForGeneration, RagTokenizer
 from typing import List
@@ -48,6 +48,7 @@ def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
 
     if args.rag_scratch:
         logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use Our Trained Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+        logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use Our Trained Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
         ctx_encoder.ctx_encoder.bert_model = our_ctx_encoder
         ctx_tokenizer = tokenizer
 
@@ -74,6 +75,7 @@ def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
     rag_tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
     rag_model.set_context_encoder_for_training(ctx_encoder)
     if args.rag_scratch:
+        logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@ Model question_encoder changed by ours @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
         logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@ Model question_encoder changed by ours @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
         rag_model.rag.question_encoder.question_encoder.bert_model = our_question_encoder
         rag_tokenizer.question_encoder = tokenizer
@@ -106,7 +108,7 @@ def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
         if args.rag_onlyDecoderTune:
             rag_model.eval()
             rag_model.generator.train()
-        hitDic, hitdic_ratio, output_str = epoch_play(args, rag_tokenizer, rag_model, train_dataloader, optimizer, scheduler, epoch, faiss_dataset, mode = 'train')
+            hitDic, hitdic_ratio, output_str = epoch_play(args, rag_tokenizer, rag_model, train_dataloader, optimizer, scheduler, epoch, faiss_dataset, mode = 'train')
 
         rag_model.eval()
         with torch.no_grad():
@@ -265,17 +267,27 @@ def save_preds(args, context, pred_words, label_words, epoch=None, new_knows=Non
     logger.info(f"Save {mode}, Epoch: {str(epoch)}, generated results in {path}")
     return
 
-def get_bleu(references, candidates): # From UNIMIND
+# def get_bleu(references, candidates): # From UNIMIND
 
-    ref = [[ctx.split(' ')] for ctx in references]   # len of True samples of [['System:', "It's", 'Libra.[SEP]']]
-    preds = [pred.split(' ') for pred in candidates] # len of Predicted samples of ['it','s','libra','',]
+#     ref = [[ctx.split(' ')] for ctx in references]   # len of True samples of [['System:', "It's", 'Libra.[SEP]']]
+#     preds = [pred.split(' ') for pred in candidates] # len of Predicted samples of ['it','s','libra','',]
+#     bleu_score = corpus_bleu(ref, preds)
+#     bleu1 = corpus_bleu(ref, preds, weights=(1, 0, 0, 0))
+#     bleu2 = corpus_bleu(ref, preds, weights=(0.5, 0.5, 0, 0))
+#     return bleu_score, bleu1, bleu2
+
+
+def get_bleu(real_resps, predicts): # From UNIMIND
+    ref = [[gold.lower().split(' ')] for gold in real_resps] # len of Golden samples of [ [['System:', "It's", 'Libra.[SEP]']], ... ,[['System:', "Okay", 'Goodbye[SEP]']] ]
+    preds = [pred.lower().split(' ') for pred in predicts] # len of Predicted samples of [ ['yeah','i','think','so',], ... , ['see','you'] ]
+    # assert isinstance(ref[0][0], list) and isinstance(preds[0], list)
     bleu_score = corpus_bleu(ref, preds)
-    bleu1 = corpus_bleu(ref, preds, weights=(1, 0, 0, 0))
-    bleu2 = corpus_bleu(ref, preds, weights=(0.5, 0.5, 0, 0))
+    bleu1 = corpus_bleu(ref, preds, weights=(1, 0, 0, 0)) # bleu 1-gram
+    bleu2 = corpus_bleu(ref, preds, weights=(0.5, 0.5, 0, 0)) # bleu 2-gram
     return bleu_score, bleu1, bleu2
 
 def distinct(candidates): # From UniMIND
-    seqs = [pred.split(' ') for pred in candidates]
+    seqs = [pred.lower().split(' ') for pred in candidates]
     intra_dist1, intra_dist2 = [], []
     unigrams_all, bigrams_all = Counter(), Counter()
     for seq in seqs:
@@ -336,3 +348,14 @@ def embed(documents: dict, ctx_encoder: DPRContextEncoder, ctx_tokenizer: DPRCon
     input_ids = ctx_tokenizer(documents["title"], documents["text"], truncation=True, padding="longest", return_tensors="pt")["input_ids"]
     embeddings = ctx_encoder(input_ids.to(device=args.device), return_dict=True).pooler_output
     return {"embeddings": embeddings.detach().cpu().numpy()}
+
+
+
+
+
+
+
+# if __name__ == "__main__":
+#     # args = parseargs()
+#     import main
+#     main.main()
