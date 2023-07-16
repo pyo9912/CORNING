@@ -83,10 +83,11 @@ def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
     train_aug_pred_path = os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl')
     test_aug_pred_path = os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl')
     assert os.path.exists(train_aug_pred_path) and os.path.exists(test_aug_pred_path), f"Goal,Topic Predicted file doesn't exist! {train_aug_pred_path}"
+    
     train_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
     test_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
-    if args.debug:
-        train_dataset_aug_pred , test_dataset_aug_pred = train_dataset_aug_pred[:50], test_dataset_aug_pred[:50]
+    if args.debug: train_dataset_aug_pred , test_dataset_aug_pred = train_dataset_aug_pred[:50], test_dataset_aug_pred[:50]
+
     train_Dataset = data_model.RagDataset(args, train_dataset_aug_pred, rag_tokenizer, all_knowledgeDB, mode='train')
     test_Dataset = data_model.RagDataset(args, test_dataset_aug_pred, rag_tokenizer, all_knowledgeDB, mode='test')
 
@@ -163,7 +164,7 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
         batch_top5_docs = [faiss_dataset[i]['text'] for i in retrieved_docs_pt]
         top5_docs.extend(batch_top5_docs)
         # new_knows.extend([int(i) for i in batch['is_new_knowledge']])
-        contexts.extend(tokenizer.question_encoder.batch_decode(source_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True))
+        contexts.extend(tokenizer.question_encoder.batch_decode(source_ids))
         real_resps.extend(tokenizer.generator.batch_decode(target_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True))
         label_gold_knowledges.extend(knowledge_gold_label)
         # label_pseudo_knowledges.extend(knowledge_pseudo_label)
@@ -266,16 +267,6 @@ def save_preds(args, context, pred_words, label_words, epoch=None, new_knows=Non
             f.write(f"\n")
     logger.info(f"Save {mode}, Epoch: {str(epoch)}, generated results in {path}")
     return
-
-# def get_bleu(references, candidates): # From UNIMIND
-
-#     ref = [[ctx.split(' ')] for ctx in references]   # len of True samples of [['System:', "It's", 'Libra.[SEP]']]
-#     preds = [pred.split(' ') for pred in candidates] # len of Predicted samples of ['it','s','libra','',]
-#     bleu_score = corpus_bleu(ref, preds)
-#     bleu1 = corpus_bleu(ref, preds, weights=(1, 0, 0, 0))
-#     bleu2 = corpus_bleu(ref, preds, weights=(0.5, 0.5, 0, 0))
-#     return bleu_score, bleu1, bleu2
-
 
 def get_bleu(real_resps, predicts): # From UNIMIND
     ref = [[gold.lower().split(' ')] for gold in real_resps] # len of Golden samples of [ [['System:', "It's", 'Libra.[SEP]']], ... ,[['System:', "Okay", 'Goodbye[SEP]']] ]
