@@ -45,6 +45,8 @@ def add_ours_specific_args(parser):
     parser.add_argument("--rag_epochs", type=int, default=10, help=" Method ")
     parser.add_argument('--rag_lr', type=float, default=1e-6, help='RAG Learning rate')
     parser.add_argument("--rag_scratch", action='store_false', help="우리의 retriever모델을 쓸지 말지")  # --rag_scratch하면 scratch모델 사용하게됨
+    
+    parser.add_argument("--rag_onlyDecoderTune", action='store_true', help="rag decoder를 쓸 때, retriever부분 freeze하도록 세팅")
     # parser.add_argument( "--method", type=str, default="ours", help=" Method " )
     return parser
 

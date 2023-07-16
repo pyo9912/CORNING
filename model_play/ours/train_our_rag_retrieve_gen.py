@@ -22,6 +22,7 @@ import data_model
 def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
     logger.info("OUR Retriever model For resp")
     from model_play.rag import rag_retrieve
+    # if args.rag_onlyDecoderTune: args.rag_batch_size = args.rag_batch_size*2
 
     our_best_model = Retriever(args, bert_model)
     our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"ours_retriever.pt"), map_location=args.device))
@@ -102,6 +103,9 @@ def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
     for epoch in range(args.rag_epochs):
         # if not args.debug:
         rag_model.train()
+        if args.rag_onlyDecoderTune:
+            rag_model.eval()
+            rag_model.generator.train()
         hitDic, hitdic_ratio, output_str = epoch_play(args, rag_tokenizer, rag_model, train_dataloader, optimizer, scheduler, epoch, faiss_dataset, mode = 'train')
 
         rag_model.eval()
@@ -110,11 +114,11 @@ def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
             if best_hitdic_ratio['total']['hit1'] <= hitdic_ratio['total']['hit1']:
                 best_hitdic_ratio = hitdic_ratio
                 best_hitdic_str = output_str
-            else:
-                early_stop+=1 # 3회 이상 hit1 ratio 떨어지면 그냥 꺼버리기
+            # else:
+            #     early_stop+=1 # 3회 이상 hit1 ratio 떨어지면 그냥 꺼버리기
 
-        if epoch<3: 
-            index_update(args, rag_model, rag_tokenizer, faiss_dataset)
+        # if epoch<3: 
+        #     index_update(args, rag_model, rag_tokenizer, faiss_dataset)
 
         ## Early Stopping
 
@@ -176,14 +180,13 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
     if mode == 'test':
         for i in output_str:
             logger.info(f"{mode}_{epoch} {i}")
-        bleu, bleu1, bleu2 = get_bleu(contexts, gen_resp)
+        bleu, bleu1, bleu2 = get_bleu(real_resps, gen_resp)
         intra_dist1, intra_dist2, inter_dist1, inter_dist2 = distinct(gen_resp)
-        logger.info(f"Bleu_score, Bleu_1, Bleu_2: {bleu:.3f}, {bleu1:.3f}, {bleu2:.3f}")
+        logger.info(f"PPL, Bleu_score, Bleu_1, Bleu_2: {perplexity:.3f}, {bleu:.3f}, {bleu1:.3f}, {bleu2:.3f}")
         logger.info(f"intra_dist1, intra_dist2, inter_dist1, inter_dist2 : {intra_dist1:.3f}, {intra_dist2:.3f}, {inter_dist1:.3f}, {inter_dist2:.3f}")
-        output_str.append(f"Bleu_score, Bleu_1, Bleu_2: {bleu:.3f}, {bleu1:.3f}, {bleu2:.3f}")
         output_str.append(f"PPL, Bleu_score, Bleu_1, Bleu_2: {perplexity:.3f}, {bleu:.3f}, {bleu1:.3f}, {bleu2:.3f}")
         output_str.append(f"intra_dist1, intra_dist2, inter_dist1, inter_dist2 : {intra_dist1:.3f}, {intra_dist2:.3f}, {inter_dist1:.3f}, {inter_dist2:.3f}")
-    logger.info(f"{mode} Loss: {epoch_loss}")
+    logger.info(f"{mode} Loss: {epoch_loss}, PPL: {perplexity}")
     save_preds(args, contexts, top5_docs, label_gold_knowledges, epoch=epoch, new_knows=new_knows, real_resp=real_resps, gen_resps=gen_resp, mode=mode)
     return hitdic, hitdic_ratio, output_str  # output_strings, hit1_ratio, total_hit1, total_hit3, total_hit5, total_hit1_new, total_hit3_new, total_hit5_new
 
@@ -244,7 +247,7 @@ def know_hit_ratio(args, pred_pt, gold_pt, new_knows=None, types=None, typelist=
 
 def save_preds(args, context, pred_words, label_words, epoch=None, new_knows=None, real_resp=None, gen_resps=None, mode='train'):
     # HJ: 동일 파일 덮어쓰면서 맨 윗줄에 몇번째 에폭인지만 쓰도록 수정
-    log_file_name = mode + f'{str(epoch)}_'+ args.log_name + '.txt'
+    log_file_name = mode + f'{str(epoch)}_'+ args.log_name
     path = os.path.join(args.output_dir, log_file_name)
     # if not os.path.exists(path): os.makedirs(path)
     with open(path , 'w' ,encoding='utf-8') as f:
@@ -263,8 +266,9 @@ def save_preds(args, context, pred_words, label_words, epoch=None, new_knows=Non
     return
 
 def get_bleu(references, candidates): # From UNIMIND
-    preds = [pred.split(' ') for pred in candidates]
-    ref = [ctx.split(' ') for ctx in references]
+
+    ref = [[ctx.split(' ')] for ctx in references]   # len of True samples of [['System:', "It's", 'Libra.[SEP]']]
+    preds = [pred.split(' ') for pred in candidates] # len of Predicted samples of ['it','s','libra','',]
     bleu_score = corpus_bleu(ref, preds)
     bleu1 = corpus_bleu(ref, preds, weights=(1, 0, 0, 0))
     bleu2 = corpus_bleu(ref, preds, weights=(0.5, 0.5, 0, 0))

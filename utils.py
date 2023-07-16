@@ -300,7 +300,7 @@ def dir_init(default_args):
     args.device = f'cuda:{args.device}' if args.device else "cpu"
     args.home = os.path.dirname(os.path.realpath(__file__))
     args.data_dir = os.path.join(args.home, 'data', args.version)
-    args.output_dir = os.path.join(args.home, 'output', args.version, args.method, f"{args.time}_{args.log_name}")
+    args.output_dir = os.path.join(args.home, 'output', args.version, args.method, f'{args.time}_{"DEBUG" if args.debug else args.log_name}')
     args.log_dir = os.path.join(args.home, 'logs', args.version, args.method)
     args.log_name = f'{args.time}_{"DEBUG" if args.debug else args.log_name}_{args.model_name.replace("/", "_")}_log.txt'  # TIME_LOGNAME_MODELNAME_log.txt
     # args.model_dir = os.path.join(args.home, 'models')
