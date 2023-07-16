@@ -101,6 +101,7 @@ class DialogDataset(Dataset):
         pad_token_id = self.tokenizer.pad_token_id if self.tokenizer.pad_token_id is not None else self.tokenizer.eos_token_id
 
         context_batch = defaultdict()
+
         predicted_topic_list = deepcopy(data['predicted_topic'][:self.args.topk_topic])
 
         if self.mode == 'train':
@@ -120,6 +121,8 @@ class DialogDataset(Dataset):
             prefix = '<goal>' + predicted_goal + self.tokenizer.sep_token
         elif self.args.input_prompt == 'dialog_topic':
             prefix = '<topic>' + predicted_topic + self.tokenizer.sep_token
+        elif self.args.input_prompt == 'dialog_g-topic':
+            prefix = '<topic>' + topic + self.tokenizer.sep_token
         elif self.args.input_prompt == 'dialog_goal_topic':
             prefix = '<goal>' + predicted_goal + '<topic>' + predicted_topic + self.tokenizer.sep_token
 
