@@ -267,7 +267,7 @@ def initLogging(args):
     filename = os.path.join(args.log_dir, filename)
     logger.remove()
     fmt = "<green>{time:YYMMDD_HH:mm:ss}</green> | {message}"
-    if not args.debug: logger.add(filename, format=fmt, encoding='utf-8')
+    if not args.debug or True: logger.add(filename, format=fmt, encoding='utf-8')
     logger.add(sys.stdout, format=fmt, level="INFO", colorize=True)
     logger.info(f"FILENAME: {filename}")
     try: logger.info(f"Git commit massages: {git.Repo(search_parent_directories=True).head.object.hexsha[:7]}")

@@ -302,7 +302,7 @@ def dir_init(default_args):
     args.data_dir = os.path.join(args.home, 'data', args.version)
     args.output_dir = os.path.join(args.home, 'output', args.version, args.method, f'{args.time}_{"DEBUG" if args.debug else args.log_name}')
     args.log_dir = os.path.join(args.home, 'logs', args.version, args.method)
-    args.log_name = f'{args.time}_{"DEBUG" if args.debug else args.log_name}_{args.model_name.replace("/", "_")}_log.txt'  # TIME_LOGNAME_MODELNAME_log.txt
+    args.log_name = f'{args.time}_{f"DEBUG_{args.log_name}" if args.debug else args.log_name}_{args.model_name.replace("/", "_")}_log.txt'  # TIME_LOGNAME_MODELNAME_log.txt
     # args.model_dir = os.path.join(args.home, 'models')
     args.saved_model_path = os.path.join(args.home, 'model_save', args.version)
     # args.saved_model_dir = os.path.join(args.home, 'model_save', args.version, args.method)

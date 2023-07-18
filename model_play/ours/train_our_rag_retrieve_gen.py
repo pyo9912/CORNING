@@ -130,7 +130,14 @@ def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
         rag_model.train()
         if args.rag_onlyDecoderTune:
             rag_model.eval()
+            rag_model.rag.ctx_encoder.eval()
+            rag_model.rag.question_encoder.eval()
             rag_model.generator.train()
+            for param in rag_model.rag.ctx_encoder.parameters():
+                param.requires_grad = False
+            for param in rag_model.rag.question_encoder.parameters():
+                param.requires_grad = False
+        if epoch==0: rag_model_weight_logging(args,rag_model,epoch,'before_train', faiss_dataset)
         hitDic, hitdic_ratio, output_str = epoch_play(args, rag_tokenizer, rag_model, train_dataloader, optimizer, scheduler, epoch, faiss_dataset, mode = 'train')
 
         rag_model.eval()
@@ -139,6 +146,7 @@ def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
             if best_hitdic_ratio['total']['hit1'] <= hitdic_ratio['total']['hit1']:
                 best_hitdic_ratio = hitdic_ratio
                 best_hitdic_str = output_str
+        if epoch==0: rag_model_weight_logging(args,rag_model,epoch,'after_test', faiss_dataset)
 
     for i in best_hitdic_str:
         logger.info(f"Test_best {i}")
@@ -152,34 +160,39 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
     torch.cuda.empty_cache()
     contexts, label_gold_knowledges, label_pseudo_knowledges, top5_docs, real_resps, gen_resp, new_knows = [], [], [], [], [], [], []
     types = []
+    weight_log_file = os.path.join(args.output_dir,f'{epoch}_{mode}_weights.txt')
+    
+        
     for batch in tqdm(data_loader, desc=f"Epoch {epoch}__{mode}", bar_format=' {l_bar} | {bar:23} {r_bar}'):
         source_ids, source_mask, target_ids = batch["input_ids"].to(args.device), batch["attention_mask"].to(args.device), batch["response"].to(args.device)
-        ### lm_labels = target_ids # response == target_ids ### decoder_input_ids = target_ids[:, :-1].contiguous() ### lm_labels = target_ids[:, 1:].clone()
+        ### lm_labels = target_ids # response == target_ids ### decoder_input_ids = target_ids[:, :-1].contiguous() ### lm_labels = target_ids[:, 1:].clone()  # decoder_input_ids = decoder_input_ids,
+        
+        #### Whole Model 사용시
         outputs = model(input_ids=source_ids,
                         attention_mask=source_mask,
                         labels=target_ids,  # target_ids = response
                         output_retrieved=True,
                         n_docs=5,
-                        # reduce_loss=True,       # HJ추가
-                        # exclude_bos_score=True, # HJ추가
+                        #### reduce_loss=True,       # HJ추가
+                        #### exclude_bos_score=True, # HJ추가
                         )
-        # decoder_input_ids = decoder_input_ids,
-        """
-        # 1. Encode
-        >>> question_hidden_states = model.question_encoder(input_ids)[0]
-        >>> # 2. Retrieve
-        >>> docs_dict = retriever(input_ids.numpy(), question_hidden_states.detach().numpy(), return_tensors="pt")
-        >>> doc_scores = torch.bmm(
-        ...     question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2)
-        ... ).squeeze(1)
-        >>> # 3. Forward to generator
-        >>> outputs = model(
-        ...     context_input_ids=docs_dict["context_input_ids"],
-        ...     context_attention_mask=docs_dict["context_attention_mask"],
-        ...     doc_scores=doc_scores,
-        ...     decoder_input_ids=labels,
-        """
         retrieved_docs_pt = outputs.retrieved_doc_ids.data
+
+        ######
+        # ## Retriever 따로 사용시
+        # # 1. Encode
+        # question_hidden_states = model.question_encoder(source_ids)[0]
+        # # 2. Retrieve
+        # docs_dict = model.retriever(source_ids.cpu().numpy(), question_hidden_states.detach().cpu().numpy(), return_tensors="pt")
+        # # docs_dict = model(input_ids=source_ids.cpu().numpy(), doc_scores=question_hidden_states.detach().cpu().numpy(), return_tensors="pt")
+        # doc_scores = torch.bmm(
+        #     question_hidden_states.unsqueeze(1).to(args.device), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2).to(args.device)
+        # ).squeeze(1)
+        # # 3. Forward to generator
+        # outputs = model(context_input_ids=docs_dict["context_input_ids"].to(args.device), context_attention_mask=docs_dict["context_attention_mask"].to(args.device), doc_scores=doc_scores.to(args.device), labels=target_ids.to(args.device)) # decoder_input_ids=target_ids.to(args.device)
+        # retrieved_docs_pt = docs_dict.data['doc_ids']
+        # ######
+        
         loss = outputs['loss'].mean()
         epoch_loss += loss.item()
         # perplexity(outputs['logits'][::5].size(), target_ids) ## Perplexity 관련 코드
@@ -280,6 +293,36 @@ def know_hit_ratio(args, pred_pt, gold_pt, new_knows=None, types=None, typelist=
     # hitdic_ratio['total']['hit1'],hitdic_ratio['total']['hit3'], hitdic_ratio['total']['hit5'],
     # output_str.append(f"{'total':^22}: {hitdic_ratio['total']['hit1']/hitdic_ratio['total']['total']:.3f}, {hitdic_ratio['total']['hit3']/hitdic_ratio['total']['total']:.3f}, {hitdic_ratio['total']['hit5']/hitdic_ratio['total']['total']:.3f}, {hitdic_ratio['total']['total']}")
     return hitdic, hitdic_ratio, output_str
+
+def rag_model_weight_logging(args,model,epoch,mode, faiss_dataset):
+    # weight_log_file = os.path.join(args.output_dir,f'{epoch}_{mode}_weights.txt')
+    weight_log_file = os.path.join(args.output_dir,f'{epoch}_weights.txt')
+    if not os.path.exists(args.output_dir): os.makedirs(args.output_dir)
+    with open(weight_log_file, 'a' , encoding='utf-8') as f:
+        f.write(f"\n{args.log_name}\n")
+        f.write(f"\n only decoder tune: {args.rag_onlyDecoderTune} // rag_our_bert: {args.rag_our_bert}\n")
+        f.write(f"{epoch}_{mode}\n")
+        f.write(f"model.question_encoder.training: {model.question_encoder.training}\n")
+        f.write(f"model.generator.training: {model.generator.training}\n")
+        f.write(f"model.rag.training: {model.rag.training}\n")
+        f.write(f"model.rag.generator.training: {model.rag.generator.training}\n")
+        f.write(f"model.rag.ctx_encoder.training: {model.rag.ctx_encoder.training}\n")
+        f.write(f"\nmodel.rag.ctx_encoder.ctx_encoder.bert_model.encoder.layer[0].attention.self.key.weight[0][:50][0]\n")
+        f.write(f'{model.rag.ctx_encoder.ctx_encoder.bert_model.encoder.layer[0].attention.self.key.weight[0][:50][0]}\n')
+        f.write(f"\nmodel.rag.question_encoder.question_encoder.bert_model.base_model.encoder.layer[0].attention.self.key.weight[0][:50][0]\n")
+        f.write(f"{model.rag.question_encoder.question_encoder.bert_model.base_model.encoder.layer[0].attention.self.key.weight[0][:50][0]}")
+        f.write(f"\nmodel.rag.generator.model.encoder.base_model.layers[0].self_attn.k_proj.weight[0][:50][0]\n")
+        f.write(f"{model.rag.generator.model.encoder.base_model.layers[0].self_attn.k_proj.weight[0][:50][0]}")
+        f.write(f"\nmodel.rag.generator.model.decoder.base_model.layers[0].self_attn.k_proj.weight[0][:50][0]\n")
+        f.write(f'{model.rag.generator.model.decoder.base_model.layers[0].self_attn.k_proj.weight[0][:50][0]}\n')
+        f.write(f"\nfaiss dataset [0,5,10,15,20][:50][0]\n")
+        f.write(f'{faiss_dataset[0]["embeddings"][:50][0]}\n')
+        f.write(f'{faiss_dataset[5]["embeddings"][:50][0]}\n')
+        f.write(f'{faiss_dataset[10]["embeddings"][:50][0]}\n')
+        f.write(f'{faiss_dataset[15]["embeddings"][:50][0]}\n')
+        f.write(f'{faiss_dataset[20]["embeddings"][:50][0]}\n')
+        f.write(f'{mode}-----------------End----------------\n\n')
+
 
 
 def save_preds(args, context, pred_words, label_words, epoch=None, new_knows=None, real_resp=None, gen_resps=None, mode='train'):
