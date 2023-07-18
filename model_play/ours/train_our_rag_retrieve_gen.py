@@ -17,10 +17,35 @@ import faiss
 from models.ours.retriever import Retriever
 import utils
 import data_model
+from torcheval.metrics.functional.text import perplexity
 
+def make_aug_gt_pred(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB):
+    import data_utils
+    import data_model
+    from models.ours.retriever import Retriever
+    from model_play.ours.train_bert_goal_topic import eval_goal_topic_model
+    if args.alltype:
+        train_dataset = data_utils.process_augment_all_sample(train_dataset_raw, tokenizer, train_knowledgeDB)
+        test_dataset = data_utils.process_augment_all_sample(test_dataset_raw, tokenizer, all_knowledgeDB)
+    else:
+        train_dataset = data_utils.process_augment_sample(train_dataset_raw, tokenizer, train_knowledgeDB)
+        test_dataset = data_utils.process_augment_sample(test_dataset_raw, tokenizer, all_knowledgeDB)
+    logger.info(f"Dataset Length: {len(train_dataset)}, {len(test_dataset)}")
+
+    retriever = Retriever(args, bert_model)  # eval_goal_topic_model 함수에서 goal, topic load해서 쓸것임
+    retriever.to(args.device)
+    train_datamodel_topic = data_model.GenerationDataset(args, train_dataset, train_knowledgeDB, tokenizer, mode='train', subtask=args.subtask)
+    test_datamodel_topic = data_model.GenerationDataset(args, test_dataset, all_knowledgeDB, tokenizer, mode='test', subtask=args.subtask)
+
+    train_GT_pred_auged_Dataset, test_GT_pred_auged_Dataset = eval_goal_topic_model(args, train_datamodel_topic, test_datamodel_topic, retriever, tokenizer)
+    return train_GT_pred_auged_Dataset.augmented_raw_sample, test_GT_pred_auged_Dataset.augmented_raw_sample
+
+def train_rag_resp(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB, bert_model, tokenizer):
+    train_aug_pred, test_aug_pred = make_aug_gt_pred(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
+    
 
 def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
-    logger.info("OUR Retriever model For resp")
+    logger.info(f"OUR Retriever model For resp, RAG_OUR_BERT: {args.rag_our_bert}, RAG_OnlyDecoderTune: {args.rag_onlyDecoderTune}")
     from model_play.rag import rag_retrieve
     # if args.rag_onlyDecoderTune: args.rag_batch_size = args.rag_batch_size*2
 
@@ -101,7 +126,7 @@ def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
     logger.info(f"Logging Epoch results:                      hit@1, hit@3, hit@5, hit_new@1, hit_new@3, hit_new@5")
 
     for epoch in range(args.rag_epochs):
-        # if not args.debug:
+        #######if not args.debug:
         rag_model.train()
         if args.rag_onlyDecoderTune:
             rag_model.eval()
@@ -123,7 +148,7 @@ def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
 def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch, faiss_dataset, mode='train'):
     from tqdm import tqdm
     # data_loader
-    epoch_loss, steps = 0, 0
+    epoch_loss, steps, gradient_accumulation_steps = 0, 0, 500
     torch.cuda.empty_cache()
     contexts, label_gold_knowledges, label_pseudo_knowledges, top5_docs, real_resps, gen_resp, new_knows = [], [], [], [], [], [], []
     types = []
@@ -133,15 +158,35 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
         outputs = model(input_ids=source_ids,
                         attention_mask=source_mask,
                         labels=target_ids,  # target_ids = response
-                        output_retrieved=True)
+                        output_retrieved=True,
+                        n_docs=5,
+                        # reduce_loss=True,       # HJ추가
+                        # exclude_bos_score=True, # HJ추가
+                        )
         # decoder_input_ids = decoder_input_ids,
+        """
+        # 1. Encode
+        >>> question_hidden_states = model.question_encoder(input_ids)[0]
+        >>> # 2. Retrieve
+        >>> docs_dict = retriever(input_ids.numpy(), question_hidden_states.detach().numpy(), return_tensors="pt")
+        >>> doc_scores = torch.bmm(
+        ...     question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2)
+        ... ).squeeze(1)
+        >>> # 3. Forward to generator
+        >>> outputs = model(
+        ...     context_input_ids=docs_dict["context_input_ids"],
+        ...     context_attention_mask=docs_dict["context_attention_mask"],
+        ...     doc_scores=doc_scores,
+        ...     decoder_input_ids=labels,
+        """
         retrieved_docs_pt = outputs.retrieved_doc_ids.data
         loss = outputs['loss'].mean()
         epoch_loss += loss.item()
-        # question_encoder.
+        # perplexity(outputs['logits'][::5].size(), target_ids) ## Perplexity 관련 코드
         if mode == 'train':
             optimizer.zero_grad()
             loss.backward()
+            if (steps+1) % gradient_accumulation_steps==0: torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
             optimizer.step()
             loss.detach()
         steps+=1
@@ -166,8 +211,8 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
                                )
                 , skip_special_tokens=True, clean_up_tokenization_spaces=True)
             gen_resp.extend(resp_batch)
-    if mode=='train': scheduler.step()
-    perplexity = torch.exp(torch.tensor(epoch_loss/steps))
+    if mode =='train': scheduler.step()
+    perplexity = torch.exp(torch.tensor(epoch_loss/steps)) # perplexity(outputs['logits'][::5], target_ids)
     hitdic, hitdic_ratio, output_str = know_hit_ratio(args, pred_pt=top5_docs, gold_pt=label_gold_knowledges, new_knows=new_knows, types=types)
     if mode == 'test':
         for i in output_str:
@@ -178,7 +223,7 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
         logger.info(f"intra_dist1, intra_dist2, inter_dist1, inter_dist2 : {intra_dist1:.3f}, {intra_dist2:.3f}, {inter_dist1:.3f}, {inter_dist2:.3f}")
         output_str.append(f"PPL, Bleu_score, Bleu_1, Bleu_2: {perplexity:.3f}, {bleu:.3f}, {bleu1:.3f}, {bleu2:.3f}")
         output_str.append(f"intra_dist1, intra_dist2, inter_dist1, inter_dist2 : {intra_dist1:.3f}, {intra_dist2:.3f}, {inter_dist1:.3f}, {inter_dist2:.3f}")
-    logger.info(f"{mode} Loss: {epoch_loss}, PPL: {perplexity}")
+    logger.info(f"{mode} Loss: {epoch_loss:.3f}, PPL: {perplexity:.3f}")
     save_preds(args, contexts, top5_docs, label_gold_knowledges, epoch=epoch, new_knows=new_knows, real_resp=real_resps, gen_resps=gen_resp, mode=mode)
     return hitdic, hitdic_ratio, output_str  # output_strings, hit1_ratio, total_hit1, total_hit3, total_hit5, total_hit1_new, total_hit3_new, total_hit5_new
 
