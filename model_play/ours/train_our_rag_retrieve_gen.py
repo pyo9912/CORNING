@@ -129,6 +129,7 @@ def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
         #######if not args.debug:
         rag_model.train()
         if args.rag_onlyDecoderTune:
+            logger.info(f"*****RAG_Only_Decoder Tune!*****")
             rag_model.eval()
             rag_model.rag.ctx_encoder.eval()
             rag_model.rag.question_encoder.eval()
@@ -337,10 +338,10 @@ def save_preds(args, context, pred_words, label_words, epoch=None, new_knows=Non
             if i==500: break
             f.write(f"Source: {ctx}\n")
             if new_knows: f.write(f"Is_New_Knows: {new_knows[i]}\n")
-            f.write(f"Pred : {pred}\n")
-            f.write(f"Label: {label}\n")
+            f.write(f"Pred  : {pred}\n")
+            f.write(f"Label : {label}\n")
             f.write(f"Real Response: {real_resp[i]}\n")
-            if gen_resps: f.write(f"Gen Response: {gen_resps[i]}\n")
+            if gen_resps: f.write(f"Gen Response : {gen_resps[i]}\n")
             f.write(f"\n")
     logger.info(f"Save {mode}, Epoch: {str(epoch)}, generated results in {path}")
     return
