@@ -50,7 +50,8 @@ def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
     # if args.rag_onlyDecoderTune: args.rag_batch_size = args.rag_batch_size*2
 
     our_best_model = Retriever(args, bert_model)
-    our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"ours_retriever.pt"), map_location=args.device))
+    our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"C2DPR_cotmae_retriever_0719.pt"), map_location=args.device))
+    # our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"ours_retriever_old_0473.pt"), map_location=args.device))
     our_best_model.to(args.device)
     our_question_encoder = our_best_model.query_bert
     our_ctx_encoder = our_best_model.rerank_bert
