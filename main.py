@@ -43,7 +43,7 @@ def add_ours_specific_args(parser):
     parser.add_argument("--rag_max_input_length", type=int, default=128, help=" Method ")
     parser.add_argument("--rag_max_target_length", type=int, default=128, help=" Method ")
     parser.add_argument("--rag_num_beams", type=int, default=5, help=" Method ")
-    parser.add_argument("--rag_epochs", type=int, default=10, help=" Method ")
+    parser.add_argument("--rag_epochs", type=int, default=5, help=" Method ")
     parser.add_argument('--rag_lr', type=float, default=1e-6, help='RAG Learning rate')
     parser.add_argument("--rag_our_bert", action='store_true', help="우리의 retriever모델을 쓸지 말지")  # --rag_scratch하면 scratch모델 사용하게됨
     parser.add_argument("--rag_train_alltype", action='store_true', help="우리의 retriever모델을 쓸지 말지")  
@@ -269,7 +269,7 @@ def initLogging(args):
     filename = os.path.join(args.log_dir, filename)
     logger.remove()
     fmt = "<green>{time:YYMMDD_HH:mm:ss}</green> | {message}"
-    if not args.debug or True: logger.add(filename, format=fmt, encoding='utf-8')
+    if not args.debug : logger.add(filename, format=fmt, encoding='utf-8')
     logger.add(sys.stdout, format=fmt, level="INFO", colorize=True)
     logger.info(f"FILENAME: {filename}")
     try: logger.info(f"Git commit massages: {git.Repo(search_parent_directories=True).head.object.hexsha[:7]}")

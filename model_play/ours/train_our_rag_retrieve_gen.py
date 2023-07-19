@@ -18,6 +18,7 @@ from models.ours.retriever import Retriever
 import utils
 import data_model
 from torcheval.metrics.functional.text import perplexity
+from copy import deepcopy
 
 def make_aug_gt_pred(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB):
     import data_utils
@@ -27,10 +28,10 @@ def make_aug_gt_pred(args, bert_model, tokenizer, train_dataset_raw, test_datase
 
     if args.rag_train_alltype: train_dataset = data_utils.process_augment_all_sample(train_dataset_raw, tokenizer, train_knowledgeDB) ## 42086
     else: train_dataset = data_utils.process_augment_sample(train_dataset_raw, tokenizer, train_knowledgeDB) ##11621 
-    if args.rag_train_alltype: test_dataset = data_utils.process_augment_all_sample(test_dataset_raw, tokenizer, all_knowledgeDB) ## 13282
+    if args.rag_test_alltype: test_dataset = data_utils.process_augment_all_sample(test_dataset_raw, tokenizer, all_knowledgeDB) ## 13282
     else: test_dataset = data_utils.process_augment_sample(test_dataset_raw, tokenizer, all_knowledgeDB) ## 3711
 
-    logger.info(f"Dataset Length: {len(train_dataset)}, {len(test_dataset)}")
+    logger.info(f"Train AllType: {args.rag_train_alltype}: {len(train_dataset)}, Test AllType: {args.rag_test_alltype}: {len(test_dataset)}")
 
     retriever = Retriever(args, bert_model)  # eval_goal_topic_model 함수에서 goal, topic load해서 쓸것임
     retriever.to(args.device)
@@ -38,7 +39,8 @@ def make_aug_gt_pred(args, bert_model, tokenizer, train_dataset_raw, test_datase
     test_datamodel_topic = data_model.GenerationDataset(args, test_dataset, all_knowledgeDB, tokenizer, mode='test', subtask=args.subtask)
 
     train_GT_pred_auged_Dataset, test_GT_pred_auged_Dataset = eval_goal_topic_model(args, train_datamodel_topic, test_datamodel_topic, retriever, tokenizer)
-    return train_GT_pred_auged_Dataset.augmented_raw_sample, test_GT_pred_auged_Dataset.augmented_raw_sample
+    train_gt_pred_auged, test_gt_pred_auged = train_GT_pred_auged_Dataset.augmented_raw_sample, test_GT_pred_auged_Dataset.augmented_raw_sample
+    return train_gt_pred_auged, test_gt_pred_auged
 
 
 def train_rag_resp(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB, bert_model, tokenizer):
@@ -50,9 +52,15 @@ def train_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, tes
     from model_play.rag import rag_retrieve
     # if args.rag_onlyDecoderTune: args.rag_batch_size = args.rag_batch_size*2
 
+    train_dataset_aug_pred , test_dataset_aug_pred = make_aug_gt_pred(args, deepcopy(bert_model), tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
+    logger.info(f"Length of Pred_Auged Train,Test: {len(train_dataset_aug_pred)}, {len(test_dataset_aug_pred)}")
+    if args.debug: train_dataset_aug_pred , test_dataset_aug_pred = train_dataset_aug_pred[:50], test_dataset_aug_pred[:50]
+
+
     our_best_model = Retriever(args, bert_model)
     our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"C2DPR_cotmae_retriever_0719.pt"), map_location=args.device))
     # our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"ours_retriever_old_0473.pt"), map_location=args.device))
+    # our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"DPR_retriever.pt.pt"), map_location=args.device))
     our_best_model.to(args.device)
     our_question_encoder = our_best_model.query_bert
     our_ctx_encoder = our_best_model.rerank_bert
@@ -106,21 +114,18 @@ def train_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, tes
         logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@ Model question_encoder changed by ours @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n\n")
         rag_model.rag.question_encoder.question_encoder.bert_model = our_question_encoder
         rag_tokenizer.question_encoder = tokenizer
+    
     ## Get Auged, t_pred Dataset
     # train_aug_pred_path = os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl')
     # test_aug_pred_path = os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl')
     # assert os.path.exists(train_aug_pred_path) and os.path.exists(test_aug_pred_path), f"Goal,Topic Predicted file doesn't exist! {train_aug_pred_path}"
-    
     # train_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
     # test_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
-    train_dataset_aug_pred , test_dataset_aug_pred = make_aug_gt_pred(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
-    logger.info(f"Length of Train,Test: {len(train_dataset_aug_pred)}, {len(test_dataset_aug_pred)}")
 
-    if args.debug: train_dataset_aug_pred , test_dataset_aug_pred = train_dataset_aug_pred[:50], test_dataset_aug_pred[:50]
+
 
     train_Dataset = data_model.RagDataset(args, train_dataset_aug_pred, rag_tokenizer, all_knowledgeDB, mode='train')
     test_Dataset = data_model.RagDataset(args, test_dataset_aug_pred, rag_tokenizer, all_knowledgeDB, mode='test')
-
     train_dataloader = DataLoader(train_Dataset, batch_size=args.rag_batch_size, shuffle=True)
     test_dataloader = DataLoader(test_Dataset, batch_size=args.rag_batch_size, shuffle=False)
 
