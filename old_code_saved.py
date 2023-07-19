@@ -1,34 +1,125 @@
+if False: ## train_our_rag_retrieve_gen 에서 쓰던 epoch_play
+    def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch, faiss_dataset, mode='train'):
+        from tqdm import tqdm
+        # data_loader
+        epoch_loss, steps, gradient_accumulation_steps = 0, 0, 500
+        torch.cuda.empty_cache()
+        contexts, label_gold_knowledges, label_pseudo_knowledges, top5_docs, real_resps, gen_resp, new_knows = [], [], [], [], [], [], []
+        types = []
+        weight_log_file = os.path.join(args.output_dir,f'{epoch}_{mode}_weights.txt')
+        
+            
+        for batch in tqdm(data_loader, desc=f"Epoch {epoch}__{mode}", bar_format=' {l_bar} | {bar:23} {r_bar}'):
+            source_ids, source_mask, target_ids = batch["input_ids"].to(args.device), batch["attention_mask"].to(args.device), batch["response"].to(args.device)
+            ### lm_labels = target_ids # response == target_ids ### decoder_input_ids = target_ids[:, :-1].contiguous() ### lm_labels = target_ids[:, 1:].clone()  # decoder_input_ids = decoder_input_ids,
+            
+            #### Whole Model 사용시
+            outputs = model(input_ids=source_ids,
+                            attention_mask=source_mask,
+                            labels=target_ids,  # target_ids = response
+                            output_retrieved=True,
+                            n_docs=5,
+                            #### reduce_loss=True,       # HJ추가
+                            #### exclude_bos_score=True, # HJ추가
+                            )
+            retrieved_docs_pt = outputs.retrieved_doc_ids.data
 
-if False:
-    ## 이전에 쓰던 logging 세팅 보존하던것
-    def initLogging(args):
-        filename = f'{args.time}_{"DEBUG" if args.debug else args.log_name}_{args.model_name.replace("/", "_")}_log.txt'
-        filename = os.path.join(args.log_dir, filename)
-        # global logger
-        # if logger == None: logger = logging.getLogger()
-        # else:  # wish there was a logger.close()
-        #     for handler in logger.handlers[:]:  # make a copy of the list
-        #         logger.removeHandler(handler)
-        #
-        # logger.setLevel(logging.DEBUG)
-        # formatter = logging.Formatter(fmt='%(asctime)s: %(message)s', datefmt='%Y/%m/%d_%p_%I:%M:%S ')
-        # if args.debug : pass
-        # else:
-        #     fh = logging.FileHandler(filename)
-        #     fh.setFormatter(formatter)
-        #     logger.addHandler(fh)
-        #
-        # sh = logging.StreamHandler(sys.stdout)
-        # sh.setFormatter(formatter)
-        # logger.addHandler(sh)
-        # if not args.debug :
-        logger.remove()
-        fmt="<green>{time:YYMMDD_HH:mm:ss}</green> | {message}"
-        logger.add(filename, encoding='utf-8')
-        logger.add(sys.stdout, format=fmt, level="INFO", colorize=True)
-        logger.info(f"FILENAME: {filename}")
-        logger.info('Commend: {}'.format(', '.join(map(str, sys.argv))))
-        return logger
+            ######
+            # ## Retriever 따로 사용시
+            # # 1. Encode
+            # question_hidden_states = model.question_encoder(source_ids)[0]
+            # # 2. Retrieve
+            # docs_dict = model.retriever(source_ids.cpu().numpy(), question_hidden_states.detach().cpu().numpy(), return_tensors="pt")
+            # # docs_dict = model(input_ids=source_ids.cpu().numpy(), doc_scores=question_hidden_states.detach().cpu().numpy(), return_tensors="pt")
+            # doc_scores = torch.bmm(
+            #     question_hidden_states.unsqueeze(1).to(args.device), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2).to(args.device)
+            # ).squeeze(1)
+            # # 3. Forward to generator
+            # outputs = model(context_input_ids=docs_dict["context_input_ids"].to(args.device), context_attention_mask=docs_dict["context_attention_mask"].to(args.device), doc_scores=doc_scores.to(args.device), labels=target_ids.to(args.device)) # decoder_input_ids=target_ids.to(args.device)
+            # retrieved_docs_pt = docs_dict.data['doc_ids']
+            # ######
+            
+            loss = outputs['loss'].mean()
+            epoch_loss += loss.item()
+            # perplexity(outputs['logits'][::5].size(), target_ids) ## Perplexity 관련 코드
+            if mode == 'train':
+                optimizer.zero_grad()
+                loss.backward()
+                if (steps+1) % gradient_accumulation_steps==0: torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+                optimizer.step()
+                loss.detach()
+            steps+=1
+            knowledge_gold_label = batch['target_knowledge_label']
+            # knowledge_pseudo_label = batch['knowledge_task_pseudo_label']
+            batch_types = [args.goalDic['int'][int(idx)] for idx in batch['goal_idx']]
+
+
+            batch_top5_docs = [faiss_dataset[i]['text'] for i in retrieved_docs_pt]
+            top5_docs.extend(batch_top5_docs)
+            # new_knows.extend([int(i) for i in batch['is_new_knowledge']])
+            contexts.extend(tokenizer.question_encoder.batch_decode(source_ids))
+            real_resps.extend(tokenizer.generator.batch_decode(target_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True))
+            label_gold_knowledges.extend(knowledge_gold_label)
+            # label_pseudo_knowledges.extend(knowledge_pseudo_label)
+            types.extend(batch_types)
+            
+            if mode == 'test' :
+                resp_batch = tokenizer.generator.batch_decode(
+                    model.generate(source_ids, min_length=0, max_length=args.rag_max_target_length, early_stopping=True,
+                                num_beams=1, num_return_sequences=1, n_docs=5
+                                )
+                    , skip_special_tokens=True, clean_up_tokenization_spaces=True)
+                gen_resp.extend(resp_batch)
+        if mode =='train': scheduler.step()
+        perplexity = torch.exp(torch.tensor(epoch_loss/steps)) # perplexity(outputs['logits'][::5], target_ids)
+        hitdic, hitdic_ratio, output_str = know_hit_ratio(args, pred_pt=top5_docs, gold_pt=label_gold_knowledges, new_knows=new_knows, types=types)
+        if mode == 'test':
+            for i in output_str:
+                logger.info(f"{mode}_{epoch} {i}")
+            bleu, bleu1, bleu2 = get_bleu(real_resps, gen_resp)
+            intra_dist1, intra_dist2, inter_dist1, inter_dist2 = distinct(gen_resp)
+            logger.info(f"PPL, Bleu_score, Bleu_1, Bleu_2: {perplexity:.3f}, {bleu:.3f}, {bleu1:.3f}, {bleu2:.3f}")
+            logger.info(f"intra_dist1, intra_dist2, inter_dist1, inter_dist2 : {intra_dist1:.3f}, {intra_dist2:.3f}, {inter_dist1:.3f}, {inter_dist2:.3f}")
+            output_str.append(f"PPL, Bleu_score, Bleu_1, Bleu_2: {perplexity:.3f}, {bleu:.3f}, {bleu1:.3f}, {bleu2:.3f}")
+            output_str.append(f"intra_dist1, intra_dist2, inter_dist1, inter_dist2 : {intra_dist1:.3f}, {intra_dist2:.3f}, {inter_dist1:.3f}, {inter_dist2:.3f}")
+        logger.info(f"{mode} Loss: {epoch_loss:.3f}, PPL: {perplexity:.3f}")
+        save_preds(args, contexts, top5_docs, label_gold_knowledges, epoch=epoch, new_knows=new_knows, real_resp=real_resps, gen_resps=gen_resp, mode=mode)
+        return hitdic, hitdic_ratio, output_str  # output_strings, hit1_ratio, total_hit1, total_hit3, total_hit5, total_hit1_new, total_hit3_new, total_hit5_new
+
+
+
+
+
+    if False:
+        ## 이전에 쓰던 logging 세팅 보존하던것
+        def initLogging(args):
+            filename = f'{args.time}_{"DEBUG" if args.debug else args.log_name}_{args.model_name.replace("/", "_")}_log.txt'
+            filename = os.path.join(args.log_dir, filename)
+            # global logger
+            # if logger == None: logger = logging.getLogger()
+            # else:  # wish there was a logger.close()
+            #     for handler in logger.handlers[:]:  # make a copy of the list
+            #         logger.removeHandler(handler)
+            #
+            # logger.setLevel(logging.DEBUG)
+            # formatter = logging.Formatter(fmt='%(asctime)s: %(message)s', datefmt='%Y/%m/%d_%p_%I:%M:%S ')
+            # if args.debug : pass
+            # else:
+            #     fh = logging.FileHandler(filename)
+            #     fh.setFormatter(formatter)
+            #     logger.addHandler(fh)
+            #
+            # sh = logging.StreamHandler(sys.stdout)
+            # sh.setFormatter(formatter)
+            # logger.addHandler(sh)
+            # if not args.debug :
+            logger.remove()
+            fmt="<green>{time:YYMMDD_HH:mm:ss}</green> | {message}"
+            logger.add(filename, encoding='utf-8')
+            logger.add(sys.stdout, format=fmt, level="INFO", colorize=True)
+            logger.info(f"FILENAME: {filename}")
+            logger.info('Commend: {}'.format(', '.join(map(str, sys.argv))))
+            return logger
 
 
 if False:

@@ -24,12 +24,12 @@ def make_aug_gt_pred(args, bert_model, tokenizer, train_dataset_raw, test_datase
     import data_model
     from models.ours.retriever import Retriever
     from model_play.ours.train_bert_goal_topic import eval_goal_topic_model
-    if args.alltype:
-        train_dataset = data_utils.process_augment_all_sample(train_dataset_raw, tokenizer, train_knowledgeDB)
-        test_dataset = data_utils.process_augment_all_sample(test_dataset_raw, tokenizer, all_knowledgeDB)
-    else:
-        train_dataset = data_utils.process_augment_sample(train_dataset_raw, tokenizer, train_knowledgeDB)
-        test_dataset = data_utils.process_augment_sample(test_dataset_raw, tokenizer, all_knowledgeDB)
+
+    if args.rag_train_alltype: train_dataset = data_utils.process_augment_all_sample(train_dataset_raw, tokenizer, train_knowledgeDB) ## 42086
+    else: train_dataset = data_utils.process_augment_sample(train_dataset_raw, tokenizer, train_knowledgeDB) ##11621 
+    if args.rag_train_alltype: test_dataset = data_utils.process_augment_all_sample(test_dataset_raw, tokenizer, all_knowledgeDB) ## 13282
+    else: test_dataset = data_utils.process_augment_sample(test_dataset_raw, tokenizer, all_knowledgeDB) ## 3711
+
     logger.info(f"Dataset Length: {len(train_dataset)}, {len(test_dataset)}")
 
     retriever = Retriever(args, bert_model)  # eval_goal_topic_model 함수에서 goal, topic load해서 쓸것임
@@ -40,12 +40,13 @@ def make_aug_gt_pred(args, bert_model, tokenizer, train_dataset_raw, test_datase
     train_GT_pred_auged_Dataset, test_GT_pred_auged_Dataset = eval_goal_topic_model(args, train_datamodel_topic, test_datamodel_topic, retriever, tokenizer)
     return train_GT_pred_auged_Dataset.augmented_raw_sample, test_GT_pred_auged_Dataset.augmented_raw_sample
 
+
 def train_rag_resp(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB, bert_model, tokenizer):
     train_aug_pred, test_aug_pred = make_aug_gt_pred(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
     
 
-def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
-    logger.info(f"OUR Retriever model For resp, RAG_OUR_BERT: {args.rag_our_bert}, RAG_OnlyDecoderTune: {args.rag_onlyDecoderTune}")
+def train_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB):
+    logger.info(f"\n\nOUR Retriever model For resp, RAG_OUR_BERT: {args.rag_our_bert}, RAG_OnlyDecoderTune: {args.rag_onlyDecoderTune}\n\n")
     from model_play.rag import rag_retrieve
     # if args.rag_onlyDecoderTune: args.rag_batch_size = args.rag_batch_size*2
 
@@ -73,8 +74,8 @@ def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
     ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR)
 
     if args.rag_our_bert:
-        logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use Our Trained Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
-        logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use Our Trained Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+        logger.info("\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use Our Trained Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+        logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use Our Trained Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n\n")
         ctx_encoder.ctx_encoder.bert_model = our_ctx_encoder
         ctx_tokenizer = tokenizer
 
@@ -101,17 +102,20 @@ def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
     rag_tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
     rag_model.set_context_encoder_for_training(ctx_encoder)
     if args.rag_our_bert:
-        logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@ Model question_encoder changed by ours @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
-        logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@ Model question_encoder changed by ours @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+        logger.info("\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@ Model question_encoder changed by ours @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+        logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@ Model question_encoder changed by ours @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n\n")
         rag_model.rag.question_encoder.question_encoder.bert_model = our_question_encoder
         rag_tokenizer.question_encoder = tokenizer
-
-    train_aug_pred_path = os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl')
-    test_aug_pred_path = os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl')
-    assert os.path.exists(train_aug_pred_path) and os.path.exists(test_aug_pred_path), f"Goal,Topic Predicted file doesn't exist! {train_aug_pred_path}"
+    ## Get Auged, t_pred Dataset
+    # train_aug_pred_path = os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl')
+    # test_aug_pred_path = os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl')
+    # assert os.path.exists(train_aug_pred_path) and os.path.exists(test_aug_pred_path), f"Goal,Topic Predicted file doesn't exist! {train_aug_pred_path}"
     
-    train_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
-    test_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
+    # train_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
+    # test_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
+    train_dataset_aug_pred , test_dataset_aug_pred = make_aug_gt_pred(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
+    logger.info(f"Length of Train,Test: {len(train_dataset_aug_pred)}, {len(test_dataset_aug_pred)}")
+
     if args.debug: train_dataset_aug_pred , test_dataset_aug_pred = train_dataset_aug_pred[:50], test_dataset_aug_pred[:50]
 
     train_Dataset = data_model.RagDataset(args, train_dataset_aug_pred, rag_tokenizer, all_knowledgeDB, mode='train')
@@ -127,10 +131,10 @@ def train_our_rag_generation(args, bert_model, tokenizer, all_knowledgeDB):
     logger.info(f"Logging Epoch results:                      hit@1, hit@3, hit@5, hit_new@1, hit_new@3, hit_new@5")
 
     for epoch in range(args.rag_epochs):
-        #######if not args.debug:
+        logger.info(f"RAG_LR: {args.rag_lr}")
         rag_model.train()
         if args.rag_onlyDecoderTune:
-            logger.info(f"*****RAG_Only_Decoder Tune!*****")
+            logger.info(f"\n\n*****RAG_Only_Decoder Tune!***** rag_lr: {args.rag_lr}"); logger.info(f"*****RAG_Only_Decoder Tune!***** rag_lr: {args.rag_lr}\n\n")
             rag_model.eval()
             rag_model.rag.ctx_encoder.eval()
             rag_model.rag.question_encoder.eval()
@@ -180,21 +184,6 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
                         )
         retrieved_docs_pt = outputs.retrieved_doc_ids.data
 
-        ######
-        # ## Retriever 따로 사용시
-        # # 1. Encode
-        # question_hidden_states = model.question_encoder(source_ids)[0]
-        # # 2. Retrieve
-        # docs_dict = model.retriever(source_ids.cpu().numpy(), question_hidden_states.detach().cpu().numpy(), return_tensors="pt")
-        # # docs_dict = model(input_ids=source_ids.cpu().numpy(), doc_scores=question_hidden_states.detach().cpu().numpy(), return_tensors="pt")
-        # doc_scores = torch.bmm(
-        #     question_hidden_states.unsqueeze(1).to(args.device), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2).to(args.device)
-        # ).squeeze(1)
-        # # 3. Forward to generator
-        # outputs = model(context_input_ids=docs_dict["context_input_ids"].to(args.device), context_attention_mask=docs_dict["context_attention_mask"].to(args.device), doc_scores=doc_scores.to(args.device), labels=target_ids.to(args.device)) # decoder_input_ids=target_ids.to(args.device)
-        # retrieved_docs_pt = docs_dict.data['doc_ids']
-        # ######
-        
         loss = outputs['loss'].mean()
         epoch_loss += loss.item()
         # perplexity(outputs['logits'][::5].size(), target_ids) ## Perplexity 관련 코드
@@ -256,7 +245,7 @@ def know_hit_ratio(args, pred_pt, gold_pt, new_knows=None, types=None, typelist=
         hitdic[tmp_goal]['total']+=1
         hitdic['total']['total']+=1
 
-        if args.rag_num_beams>1:
+        if args.rag_num_beams>1: ## TODO:  and isinstance(pred, list) 추가해야할듯
             if gold in pred:
                 hitdic[tmp_goal]['hit5']+=1
                 hitdic['total']['hit5']+=1
