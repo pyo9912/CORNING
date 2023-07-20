@@ -57,11 +57,9 @@ class ConvEvaluator:
     def report(self):
         report = {}
         for k, v in self.metric.items():
-            if self.sent_cnt == 0:
-                report[k] = 0
+            if self.sent_cnt == 0: report[k] = 0
             else:
-                if 'dist' in k:
-                    v = len(v)
+                if 'dist' in k: v = len(v)
                 report[k] = v / self.sent_cnt
         report['sent_cnt'] = self.sent_cnt
         return report

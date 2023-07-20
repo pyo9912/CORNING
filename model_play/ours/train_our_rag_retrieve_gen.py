@@ -55,7 +55,7 @@ def train_rag_resp(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw,
 
 
 def train_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB):
-    logger.info(f"\n\nOUR Retriever model For resp, RAG_OUR_BERT: {args.rag_our_bert}, RAG_OnlyDecoderTune: {args.rag_onlyDecoderTune}\n\n")
+    logger.info(f"\n\nOUR {args.rag_our_model}BERT_Retriever model For resp, RAG_OUR_BERT: {args.rag_our_bert}, RAG_OnlyDecoderTune: {args.rag_onlyDecoderTune}\n\n")
     from model_play.rag import rag_retrieve
     # if args.rag_onlyDecoderTune: args.rag_batch_size = args.rag_batch_size*2
 
@@ -64,9 +64,12 @@ def train_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, tes
     if args.debug: train_dataset_aug_pred, test_dataset_aug_pred = train_dataset_aug_pred[:50], test_dataset_aug_pred[:50]
 
     our_best_model = Retriever(args, bert_model)
-    our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"C2DPR_cotmae_retriever_0719.pt"), map_location=args.device))
-    # our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"ours_retriever_old_0473.pt"), map_location=args.device))
-    # our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"DPR_retriever.pt.pt"), map_location=args.device))
+    if args.rag_our_model == 'C2DPR':
+        our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"C2DPR_cotmae_retriever_0719.pt"), map_location=args.device))
+        # our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"ours_retriever_old_0473.pt"), map_location=args.device))
+    elif args.rag_our_model == 'DPR': 
+        our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"DPR_retriever.pt"), map_location=args.device))
+    else: pass
     our_best_model.to(args.device)
     our_question_encoder = deepcopy(our_best_model.query_bert)
     our_ctx_encoder = deepcopy(our_best_model.rerank_bert)
