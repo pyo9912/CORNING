@@ -62,8 +62,8 @@ def train_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, tes
     # our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"ours_retriever_old_0473.pt"), map_location=args.device))
     # our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"DPR_retriever.pt.pt"), map_location=args.device))
     our_best_model.to(args.device)
-    our_question_encoder = our_best_model.query_bert
-    our_ctx_encoder = our_best_model.rerank_bert
+    our_question_encoder = deepcopy(our_best_model.query_bert)
+    our_ctx_encoder = deepcopy(our_best_model.rerank_bert)
 
     knowledgeDB_list = list(all_knowledgeDB)
     knowledgeDB_csv_path = os.path.join(args.data_dir, 'rag')  # HOME/data/2/rag/"train_knowledge.csv")
@@ -195,7 +195,7 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
         if mode == 'train':
             optimizer.zero_grad()
             loss.backward()
-            if (steps+1) % gradient_accumulation_steps==0: torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+            # if (steps+1) % gradient_accumulation_steps==0: torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
             optimizer.step()
             loss.detach()
         steps+=1
@@ -302,9 +302,10 @@ def rag_model_weight_logging(args,model,epoch,mode, faiss_dataset):
         f.write(f"model.generator.training: {model.generator.training}\n")
         f.write(f"model.rag.training: {model.rag.training}\n")
         f.write(f"model.rag.generator.training: {model.rag.generator.training}\n")
-        f.write(f"model.rag.ctx_encoder.training: {model.rag.ctx_encoder.training}\n")
-        f.write(f"\nmodel.rag.ctx_encoder.ctx_encoder.bert_model.encoder.layer[0].attention.self.key.weight[0][:50][0]\n")
-        f.write(f'{model.rag.ctx_encoder.ctx_encoder.bert_model.encoder.layer[0].attention.self.key.weight[0][:50][0]}\n')
+        if model.rag.ctx_encoder: 
+            f.write(f"model.rag.ctx_encoder.training: {model.rag.ctx_encoder.training}\n")
+            f.write(f"\nmodel.rag.ctx_encoder.ctx_encoder.bert_model.encoder.layer[0].attention.self.key.weight[0][:50][0]\n")
+            f.write(f'{model.rag.ctx_encoder.ctx_encoder.bert_model.encoder.layer[0].attention.self.key.weight[0][:50][0]}\n')
         f.write(f"\nmodel.rag.question_encoder.question_encoder.bert_model.base_model.encoder.layer[0].attention.self.key.weight[0][:50][0]\n")
         f.write(f"{model.rag.question_encoder.question_encoder.bert_model.base_model.encoder.layer[0].attention.self.key.weight[0][:50][0]}")
         f.write(f"\nmodel.rag.generator.model.encoder.base_model.layers[0].self_attn.k_proj.weight[0][:50][0]\n")
