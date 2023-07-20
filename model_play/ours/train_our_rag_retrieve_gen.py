@@ -154,7 +154,7 @@ def train_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, tes
             for param in rag_model.rag.question_encoder.parameters():
                 param.requires_grad = False
         if epoch == 0: rag_model_weight_logging(args, rag_model, epoch, 'before_train', faiss_dataset)
-        # hitDic, hitdic_ratio, output_str = epoch_play(args, rag_tokenizer, rag_model, train_dataloader, optimizer, scheduler, epoch, faiss_dataset, mode = 'train')
+        hitDic, hitdic_ratio, output_str = epoch_play(args, rag_tokenizer, rag_model, train_dataloader, optimizer, scheduler, epoch, faiss_dataset, mode = 'train')
 
         rag_model.eval()
         with torch.no_grad():
@@ -230,22 +230,23 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
     hitdic, hitdic_ratio, output_str = know_hit_ratio(args, pred_pt=top5_docs, gold_pt=label_gold_knowledges, new_knows=new_knows, types=types)
     if mode == 'test':
         report = evaluator.report()
-        test_report = {}
-        for k, v in report.items():
-            test_report[f'test/{k}'] = v
-
-        test_report['epoch'] = epoch
-        logger.info(test_report)
+        report_text = [f"NEW_{epoch}_{mode}: bleu@1, bleu@2, bleu@3, bleu@4, dist@1, dist@2, dist@3, dist@4",
+                       f"NEW_{epoch}_{mode}:  {report['bleu@1']:.3f},  {report['bleu@2']:.3f},  {report['bleu@3']:.3f},  {report['bleu@4']:.3f},  {report['dist@1']:.3f},  {report['dist@2']:.3f},  {report['dist@3']:.3f},  {report['dist@4']:.3f}"]
+        output_str.extend(report_text)
         evaluator.reset_metric()
 
         for i in output_str:
             logger.info(f"{mode}_{epoch} {i}")
+        logger.info(report_text[0])
+        logger.info(report_text[1])
+        logger.info("======------------======")
         bleu, bleu1, bleu2 = get_bleu(real_resps, gen_resp)
         intra_dist1, intra_dist2, inter_dist1, inter_dist2 = distinct(gen_resp)
-        logger.info(f"PPL, Bleu_score, Bleu_1, Bleu_2: {perplexity:.3f}, {bleu:.3f}, {bleu1:.3f}, {bleu2:.3f}")
+        logger.info(f"                    PPL, Bleu_score, Bleu_1, Bleu_2: {perplexity:.3f}, {bleu:.3f}, {bleu1:.3f}, {bleu2:.3f}")
         logger.info(f"intra_dist1, intra_dist2, inter_dist1, inter_dist2 : {intra_dist1:.3f}, {intra_dist2:.3f}, {inter_dist1:.3f}, {inter_dist2:.3f}")
-        output_str.append(f"PPL, Bleu_score, Bleu_1, Bleu_2: {perplexity:.3f}, {bleu:.3f}, {bleu1:.3f}, {bleu2:.3f}")
+        output_str.append(f"PPL, Bleu_score, Bleu_1, Bleu_2                    : {perplexity:.3f}, {bleu:.3f}, {bleu1:.3f}, {bleu2:.3f}")
         output_str.append(f"intra_dist1, intra_dist2, inter_dist1, inter_dist2 : {intra_dist1:.3f}, {intra_dist2:.3f}, {inter_dist1:.3f}, {inter_dist2:.3f}")
+        utils.write_pkl({'contexts':contexts, 'real_resp': real_resps, 'gen_resp': gen_resp, 'top5_docs':top5_docs, 'label_gold_knowledges':label_gold_knowledges, }, os.path.join(args.output_dir,f"{epoch}_{mode}_inout.pkl"))
     logger.info(f"{mode} Loss: {epoch_loss:.3f}, PPL: {perplexity:.3f}")
     save_preds(args, contexts, top5_docs, label_gold_knowledges, epoch=epoch, new_knows=new_knows, real_resp=real_resps, gen_resps=gen_resp, mode=mode)
     return hitdic, hitdic_ratio, output_str  # output_strings, hit1_ratio, total_hit1, total_hit3, total_hit5, total_hit1_new, total_hit3_new, total_hit5_new

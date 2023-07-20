@@ -216,7 +216,9 @@ def main(args=None):
     if 'resp' in args.task:
         from model_play.ours import train_our_rag_retrieve_gen
         train_our_rag_retrieve_gen.train_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
-        
+    
+    logger.info("THE END")
+    return
 
 
 def make_cotmae_input(save_dir, dataset_raw):
