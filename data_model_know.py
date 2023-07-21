@@ -106,6 +106,7 @@ class DialogDataset(Dataset):
 
         if self.mode == 'train':
             # predicted_goal, predicted_topic = goal, topic
+            predicted_topic_list = predicted_topic_list[:random.randint(1, self.args.topk_topic)]
             random.shuffle(predicted_topic_list)
             predicted_goal, predicted_topic = data['predicted_goal'][0], '|'.join(predicted_topic_list)
         else:
