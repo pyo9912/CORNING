@@ -126,7 +126,7 @@ def main(args=None):
         logger.info("Goal Prediction Task")
         retriever = Retriever(args, query_bert=bert_model)
         retriever = retriever.to(args.device)
-
+        
         train_dataset = process_augment_all_sample(train_dataset_raw, tokenizer, train_knowledgeDB)
         # valid_dataset = process_augment_all_sample(valid_dataset_raw, tokenizer, all_knowledgeDB)
         test_dataset = process_augment_all_sample(test_dataset_raw, tokenizer, all_knowledgeDB)

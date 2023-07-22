@@ -178,7 +178,6 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
     torch.cuda.empty_cache()
     contexts, label_gold_knowledges, label_pseudo_knowledges, top5_docs, real_resps, gen_resp, new_knows = [], [], [], [], [], [], []
     types = []
-    weight_log_file = os.path.join(args.output_dir, f'{epoch}_{mode}_weights.txt')
     evaluator = ConvEvaluator(tokenizer=tokenizer, log_file_path=os.path.join(args.output_dir, f"{epoch}_{mode}_GEN_REPORT.txt"))
 
     for batch in tqdm(data_loader, desc=f"Epoch {epoch}__{mode}", bar_format=' {l_bar} | {bar:23} {r_bar}'):
@@ -224,7 +223,7 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
                                      num_beams=1, num_return_sequences=1, n_docs=5)
             resp_batch = tokenizer.generator.batch_decode(gen_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
             gen_resp.extend(resp_batch)
-            evaluator.log_file.write(f'\n*** Generator Fine-tuning test-{epoch}{mode} ***\n\n')
+            # evaluator.log_file.write(f'\n*** Generator Fine-tuning test-{epoch}{mode} ***\n\n')
             # evaluator.evaluate(gen_ids, target_ids, source_ids, log=True)
             evaluator.evaluate(gen_ids, target_ids, log=True)
 

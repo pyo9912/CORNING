@@ -308,7 +308,7 @@ def dir_init(default_args):
     # args.saved_model_dir = os.path.join(args.home, 'model_save', args.version, args.method)
     args.model_dir = os.path.join(args.home, 'model_save', args.version, args.method)
     args.rag_our_model = args.rag_our_model.upper()
-
+    
     checkPath(args.data_dir, args.saved_model_path, args.log_dir)
     checkPath(os.path.join(args.data_dir, 'pred_aug'))
     checkPath(os.path.join(args.output_dir))
