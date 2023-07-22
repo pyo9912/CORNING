@@ -22,7 +22,7 @@ class GenerationDataset(Dataset):  # knowledge용 데이터셋
         pad_token_id = self.tokenizer.pad_token_id
 
         context_batch = defaultdict()
-        context_batch['goal_type'] = self.tokenizer(goal, max_length=self.args.max_gen_length, truncation=True, padding='max_length').input_ids
+        # context_batch['goal_type'] = self.tokenizer(goal, max_length=self.args.max_gen_length, truncation=True, padding='max_length').input_ids
         resp_batch = []
         context_len_batch = []
 
@@ -38,7 +38,7 @@ class GenerationDataset(Dataset):  # knowledge용 데이터셋
             max_length = self.args.max_length + self.args.max_gen_length
             context_ids = dialog + label
             context_ids = context_ids[-max_length:]
-            context_ids = context_ids + [pad_token_id] * (max_length - len(context_ids))
+            context_ids = context_ids + [pad_token_id] * (max_length - len(context_ids)) # padding right
             resp_batch = [token_id if token_id != self.tokenizer.pad_token_id else -100 for token_id in context_ids]
 
             context_batch['input_ids'] = torch.LongTensor(context_ids)
@@ -54,12 +54,12 @@ class GenerationDataset(Dataset):  # knowledge용 데이터셋
             context_len_batch = len([token for token in context_ids if token != pad_token_id])
             context_ids += self.generate_prompt_ids
 
-            context_ids = [pad_token_id] * (self.args.max_length - len(context_ids)) + context_ids
+            context_ids = [pad_token_id] * (self.args.max_length - len(context_ids)) + context_ids # padding left for test
 
             context_batch['input_ids'] = torch.LongTensor(context_ids)
             context_batch['attention_mask'] = torch.ne(context_batch['input_ids'], pad_token_id)
 
-            context_batch['response'] = label + [pad_token_id] * (self.args.max_gen_length - len(label))
+            context_batch['response'] = label + [pad_token_id] * (self.args.max_gen_length - len(label)) # label은 padding방향 무관 but 오른쪽에 있어야함
             context_batch['context_len'] = context_len_batch
 
 

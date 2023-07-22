@@ -101,8 +101,8 @@ class GenerationDataset(Dataset):
         self.subtask = subtask  # goal , topic, resp
         self.generate_prompt_ids = self.tokenizer.convert_tokens_to_ids(self.tokenizer.tokenize('System:'))
         self.idxList = deque(maxlen=len(self.augmented_raw_sample))
-        self.TopicTask_Train_Prompt_usePredGoal = args.TopicTask_Train_Prompt_usePredGoal
-        self.TopicTask_Test_Prompt_usePredGoal = args.TopicTask_Test_Prompt_usePredGoal
+        self.TopicTask_Train_Prompt_usePredGoal = False # args.TopicTask_Train_Prompt_usePredGoal 
+        self.TopicTask_Test_Prompt_usePredGoal = True # args.TopicTask_Test_Prompt_usePredGoal -- Topic GP
         # TopicTask_Train_Prompt_usePredGoal TopicTask_Test_Prompt_usePredGoal
 
     def __getitem__(self, idx):  # TODO 구현 전

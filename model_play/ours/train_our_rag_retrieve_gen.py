@@ -64,10 +64,10 @@ def train_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, tes
     if args.debug: train_dataset_aug_pred, test_dataset_aug_pred = train_dataset_aug_pred[:50], test_dataset_aug_pred[:50]
 
     our_best_model = Retriever(args, bert_model)
-    if args.rag_our_model == 'C2DPR':
+    if args.rag_our_model.upper() == 'C2DPR':
         our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"C2DPR_cotmae_retriever_0719.pt"), map_location=args.device))
         # our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"ours_retriever_old_0473.pt"), map_location=args.device))
-    elif args.rag_our_model == 'DPR': 
+    elif args.rag_our_model.upper() == 'DPR': 
         our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"DPR_retriever.pt"), map_location=args.device))
     else: pass
     our_best_model.to(args.device)
