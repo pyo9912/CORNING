@@ -89,6 +89,8 @@ def main(args=None):
     train_knowledgeDB = list(train_knowledgeDB)
     all_knowledgeDB = list(all_knowledgeDB)
     
+    
+    logger.info("Pred-Aug dataset 구축")
     args.rag_train_alltype, args.rag_test_alltype = args.uni_train_alltype, args.uni_test_alltype
     train_dataset_aug_pred, test_dataset_aug_pred = make_aug_gt_pred(args, deepcopy(bert_model), tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
     logger.info(f"Length of Pred_Auged Train,Test: {len(train_dataset_aug_pred)}, {len(test_dataset_aug_pred)}")
@@ -116,18 +118,23 @@ def main(args=None):
 
     optimizer = torch.optim.AdamW(bart.parameters(), lr=args.uni_lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_dc_step, gamma=args.lr_dc)
-
+    best_ppl, best_outputstr=10000, None
     for epoch in range(args.uni_epochs):
         logger.info(f"Train {epoch} Start")
 
         bart.train()
-        epoch_play(args, tokenizer, bart, train_dataloader, optimizer, scheduler, epoch, mode='train')
+        ppl, output_str = epoch_play(args, tokenizer, bart, train_dataloader, optimizer, scheduler, epoch, mode='train')
         
         with torch.no_grad():
             bart.eval()
-            epoch_play(args, tokenizer, bart, test_dataloader, optimizer, scheduler, epoch, mode='test')
-        pass
-    
+            ppl, output_str = epoch_play(args, tokenizer, bart, test_dataloader, optimizer, scheduler, epoch, mode='test')
+            if best_ppl>ppl:
+                best_ppl = ppl 
+                best_outputstr = output_str
+    logger.info("END")
+    for i in best_outputstr:
+        logger.info(f"best_test: {i}")
+    logger.info("END")
     # tb_writer.close()
     return
 
@@ -151,17 +158,18 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
             loss.detach()
         else:
             gen_ids=model.generate(source_ids, num_return_sequences=1, num_beams=1, max_length = args.uni_max_target_length, early_stopping=True)
-            gen_resps.extend(tokenizer.batch_decode(gen_ids))
+            gen_resps.extend(tokenizer.batch_decode(gen_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
             evaluator.evaluate(gen_ids, lm_labels, log=True)
         contexts.extend(tokenizer.batch_decode(source_ids))
-        real_resps.extend(tokenizer.batch_decode(lm_labels)) # , skip_special_tokens=True, clean_up_tokenization_spaces=False
+        real_resps.extend(tokenizer.batch_decode(lm_labels, skip_special_tokens=True, clean_up_tokenization_spaces=False)) # , skip_special_tokens=True, clean_up_tokenization_spaces=False
 
     if mode=='train': scheduler.step()
-    logger.info(f"{mode}_Epoch {epoch} loss: {epoch_loss:.3f}")
-    output_strings = [f"{mode}_{epoch}"]
-    # tb_writer.add_scalar("Loss/train", loss, epoch)
+
     ppl = torch.exp(torch.tensor(epoch_loss/total_steps)).item()
-    
+    logger.info(f"{mode}_Epoch {epoch} loss: {epoch_loss:.3f}, ppl: {ppl:.3f}")
+    output_strings = [f"{mode}_{epoch}, loss: {epoch_loss:.3f}, ppl: {ppl:.3f}"]
+    # tb_writer.add_scalar("Loss/train", loss, epoch)
+
     if mode=='test':
         report = evaluator.report()
         report_text = [f"NEW_{epoch}_{mode}: bleu@1, bleu@2, bleu@3, bleu@4, dist@1, dist@2, dist@3, dist@4",
@@ -170,8 +178,9 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
         evaluator.reset_metric()
         for i in report_text:
             logger.info(f"{mode}_{epoch} {i}")
+
     save_preds(args, contexts, real_resp=real_resps, gen_resps=gen_resps, epoch=epoch, mode=mode)
-    return
+    return ppl, output_strings
 
 def save_preds(args, context, real_resp, gen_resps=[], epoch=None, mode='train'):
     log_file_name = mode + f'{str(epoch)}_' + args.log_name
