@@ -1,6 +1,11 @@
 #!/bin/bash
 # 아래에 실행시키려는 녀석들 다 입력해놓고, 마지막 echo "" 따옴표 안에 어떤걸 보기위한 실험이었는지 적어놓기
 
+#============================================#
+# 230722 UniMIND 실험
+python unimind_main.py --gpu=1 --log_name="Uni_Alltrain_Alltest" --uni_train_alltype --uni_test_alltype 
+python unimind_main.py --gpu=2 --log_name="Uni_Alltrain_3711test" --uni_train_alltype 
+python unimind_main.py --gpu=3 --log_name="Uni_3711train_3711test" --uni_train_alltype 
 
 
 #============================================#
