@@ -82,7 +82,7 @@ def main(args=None):
     logger.info("BERT_model config")
     logger.info(bert_model.config)
     
-    final1000 = pickle.load(open(os.path.join(args.data_dir,'final1000_topic_cln.pkl'),'rb'))
+    # final1000 = pickle.load(open(os.path.join(args.data_dir,'final1000_topic_cln.pkl'),'rb'))
 
     topicDic = readDic(os.path.join(args.data_dir, "topic2id.txt"))
     goalDic = readDic(os.path.join(args.data_dir, "goal2id.txt"))
@@ -93,9 +93,9 @@ def main(args=None):
     args.taskDic = {'goal': goalDic, 'topic': topicDic}
 
     logger.info("Read raw file")
-    train_dataset_raw, train_knowledge_base, train_knowledge_topic = data_utils.dataset_reader(args, 'train')
-    test_dataset_raw, valid_knowledge_base, test_knowledge_topic = data_utils.dataset_reader(args, 'test')
-    valid_dataset_raw, test_knowledge_base, _ = data_utils.dataset_reader(args, 'dev')
+    train_dataset_raw, train_knowledge_base = data_utils.dataset_reader_ko(args, 'train')
+    test_dataset_raw, valid_knowledge_base = data_utils.dataset_reader_ko(args, 'test')
+    # valid_dataset_raw, test_knowledge_base, _ = data_utils.dataset_reader(args, 'dev')
 
     logger.info("Knowledge DB 구축")
     train_knowledgeDB, all_knowledgeDB = set(), set()
@@ -103,16 +103,16 @@ def main(args=None):
 
     all_knowledgeDB.update(train_knowledge_base)
     all_knowledgeDB.update(valid_knowledge_base)
-    all_knowledgeDB.update(test_knowledge_base)
+    # all_knowledgeDB.update(test_knowledge_base)
 
     train_knowledgeDB = list(train_knowledgeDB)
     all_knowledgeDB = list(all_knowledgeDB)
 
-    filtered_corpus = []
-    for sentence in all_knowledgeDB:
-        tokenized_sentence = bm_tokenizer(sentence, tokenizer)
-        filtered_corpus.append(tokenized_sentence)
-    args.bm25 = BM25Okapi(filtered_corpus)
+    # filtered_corpus = []
+    # for sentence in all_knowledgeDB:
+    #     tokenized_sentence = bm_tokenizer(sentence, tokenizer)
+    #     filtered_corpus.append(tokenized_sentence)
+    # args.bm25 = BM25Okapi(filtered_corpus)
 
     # knowledgeDB = data.read_pkl(os.path.join(args.data_dir, 'knowledgeDB.txt'))  # TODO: verbalize (TH)
     # knowledgeDB.insert(0, "")

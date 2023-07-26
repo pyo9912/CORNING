@@ -61,10 +61,12 @@ def train_goal_topic_bert(args, retriever, tokenizer, train_data_loader, test_da
         with torch.no_grad():
             test_task_preds, _, test_hit1 = inEpoch_BatchPlay(args, retriever, tokenizer, test_data_loader, optimizer, scheduler, epoch, task=task, mode='test')
             if test_hit1 > max_hit_test:
+                if task == 'goal' and args.version == 'ko': topk = 1
+                else: topk = 5
                 for i, idx in enumerate(train_data_loader.dataset.idxList):
-                    train_data_loader.dataset.augmented_raw_sample[idx][f"predicted_{task}"] = [args.taskDic[task]['int'][train_task_preds[i][j]] for j in range(5)]
+                    train_data_loader.dataset.augmented_raw_sample[idx][f"predicted_{task}"] = [args.taskDic[task]['int'][train_task_preds[i][j]] for j in range(topk)]
                 for i, idx in enumerate(test_data_loader.dataset.idxList):
-                    test_data_loader.dataset.augmented_raw_sample[idx][f"predicted_{task}"] = [args.taskDic[task]['int'][test_task_preds[i][j]] for j in range(5)]  # args.taskDic[task]['int'][test_task_preds[i][0]]
+                    test_data_loader.dataset.augmented_raw_sample[idx][f"predicted_{task}"] = [args.taskDic[task]['int'][test_task_preds[i][j]] for j in range(topk)]  # args.taskDic[task]['int'][test_task_preds[i][0]]
                 ## BEST MODEL SAVE
                 model_path = os.path.join(args.saved_model_path, f"{task}_best_model.pt")
                 logger.info(f"{task} Best model saved: {model_path}")
@@ -112,8 +114,10 @@ def inEpoch_BatchPlay(args, retriever, tokenizer, data_loader, optimizer, schedu
             retriever.zero_grad()
 
         scores = torch.softmax(scores, dim=-1)
-        topk_pred = [list(i) for i in torch.topk(scores, k=5, dim=-1).indices.detach().cpu().numpy()]
-        topk_conf = [list(i) for i in torch.topk(scores, k=5, dim=-1).values.detach().cpu().numpy()]
+        if task=='goal' and args.version == 'ko':  topk=1
+        else: topk=5
+        topk_pred = [list(i) for i in torch.topk(scores, k=topk, dim=-1).indices.detach().cpu().numpy()]
+        topk_conf = [list(i) for i in torch.topk(scores, k=topk, dim=-1).values.detach().cpu().numpy()]
         ## For Scoring and Print
         contexts.extend(tokenizer.batch_decode(input_ids))
         task_preds.extend(topk_pred)
@@ -152,7 +156,7 @@ def savePrint(args, contexts, task_preds, task_labels, gold_goal, gold_topic, ep
 
 def HitbyType(args, task_preds, task_labels, gold_goal):
     if len(task_preds[0]) != 2: Exception("Task preds sould be list of tok-k(5)")
-    goal_types = ['Q&A', 'Movie recommendation', 'Music recommendation', 'POI recommendation', 'Food recommendation']
+    goal_types = ['Q&A', 'Movie recommendation', 'Music recommendation', 'POI recommendation', 'Food recommendation'] if args.version=='2' else ['Movie Recommendation','QA','Chit-chat']
     # Hitdit=defaultdict({'hit1':0,'hit3':0,'hit5':0})
     Hitdic = {goal_type: {'hit1': 0, 'hit3': 0, 'hit5': 0, 'total': 0} for goal_type in goal_types + ["Others", 'Total']}
     for goal, preds, label in zip(gold_goal, task_preds, task_labels):

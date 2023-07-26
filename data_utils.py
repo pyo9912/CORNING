@@ -15,9 +15,12 @@ from loguru import logger
 stop_words = set(stopwords.words('english'))
 
 
-def readDic(filename, out=None):
+def readDic(filename, out=None, isNone=0):
     output_idx_str = dict()
     output_idx_int = dict()
+    if isNone:
+        output_idx_str['None'] = 0
+        output_idx_int[0] = 'None'
     with open(filename, 'r', encoding='utf-8') as infile:
         for line in infile:
             try:
@@ -25,8 +28,8 @@ def readDic(filename, out=None):
             except:
                 print(line)
                 k, idx = line.strip().split()
-            output_idx_str[k] = int(idx)
-            output_idx_int[int(idx)] = k
+            output_idx_str[k] = int(idx) + isNone
+            output_idx_int[int(idx) + isNone ] = k
         # output_idx_str[len(output_idx_str)] = '<PAD>'
         # output_idx_int[len(output_idx_int)] = '<PAD>'
     if out == 'str': return output_idx_str
@@ -177,7 +180,8 @@ def dataset_reader(args, data_name='train'):
     all_knowledge = set()
     all_knowledge_topic = []
     conversation_sample = []
-    data_path = os.path.join(args.data_dir, f"en_{data_name}_know_cand_score20_new.txt")
+    # data_path = os.path.join(args.data_dir, f"en_{data_name}_know_cand_score20_new.txt")
+    data_path = os.path.join(args.data_dir, f"ko_all.txt")
     with open(data_path, 'r', encoding='UTF-8') as f:
         line_idx=0
         for line in tqdm(f, desc="Dataset Read", bar_format='{l_bar} | {bar:23} {r_bar}'):
@@ -271,3 +275,70 @@ def make_dsi_input(save_dir, dataset_raw, input_setting='dialog', knowledgeDB=[]
         with open(os.path.join(save_dir, f"test_dataset_gold_text_.json"), 'w', encoding='utf-8') as f:
             f.write(json.dumps(text2text))
     return
+
+def makeDic(args, data, which):
+    dic = {'str': defaultdict(), 'int': defaultdict()}
+    whichset=set()
+    if which=='topic':
+        for conv in data:
+            for type in conv['topic']:
+                whichset.add(type)
+    elif which=='goal':
+        for conv in data:
+            for type in conv['goal']:
+                whichset.add(type)
+    elif which=='knowledge':
+        for conv in data:
+            for type in conv['knowledge_seq']:
+                whichset.add(type)
+    else: return
+    for i,v in enumerate(whichset):
+        dic['str'][v] = i
+        dic['int'][i] = v
+    return dic
+
+
+
+def dataset_reader_ko(args, data_name='train'):
+    all_knowledge = set()
+    # all_knowledge_topic = []
+    conversation_sample = []
+    data_path = os.path.join(args.data_dir, f"kt_{data_name}_know_cand_score20_new.txt")
+    with open(data_path, 'r', encoding='UTF-8') as f:
+        line_idx=0
+        for line in tqdm(f, desc="Dataset Read", bar_format='{l_bar} | {bar:23} {r_bar}'):
+            line_idx+=1
+            if args.debug and line_idx>30: break
+            dialog = json.loads(line)
+            conversation = dialog['conversation']
+            role_seq = [i.split(':')[0] for i in conversation]
+
+            knowledge_seq = dialog['knowledge']
+            know_candidates = dialog['know_candidates']
+            pseudo_knowledge_seq = []
+            pseudo_confidence_seq = []
+            for idx, know_conf_list in enumerate(know_candidates):
+                positive_candidates = [know[0] for know in know_conf_list]
+
+                conf_list = [know[1] for know in know_conf_list]
+                pseudo_knowledge_seq.append(positive_candidates)
+                pseudo_confidence_seq.append(conf_list)
+
+            all_knowledge.update(knowledge_seq)
+
+            user_profile = "" # user_profile_setting(dialog['user_profile'])
+            situation = dialog['situation']
+            topics = [i if i else 'None' for i in dialog['goal_topic_list']]
+            conversation_sample.append({
+                'dialog': conversation,
+                'role_seq': role_seq,
+                'goal': dialog['goal_type_list'],
+                'topic': topics,
+                'situation': situation,
+                'user_profile': user_profile,
+                'knowledge_seq': knowledge_seq,
+                'pseudo_knowledge_seq': pseudo_knowledge_seq,
+                'pseudo_confidence_seq': pseudo_confidence_seq
+            })
+
+    return conversation_sample, list(all_knowledge) #, all_knowledge_topic
