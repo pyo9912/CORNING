@@ -4,7 +4,7 @@ import torch
 from torch.utils.data import Dataset
 
 
-class GenerationDataset(Dataset):  # knowledge용 데이터셋
+class GPTDataset(Dataset):  # knowledge용 데이터셋
     def __init__(self, args, data_sample, knowledgeDB, tokenizer, mode='train', subtask='response'):
         super(Dataset, self).__init__()
         self.args = args

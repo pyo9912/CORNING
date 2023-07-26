@@ -50,8 +50,8 @@ def make_aug_gt_pred(args, bert_model, tokenizer, train_dataset_raw, test_datase
     return train_gt_pred_auged, test_gt_pred_auged
 
 
-def train_rag_resp(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB, bert_model, tokenizer):
-    train_aug_pred, test_aug_pred = make_aug_gt_pred(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
+# def train_rag_resp(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB, bert_model, tokenizer):
+#     train_aug_pred, test_aug_pred = make_aug_gt_pred(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
 
 
 def train_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB):
