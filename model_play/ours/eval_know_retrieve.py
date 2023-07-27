@@ -65,13 +65,14 @@ def eval_know(args, test_dataloader, retriever, knowledgeDB, tokenizer, write=No
     pred = []
     targets = []
     current = 0
+    topic_lens = []
     for batch in tqdm(test_dataloader, desc="Knowledge_Test", bar_format=' {percentage:3.0f} % | {bar:23} {r_bar}'):  # TODO: Knowledge task 분리중
         batch_size = batch['attention_mask'].size(0)
         dialog_token = batch['input_ids']
         dialog_mask = batch['attention_mask']
         response = batch['response']
         new_knowledge = batch['new_knowledge']
-
+        topic_lens.extend(batch['topic_len'].tolist())
         # candidate_indice = batch['candidate_indice']
         # candidate_knowledge_token = batch['candidate_knowledge_token']  # [B,5,256]
         # candidate_knowledge_mask = batch['candidate_knowledge_mask']  # [B,5,256]
@@ -136,6 +137,7 @@ def eval_know(args, test_dataloader, retriever, knowledgeDB, tokenizer, write=No
                     if new:
                         hit20_new.append(correct_k)
 
+    topic_len_avg = np.average(topic_lens)
     hit1 = np.average(hit1)
     hit3 = np.average(hit3)
     hit5 = np.average(hit5)
@@ -171,6 +173,7 @@ def eval_know(args, test_dataloader, retriever, knowledgeDB, tokenizer, write=No
         write_pkl(obj=jsonlineSave, filename='jsonline.pkl')  # 입출력 저장
         save_json(args, f"{args.time}_{args.model_name}_inout", jsonlineSave)
     else:
+        logger.info(f"avg topic avg" % topic_len_avg)
         logger.info(f"Test Hit@1: %.4f" % np.average(hit1))
         logger.info(f"Test Hit@3: %.4f" % np.average(hit3))
         logger.info(f"Test Hit@5: %.4f" % np.average(hit5))

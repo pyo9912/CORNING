@@ -113,12 +113,20 @@ class DialogDataset(Dataset):
             # predicted_topic_list = predicted_topic_list[:random.randint(1, self.args.topk_topic)]
             predicted_topic = '|'.join(predicted_topic_list)
         else:
+            cum_prob = 0
+            candidate_topic_entities = []
+            for topic, conf in zip(predicted_topic_list, predicted_topic_confidence_list):
+                candidate_topic_entities.append(topic)
+                cum_prob += conf
+                if cum_prob > self.args.topic_conf:
+                    break
 
-            predicted_topic_list = [topic for (topic, conf) in zip(predicted_topic_list, predicted_topic_confidence_list) if conf > self.args.topic_conf]
+            # predicted_topic_list = [topic for (topic, conf) in zip(predicted_topic_list, predicted_topic_confidence_list) if conf > self.args.topic_conf]
             # if data['predicted_topic_confidence'][0] > (1 - self.args.topic_conf):
             #     predicted_topic = data['predicted_topic'][0]
             # else:
-            predicted_topic = '|'.join(predicted_topic_list)
+            topic_len = len(candidate_topic_entities)
+            predicted_topic = '|'.join(candidate_topic_entities)
 
         if self.args.input_prompt == 'dialog':
             prefix = ''
@@ -251,7 +259,7 @@ class DialogDataset(Dataset):
         context_batch['bm25_top20'] = candidate_knowledges
         context_batch['new_knowledge'] = self.knowledgeDB[target_knowledge_idx] not in self.train_knowledgeDB
         context_batch['isFood'] = (goal == 'Food recommendation')
-
+        context_batch['topic_len'] = topic_len
         # context_batch['sampling_results'] = sampling_results
 
         context_batch['indices'] = idx

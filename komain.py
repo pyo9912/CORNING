@@ -243,7 +243,7 @@ def main(args=None):
 
 def make_cotmae_input(save_dir, dataset_raw):
     lines = []
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+    tokenizer = KoBERTTokenizer.from_pretrained('skt/kobert-base-v1')
 
     for data in dataset_raw:
         dialog = data['dialog']
@@ -254,7 +254,7 @@ def make_cotmae_input(save_dir, dataset_raw):
             nearby = tokenizer.encode(tokenizer.sep_token.join(dialog[split_point:]))[1:-1]
             samples.append({"anchor": anchor, "nearby": nearby, "random_sampled": nearby, "overlap": nearby})
         lines.append({"spans": samples})
-    with open("../ir-main/ir-main/cotmae/DuRecDial2_COTMAE.json", 'w', encoding='utf-8') as wf:
+    with open("KoReDial_COTMAE.json", 'w', encoding='utf-8') as wf:
         for line in lines:
             wf.write(json.dumps(line) + "\n")
 
