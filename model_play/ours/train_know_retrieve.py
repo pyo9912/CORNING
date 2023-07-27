@@ -82,14 +82,14 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
         data['predicted_topic'] = train_dataset_pred_aug[idx]['predicted_topic']
         data['predicted_topic_confidence'] = train_dataset_pred_aug[idx]['predicted_topic_confidence']
 
-    # test_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
-    # test_dataset_pred_aug = [data for data in test_dataset_pred_aug if data['target_knowledge'] != '' and data['goal'] in goal_list]
-    #
-    # for idx, data in enumerate(test_dataset):
-    #     data['predicted_goal'] = test_dataset_pred_aug[idx]['predicted_goal']
-    #     data['predicted_topic'] = test_dataset_pred_aug[idx]['predicted_topic']
+    test_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
+    test_dataset_pred_aug = [data for data in test_dataset_pred_aug if data['target_knowledge'] != '' and data['goal'].lower() in goal_list]
+    for idx, data in enumerate(test_dataset):
+        data['predicted_goal'] = test_dataset_pred_aug[idx]['predicted_goal']
+        data['predicted_topic'] = test_dataset_pred_aug[idx]['predicted_topic']
+        data['predicted_topic_confidence'] = test_dataset_pred_aug[idx]['predicted_topic_confidence']
 
-    test_dataset = read_pkl(os.path.join(args.data_dir, 'pred_aug', "gt_test_pred_aug_dataset.pkl"))
+    # test_dataset = read_pkl(os.path.join(args.data_dir, 'pred_aug', "gt_test_pred_aug_dataset.pkl"))
 
     train_datamodel_know = DialogDataset(args, train_dataset, train_knowledgeDB, train_knowledgeDB, tokenizer, mode='train', task='know')
     valid_datamodel_know = DialogDataset(args, valid_dataset, all_knowledgeDB, train_knowledgeDB, tokenizer, mode='test', task='know')
@@ -167,11 +167,6 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
             num_update += 1
 
         scheduler.step()
-        # if num_update > update_freq:
-        #     update_key_bert(retriever.key_bert, retriever.query_bert)
-        #     num_update = 0
-        #     knowledge_index = knowledge_reindexing(args, knowledge_data, retriever)
-        #     knowledge_index = knowledge_index.to(args.device)
 
         logger.info(f"Epoch: {epoch}\nTrain Loss: {train_epoch_loss}")
 
