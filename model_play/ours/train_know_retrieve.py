@@ -64,8 +64,9 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
     if 'Movie' in args.goal_list: goal_list.append('Movie recommendation')
     if 'POI' in args.goal_list: goal_list.append('POI recommendation')
     if 'Music' in args.goal_list: goal_list.append('Music recommendation')
-    if 'QA' in args.goal_list: goal_list.append('Q&A')
+    if 'QA' in args.goal_list: goal_list.append('Q&A'); goal_list.append('QA')
     if 'Food' in args.goal_list: goal_list.append('Food recommendation')
+    goal_list = [goal.lower() for goal in goal_list]
     # if 'Chat' in args.goal_list:  goal_list.append('Chat about stars')
     logger.info(f" Goal List in Knowledge Task : {args.goal_list}")
 
@@ -75,7 +76,7 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
     test_dataset = process_augment_sample(test_dataset_raw, tokenizer, all_knowledgeDB, goal_list=goal_list)  # gold-topic
 
     train_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
-    train_dataset_pred_aug = [data for data in train_dataset_pred_aug if data['target_knowledge'] != '' and data['goal'] in goal_list]
+    train_dataset_pred_aug = [data for data in train_dataset_pred_aug if data['target_knowledge'] != '' and data['goal'].lower() in goal_list]
     for idx, data in enumerate(train_dataset):
         data['predicted_goal'] = train_dataset_pred_aug[idx]['predicted_goal']
         data['predicted_topic'] = train_dataset_pred_aug[idx]['predicted_topic']

@@ -145,6 +145,7 @@ def process_augment_all_sample(raw_data, tokenizer, knowledgeDB):
 
 
 def process_augment_sample(raw_data, tokenizer=None, knowledgeDB=None, goal_list=['Movie recommendation', 'POI recommendation', 'Music recommendation', 'Q&A', 'Food recommendation']):
+    goal_list = [goal.lower() for goal in goal_list]
     train_sample = []
     if tokenizer:
         if tokenizer.eos_token is not None: eos_token = tokenizer.eos_token
@@ -157,7 +158,7 @@ def process_augment_sample(raw_data, tokenizer=None, knowledgeDB=None, goal_list
             role = conversation['role_seq'][i]
             utterance = conversation['dialog'][i] + eos_token
             goal = conversation['goal'][i]
-            if goal in goal_list:
+            if goal.lower() in goal_list:
                 if role.lower() == 'system' and len(augmented_dialog) > 0 and len(conversation['pseudo_knowledge_seq'][i]) != 0: # Test 3711 Setting
                     flatten_dialog = ''.join(augmented_dialog)
                     train_sample.append({'dialog': flatten_dialog,
@@ -321,7 +322,9 @@ def dataset_reader_ko(args, data_name='train'):
             role_seq = dialog['role']#[i.split(':')[0] for i in conversation]
             conversation = [f"{role}: {utt}" for role, utt in zip(role_seq, dialog['conversation'])]
 
-            knowledge_seq = [j.replace('\n', ',') for j in dialog['knowledge']]
+            # knowledge_seq = [j.replace('\n', '') for j in dialog['knowledge']]
+            # knowledge_seq = dialog['knowledge']
+            knowledge_seq = [readData.replace("!", "").replace("<", "").replace(">", "").replace(".", "") for readData in dialog['knowledge']]
             all_knowledge.update(knowledge_seq)
 
             pseudo_knowledge_seq = []
