@@ -44,9 +44,10 @@ def pred_goal_topic_aug(args, retriever, tokenizer, Auged_Dataset, task):
     data_loader = DataLoader(Auged_Dataset, batch_size=args.gt_batch_size * 20, shuffle=False)
     with torch.no_grad():
         task_preds, task_confs, _ = inEpoch_BatchPlay(args, retriever, tokenizer, data_loader, optimizer, scheduler, epoch=0, task=task, mode='test')
+    topk=5 if task=='topic' else 1
     for i, dataset in enumerate(Auged_Dataset.augmented_raw_sample):
-        dataset[f"predicted_{task}"] = [args.taskDic[task]['int'][task_preds[i][j]] for j in range(5)]
-        dataset[f"predicted_{task}_confidence"] = [task_confs[i][j] for j in range(5)]
+        dataset[f"predicted_{task}"] = [args.taskDic[task]['int'][task_preds[i][j]] for j in range(topk)]
+        dataset[f"predicted_{task}_confidence"] = [task_confs[i][j] for j in range(topk)]
 
 
 def train_goal_topic_bert(args, retriever, tokenizer, train_data_loader, test_data_loader, task):

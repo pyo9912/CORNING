@@ -63,7 +63,7 @@ def main(args=None):
     
     args = parser.parse_args()
     args.version='ko'
-    # args.bert_name = 'skt/kobert-base-v1'
+    args.bert_name = 'skt/kobert-base-v1'
     # # args.bert_name = 'beomi/kcbert-base' # 'beomi/kcbert-large'
     # args.gpt_name = 'skt/kogpt2-base-v2'
     # parser.add_argument('--bert_name', default='bert-base-uncased', type=str, help="BERT Model Name")
@@ -203,12 +203,9 @@ def main(args=None):
         # args.gt_max_length = 256
         # args.gt_batch_size = 32
         train_dataset, valid_dataset, test_dataset = None, None, None
-        if args.alltype:
-            train_dataset = process_augment_all_sample(train_dataset_raw, tokenizer, train_knowledgeDB)
-            test_dataset = process_augment_all_sample(test_dataset_raw, tokenizer, all_knowledgeDB)
-        else:
-            train_dataset = process_augment_sample(train_dataset_raw, tokenizer, train_knowledgeDB)
-            test_dataset = process_augment_sample(test_dataset_raw, tokenizer, all_knowledgeDB)
+        train_dataset = process_augment_all_sample(train_dataset_raw, tokenizer, train_knowledgeDB)
+        test_dataset = process_augment_all_sample(test_dataset_raw, tokenizer, all_knowledgeDB)
+
         logger.info(f"Dataset Length: {len(train_dataset)}, {len(test_dataset)}")
 
         retriever = Retriever(args, bert_model)  # eval_goal_topic_model 함수에서 goal, topic load해서 쓸것임
@@ -220,6 +217,7 @@ def main(args=None):
         if not args.debug:
             write_pkl(train_GT_pred_auged_Dataset.augmented_raw_sample, os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
             write_pkl(test_GT_pred_auged_Dataset.augmented_raw_sample, os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
+            logger.info("Finish Data Augment with Goal-Topic_pred_conf and saved in pred_aug/gt_test_pred_aug_dataset.pkl")
         logger.info("Finish Data Augment with Goal-Topic_pred_conf")
         pass
 

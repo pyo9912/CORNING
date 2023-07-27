@@ -1,32 +1,40 @@
 #!/bin/bash
 # 아래에 실행시키려는 녀석들 다 입력해놓고, 마지막 echo "" 따옴표 안에 어떤걸 보기위한 실험이었는지 적어놓기
 
-python main.py --gpu=2 --rag_our_model=DPR --task=resp --log_name="DPR_RAG_3711train_3711test_1e-5"  --rag_lr=1e-5 --rag_epochs=15 --rag_our_bert --rag_onlyDecoderTune
-python main.py --gpu=3 --rag_our_model=C2DPR --task=resp --log_name="C2DPR_RAG_3711train_3711test_1e-5"  --rag_lr=1e-5 --rag_epochs=15 --rag_our_bert --rag_onlyDecoderTune
-
-#============================================#
-# 230722 UniMIND 실험
-python unimind_main.py --gpu=1 --log_name="Uni_Alltrain_Alltest" --uni_train_alltype --uni_test_alltype 
-python unimind_main.py --gpu=2 --log_name="Uni_Alltrain_3711test" --uni_train_alltype 
-python unimind_main.py --gpu=3 --log_name="Uni_3711train_3711test" --uni_train_alltype 
 
 
-#============================================#
-# 230720 DPR-RAG 실험
-python lm_main_THpaper.py --gpu=3 --log_name="BART-base_AllTrain_AllTest"    --num_epochs=5 --model_name='facebook/bart-base'  --train_alltype --test_alltype 
-python lm_main_THpaper.py --gpu=3 --log_name="BART-base_AllTrain_3711Test"   --num_epochs=5 --model_name='facebook/bart-base'  --train_alltype 
-python lm_main_THpaper.py --gpu=3 --log_name="BART-base_3711Train_3711Test"  --num_epochs=5 --model_name='facebook/bart-base' 
-python lm_main_THpaper.py --gpu=3 --log_name="BART-large_AllTrain_AllTest"   --num_epochs=5 --model_name='facebook/bart-large'  --train_alltype --test_alltype 
-python lm_main_THpaper.py --gpu=3 --log_name="BART-large_AllTrain_3711Test"  --num_epochs=5 --model_name='facebook/bart-large'  --train_alltype 
-python lm_main_THpaper.py --gpu=3 --log_name="BART-large_3711Train_3711Test" --num_epochs=5 --model_name='facebook/bart-large' 
+python komain.py --gpu=2 --version=ko --task='goal_topic' --log_name="ko_GoalTopic_1e-5"  --lr=1e-5 --num_epochs=15
+python komain.py --gpu=3 --version=ko --task='goal_topic' --log_name="ko_GoalTopic_1e-6"  --lr=1e-6 --num_epochs=15
 
 
-python main.py --gpu=2 --rag_our_model=DPR --task=resp --log_name="DPR_RAG_alltrain_alltest_1e-5"  --rag_lr=1e-5 --rag_epochs=5 --rag_train_alltype --rag_test_alltype 
-python main.py --gpu=3 --rag_our_model=DPR --task=resp --log_name="DPR_RAG_alltrain_3711test_1e-5"  --rag_lr=1e-5 --rag_epochs=5 --rag_train_alltype 
-python main.py --gpu=2 --rag_our_model=DPR --task=resp --log_name="DPR_RAG_3711train_3711test_1e-5"  --rag_lr=1e-5 --rag_epochs=5 
+# #============================================#
+# # 230722 UniMIND 실험
+# python main.py --gpu=2 --rag_our_model=DPR --task=resp --log_name="DPR_RAG_3711train_3711test_1e-5"  --rag_lr=1e-5 --rag_epochs=15 --rag_our_bert --rag_onlyDecoderTune
+# python main.py --gpu=3 --rag_our_model=C2DPR --task=resp --log_name="C2DPR_RAG_3711train_3711test_1e-5"  --rag_lr=1e-5 --rag_epochs=15 --rag_our_bert --rag_onlyDecoderTune
 
-# python main.py --gpu=0 --task=resp --log_name="OUR_RAG_alltrain_alltest_1e-5"   --rag_onlyDecoderTune --rag_our_bert --rag_lr=1e-5 --rag_epochs=5 --rag_train_alltype --rag_test_alltype
-# python main.py --gpu=1 --task=resp --log_name="OUR_RAG_alltrain_alltest_1e-5"   --rag_onlyDecoderTune --rag_our_bert --rag_lr=1e-5 --rag_epochs=5 --rag_train_alltype 
+# #============================================#
+# # 230722 UniMIND 실험
+# python unimind_main.py --gpu=1 --log_name="Uni_Alltrain_Alltest" --uni_train_alltype --uni_test_alltype 
+# python unimind_main.py --gpu=2 --log_name="Uni_Alltrain_3711test" --uni_train_alltype 
+# python unimind_main.py --gpu=3 --log_name="Uni_3711train_3711test" --uni_train_alltype 
+
+
+# #============================================#
+# # 230720 DPR-RAG 실험
+# python lm_main_THpaper.py --gpu=3 --log_name="BART-base_AllTrain_AllTest"    --num_epochs=5 --model_name='facebook/bart-base'  --train_alltype --test_alltype 
+# python lm_main_THpaper.py --gpu=3 --log_name="BART-base_AllTrain_3711Test"   --num_epochs=5 --model_name='facebook/bart-base'  --train_alltype 
+# python lm_main_THpaper.py --gpu=3 --log_name="BART-base_3711Train_3711Test"  --num_epochs=5 --model_name='facebook/bart-base' 
+# python lm_main_THpaper.py --gpu=3 --log_name="BART-large_AllTrain_AllTest"   --num_epochs=5 --model_name='facebook/bart-large'  --train_alltype --test_alltype 
+# python lm_main_THpaper.py --gpu=3 --log_name="BART-large_AllTrain_3711Test"  --num_epochs=5 --model_name='facebook/bart-large'  --train_alltype 
+# python lm_main_THpaper.py --gpu=3 --log_name="BART-large_3711Train_3711Test" --num_epochs=5 --model_name='facebook/bart-large' 
+
+
+# python main.py --gpu=2 --rag_our_model=DPR --task=resp --log_name="DPR_RAG_alltrain_alltest_1e-5"  --rag_lr=1e-5 --rag_epochs=5 --rag_train_alltype --rag_test_alltype 
+# python main.py --gpu=3 --rag_our_model=DPR --task=resp --log_name="DPR_RAG_alltrain_3711test_1e-5"  --rag_lr=1e-5 --rag_epochs=5 --rag_train_alltype 
+# python main.py --gpu=2 --rag_our_model=DPR --task=resp --log_name="DPR_RAG_3711train_3711test_1e-5"  --rag_lr=1e-5 --rag_epochs=5 
+
+# # python main.py --gpu=0 --task=resp --log_name="OUR_RAG_alltrain_alltest_1e-5"   --rag_onlyDecoderTune --rag_our_bert --rag_lr=1e-5 --rag_epochs=5 --rag_train_alltype --rag_test_alltype
+# # python main.py --gpu=1 --task=resp --log_name="OUR_RAG_alltrain_alltest_1e-5"   --rag_onlyDecoderTune --rag_our_bert --rag_lr=1e-5 --rag_epochs=5 --rag_train_alltype 
 # python main.py --gpu=2 --task=resp --log_name="OUR_RAG_alltrain_alltest_1e-5"   --rag_onlyDecoderTune --rag_our_bert --rag_lr=1e-5 --rag_epochs=5 
 
 # python main.py --gpu=3 --task=resp --log_name="OUR_RAGTUNE_3711train_3711test_1e-5"   --rag_our_bert --rag_lr=1e-5 --rag_epochs=5 

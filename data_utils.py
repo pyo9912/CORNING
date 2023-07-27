@@ -310,8 +310,8 @@ def dataset_reader_ko(args, data_name='train'):
     all_knowledge = set()
     # all_knowledge_topic = []
     conversation_sample = []
-    data_path = os.path.join(args.data_dir, f"kt_{data_name}_know_cand_score20_new.txt")
-    data_path = os.path.join(args.data_dir, f"ko_{data_name}.txt")
+    data_path = os.path.join(args.data_dir, f"ko_{data_name}_know_cand_score20_new.txt")
+    # data_path = os.path.join(args.data_dir, f"ko_{data_name}.txt")
     with open(data_path, 'r', encoding='UTF-8') as f:
         line_idx=0
         for line in tqdm(f, desc="Dataset Read", bar_format='{l_bar} | {bar:23} {r_bar}'):
