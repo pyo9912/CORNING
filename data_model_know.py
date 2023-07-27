@@ -111,6 +111,7 @@ class DialogDataset(Dataset):
             # predicted_goal, predicted_topic = goal, topic
             random.shuffle(predicted_topic_list)
             # predicted_topic_list = predicted_topic_list[:random.randint(1, self.args.topk_topic)]
+            candidate_topic_entities = predicted_topic_list
             predicted_topic = '|'.join(predicted_topic_list)
         else:
             cum_prob = 0
