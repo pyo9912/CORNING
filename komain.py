@@ -63,9 +63,14 @@ def main(args=None):
     
     args = parser.parse_args()
     args.version='ko'
+    args.bert_name = 'skt/kobert-base-v1'
+    args.gpt_name =  'skt/kogpt2-base-v2'
+    # parser.add_argument('--bert_name', default='bert-base-uncased', type=str, help="BERT Model Name")
+    # parser.add_argument('--bart_name', default='facebook/bart-base', type=str, help="BERT Model Name")
+    # parser.add_argument('--gpt_name', default='gpt2', type=str, help="BERT Model Name")
     args = utils.dir_init(args)
     initLogging(args)
-    # log_args(args)
+    # log_args(args)\
 
     if args.TopicTask_Train_Prompt_usePredGoal and not args.TopicTask_Test_Prompt_usePredGoal: logger.info("Default Topic_pred Task 는 Train에 p_goal, Test에 g_goal 써야해")
 
@@ -84,18 +89,27 @@ def main(args=None):
     
     # final1000 = pickle.load(open(os.path.join(args.data_dir,'final1000_topic_cln.pkl'),'rb'))
 
-    topicDic = readDic(os.path.join(args.data_dir, "topic2id.txt"))
-    goalDic = readDic(os.path.join(args.data_dir, "goal2id.txt"))
+    logger.info("Read raw file")
+    train_dataset_raw, train_knowledge_base = data_utils.dataset_reader_ko(args, 'train')
+    test_dataset_raw, valid_knowledge_base = data_utils.dataset_reader_ko(args, 'test')
+    # valid_dataset_raw, test_knowledge_base, _ = data_utils.dataset_reader(args, 'dev')
+
+    if os.path.exists(os.path.join(args.data_dir, "topic2id.txt")) and os.path.join(args.data_dir, "goal2id.txt"):
+        topicDic = readDic(os.path.join(args.data_dir, "topic2id.txt"))
+        goalDic = readDic(os.path.join(args.data_dir, "goal2id.txt"))
+    else:
+        # make_goal, topic dic
+        goalDic = data_utils.makeDic(args, train_dataset_raw + test_dataset_raw, 'goal')
+        topicDic = data_utils.makeDic(args, train_dataset_raw + test_dataset_raw, 'topic')
+        data_utils.saveDic(args, goalDic['str'], 'goal')
+        data_utils.saveDic(args, topicDic['str'], 'topic')
+
     args.topicDic = topicDic
     args.goalDic = goalDic
     args.topic_num = len(topicDic['int'])
     args.goal_num = len(goalDic['int'])
     args.taskDic = {'goal': goalDic, 'topic': topicDic}
 
-    logger.info("Read raw file")
-    train_dataset_raw, train_knowledge_base = data_utils.dataset_reader_ko(args, 'train')
-    test_dataset_raw, valid_knowledge_base = data_utils.dataset_reader_ko(args, 'test')
-    # valid_dataset_raw, test_knowledge_base, _ = data_utils.dataset_reader(args, 'dev')
 
     logger.info("Knowledge DB 구축")
     train_knowledgeDB, all_knowledgeDB = set(), set()
