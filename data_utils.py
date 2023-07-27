@@ -349,7 +349,7 @@ def dataset_reader_ko(args, data_name='train'):
             for topic in dialog['goal_topic_list']:
                 if topic=='' or topic==' ' or topic=='0':
                     topics.append('None')
-                else: topics.append(topic)
+                else: topics.append(topic.strip())
 
             conversation_sample.append({
                 'dialog': conversation,
