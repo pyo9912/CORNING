@@ -103,18 +103,22 @@ class DialogDataset(Dataset):
         context_batch = defaultdict()
 
         predicted_topic_list = deepcopy(data['predicted_topic'][:self.args.topk_topic])
+        predicted_topic_confidence_list = deepcopy(data['predicted_topic_confidence'][:self.args.topk_topic])
+
+        predicted_goal = data['predicted_goal'][0]
 
         if self.mode == 'train':
             # predicted_goal, predicted_topic = goal, topic
             random.shuffle(predicted_topic_list)
-            predicted_topic_list = predicted_topic_list[:random.randint(1, self.args.topk_topic)]
-            predicted_goal, predicted_topic = data['predicted_goal'][0], '|'.join(predicted_topic_list)
+            # predicted_topic_list = predicted_topic_list[:random.randint(1, self.args.topk_topic)]
+            predicted_topic = '|'.join(predicted_topic_list)
         else:
-            predicted_goal = data['predicted_goal'][0]
-            if data['predicted_topic_confidence'][0] > (1 - self.args.topic_conf):
-                predicted_topic = data['predicted_topic'][0]
-            else:
-                predicted_topic = '|'.join(predicted_topic_list)
+
+            predicted_topic_list = [topic for (topic, conf) in zip(predicted_topic_list, predicted_topic_confidence_list) if conf > self.args.topic_conf]
+            # if data['predicted_topic_confidence'][0] > (1 - self.args.topic_conf):
+            #     predicted_topic = data['predicted_topic'][0]
+            # else:
+            predicted_topic = '|'.join(predicted_topic_list)
 
         if self.args.input_prompt == 'dialog':
             prefix = ''
