@@ -63,7 +63,8 @@ def main(args=None):
     
     args = parser.parse_args()
     args.version='ko'
-    args.bert_name = 'skt/kobert-base-v1'
+    # args.bert_name = 'skt/kobert-base-v1'
+    args.bert_name = 'beomi/kcbert-base' # 'beomi/kcbert-large'
     args.gpt_name =  'skt/kogpt2-base-v2'
     # parser.add_argument('--bert_name', default='bert-base-uncased', type=str, help="BERT Model Name")
     # parser.add_argument('--bart_name', default='facebook/bart-base', type=str, help="BERT Model Name")
