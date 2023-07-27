@@ -180,8 +180,8 @@ def dataset_reader(args, data_name='train'):
     all_knowledge = set()
     all_knowledge_topic = []
     conversation_sample = []
-    # data_path = os.path.join(args.data_dir, f"en_{data_name}_know_cand_score20_new.txt")
-    data_path = os.path.join(args.data_dir, f"ko_all.txt")
+    data_path = os.path.join(args.data_dir, f"en_{data_name}_know_cand_score20_new.txt")
+    # data_path = os.path.join(args.data_dir, f"ko_all.txt")
     with open(data_path, 'r', encoding='UTF-8') as f:
         line_idx=0
         for line in tqdm(f, desc="Dataset Read", bar_format='{l_bar} | {bar:23} {r_bar}'):
@@ -282,53 +282,72 @@ def makeDic(args, data, which):
     if which=='topic':
         for conv in data:
             for type in conv['topic']:
-                whichset.add(type)
+                if (type!='' or type!='0') and type:
+                    whichset.add(type)
     elif which=='goal':
         for conv in data:
             for type in conv['goal']:
-                whichset.add(type)
+                if type:
+                    whichset.add(type)
     elif which=='knowledge':
         for conv in data:
             for type in conv['knowledge_seq']:
-                whichset.add(type)
+                if (type!='' or type!='0') and type:
+                    whichset.add(type)
     else: return
     for i,v in enumerate(whichset):
         dic['str'][v] = i
         dic['int'][i] = v
     return dic
 
-
+def saveDic(args, dic, which='goal'):
+    with open(os.path.join(args.data_dir, f'{which}2id.txt'), 'w', encoding='utf-8') as f:
+        for string, index in dic.items():
+            f.write(f"{string}\t{index}\n")
+    logger.info(f" Dic saved in {os.path.join(args.data_dir, f'{which}2id.txt')}")
 
 def dataset_reader_ko(args, data_name='train'):
     all_knowledge = set()
     # all_knowledge_topic = []
     conversation_sample = []
     data_path = os.path.join(args.data_dir, f"kt_{data_name}_know_cand_score20_new.txt")
+    data_path = os.path.join(args.data_dir, f"ko_{data_name}.txt")
     with open(data_path, 'r', encoding='UTF-8') as f:
         line_idx=0
         for line in tqdm(f, desc="Dataset Read", bar_format='{l_bar} | {bar:23} {r_bar}'):
             line_idx+=1
             if args.debug and line_idx>30: break
             dialog = json.loads(line)
-            conversation = dialog['conversation']
-            role_seq = [i.split(':')[0] for i in conversation]
+            role_seq = dialog['role']#[i.split(':')[0] for i in conversation]
+            conversation = [f"{role}: {utt}" for role, utt in zip(role_seq, dialog['conversation'])]
 
-            knowledge_seq = dialog['knowledge']
-            know_candidates = dialog['know_candidates']
+            knowledge_seq = [j.replace('\n', ',') for j in dialog['knowledge']]
+            all_knowledge.update(knowledge_seq)
+
             pseudo_knowledge_seq = []
             pseudo_confidence_seq = []
-            for idx, know_conf_list in enumerate(know_candidates):
-                positive_candidates = [know[0] for know in know_conf_list]
+            if 'know_candidates' in dialog:
+                know_candidates = dialog['know_candidates']
+                for idx, know_conf_list in enumerate(know_candidates):
+                    positive_candidates = [know[0] for know in know_conf_list]
 
-                conf_list = [know[1] for know in know_conf_list]
-                pseudo_knowledge_seq.append(positive_candidates)
-                pseudo_confidence_seq.append(conf_list)
-
-            all_knowledge.update(knowledge_seq)
+                    conf_list = [know[1] for know in know_conf_list]
+                    pseudo_knowledge_seq.append(positive_candidates)
+                    pseudo_confidence_seq.append(conf_list)
+            else:
+                for _ in role_seq:
+                    pseudo_confidence_seq.append('')
+                    pseudo_knowledge_seq.append('')
 
             user_profile = "" # user_profile_setting(dialog['user_profile'])
             situation = dialog['situation']
-            topics = [i if i else 'None' for i in dialog['goal_topic_list']]
+
+            topics = [] # Topic clean
+            for topic in dialog['goal_topic_list']:
+                if topic=='' or topic==' ' or topic=='0':
+                    topics.append('None')
+                else: topics.append(topic)
+
             conversation_sample.append({
                 'dialog': conversation,
                 'role_seq': role_seq,
