@@ -164,7 +164,7 @@ class GenerationDataset(Dataset):
         context_batch['response'] = torch.LongTensor(resp_batch)
 
         context_batch['goal_idx'] = self.args.goalDic['str'][goal]  # index로 바꿈
-        context_batch['topic_idx'] = self.args.topicDic['str'][topic]  # index로 바꿈
+        context_batch['topic_idx'] = self.args.topicDic['str'].get(topic, 0)  # index로 바꿈
         # context_batch['predicted_goal_idx']
 
         if 'predicted_goal' in data:
