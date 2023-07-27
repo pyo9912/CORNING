@@ -173,7 +173,7 @@ def eval_know(args, test_dataloader, retriever, knowledgeDB, tokenizer, write=No
         write_pkl(obj=jsonlineSave, filename='jsonline.pkl')  # 입출력 저장
         save_json(args, f"{args.time}_{args.model_name}_inout", jsonlineSave)
     else:
-        logger.info(f"avg topic avg" % topic_len_avg)
+        logger.info(f"avg topic: %d" % topic_len_avg)
         logger.info(f"Test Hit@1: %.4f" % np.average(hit1))
         logger.info(f"Test Hit@3: %.4f" % np.average(hit3))
         logger.info(f"Test Hit@5: %.4f" % np.average(hit5))
