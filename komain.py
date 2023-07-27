@@ -1,6 +1,6 @@
 import sys
 import os
-from transformers import AutoModel, AutoTokenizer, BartForConditionalGeneration, GPT2LMHeadModel, GPT2Config, AutoConfig, BartTokenizer
+from transformers import AutoModel, AutoTokenizer, BartForConditionalGeneration, GPT2LMHeadModel, GPT2Config, AutoConfig, BartTokenizer, BertModel
 import torch
 import numpy as np
 from torch.utils.data import DataLoader
@@ -20,7 +20,7 @@ from loguru import logger
 import utils
 import data_utils
 import data_model
-
+from kobert_tokenizer import KoBERTTokenizer
 
 def add_ours_specific_args(parser):
     # parser.add_argument("--asdf", action='store_true', help="~할지 여부")
@@ -64,8 +64,8 @@ def main(args=None):
     args = parser.parse_args()
     args.version='ko'
     # args.bert_name = 'skt/kobert-base-v1'
-    args.bert_name = 'beomi/kcbert-base' # 'beomi/kcbert-large'
-    args.gpt_name =  'skt/kogpt2-base-v2'
+    # # args.bert_name = 'beomi/kcbert-base' # 'beomi/kcbert-large'
+    # args.gpt_name = 'skt/kogpt2-base-v2'
     # parser.add_argument('--bert_name', default='bert-base-uncased', type=str, help="BERT Model Name")
     # parser.add_argument('--bart_name', default='facebook/bart-base', type=str, help="BERT Model Name")
     # parser.add_argument('--gpt_name', default='gpt2', type=str, help="BERT Model Name")
@@ -78,9 +78,13 @@ def main(args=None):
     # logger.info(args)
 
     logger.info("Model Call")
-    bert_model = AutoModel.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
-    bert_config = AutoConfig.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
-    tokenizer = AutoTokenizer.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
+    if 'skt' in args.bert_name:
+        tokenizer = KoBERTTokenizer.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
+        bert_model = BertModel.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
+    else:
+        bert_model = AutoModel.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
+        bert_config = AutoConfig.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
+        tokenizer = AutoTokenizer.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
     tokenizer.add_special_tokens(bert_special_tokens_dict)  # [TH] add bert special token (<dialog>, <topic> , <type>)
     bert_model.resize_token_embeddings(len(tokenizer))
     args.hidden_size = bert_model.config.hidden_size  # BERT large 쓸 때 대비
