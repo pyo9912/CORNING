@@ -119,60 +119,60 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
     result_path = f"{args.time}_{args.model_name}_result"
 
     for epoch in range(args.num_epochs):
-        # train_epoch_loss = 0
-        # num_update = 0
-        # for batch in tqdm(train_dataloader, desc="Knowledge_Train", bar_format=' {l_bar} | {bar:23} {r_bar}'):
-        #     retriever.train()
-        #     dialog_token = batch['input_ids']
-        #     dialog_mask = batch['attention_mask']
-        #     goal_idx = batch['goal_idx']
-        #     # response = batch['response']
-        #     candidate_indice = batch['candidate_indice']
-        #     candidate_knowledge_token = batch['candidate_knowledge_token']  # [B,2,256]
-        #     candidate_knowledge_mask = batch['candidate_knowledge_mask']  # [B,2,256]
-        #     # sampling_results = batch['sampling_results']
-        #
-        #     target_knowledge_idx = batch['target_knowledge']  # [B,5,256]
-        #
-        #     if args.know_ablation == 'target':
-        #         # logit = retriever.compute_know_score(dialog_token, dialog_mask, knowledge_index, goal_idx)
-        #         logit_pos, logit_neg = retriever.knowledge_retrieve(dialog_token, dialog_mask, candidate_indice, candidate_knowledge_token, candidate_knowledge_mask)  # [B, 2]
-        #         logit = torch.cat([logit_pos, logit_neg], dim=-1)
-        #         loss = (-torch.log_softmax(logit, dim=1).select(dim=1, index=0)).mean()
-        #
-        #     else:
-        #         logit_pos, logit_neg = retriever.knowledge_retrieve(dialog_token, dialog_mask, candidate_indice, candidate_knowledge_token, candidate_knowledge_mask)  # [B, 2]
-        #         cumsum_logit = torch.cumsum(logit_pos, dim=1)  # [B, K]  # Grouping
-        #
-        #         loss = 0
-        #         # pseudo_confidences_mask = batch['pseudo_confidences']  # [B, K]
-        #         for idx in range(args.pseudo_pos_rank):
-        #             # confidence = torch.softmax(pseudo_confidences[:, :idx + 1], dim=-1)
-        #             # g_logit = torch.sum(logit_pos[:, :idx + 1] * pseudo_confidences_mask[:, :idx + 1], dim=-1) / (torch.sum(pseudo_confidences_mask[:, :idx + 1], dim=-1) + 1e-20)
-        #             if args.train_ablation == 'S':
-        #                 g_logit = logit_pos[:, idx]  # For Sampling
-        #             if args.train_ablation == 'RG':
-        #                 g_logit = cumsum_logit[:, idx] / (idx + 1)  # For GCL!!!!!!! (our best)
-        #             # g_logit = cumsum_logit[:, idx] / batch_denominator[:, idx]
-        #
-        #             # g_logit = cumsum_logit[:, idx] / num_samples[:, idx]
-        #             g_logit = torch.cat([g_logit.unsqueeze(1), logit_neg], dim=1)
-        #             loss += (-torch.log_softmax(g_logit, dim=1).select(dim=1, index=0)).mean()
-        #
-        #     train_epoch_loss += loss
-        #     optimizer.zero_grad()
-        #     loss.backward()
-        #     optimizer.step()
-        #     num_update += 1
-        #
-        # scheduler.step()
-        # # if num_update > update_freq:
-        # #     update_key_bert(retriever.key_bert, retriever.query_bert)
-        # #     num_update = 0
-        # #     knowledge_index = knowledge_reindexing(args, knowledge_data, retriever)
-        # #     knowledge_index = knowledge_index.to(args.device)
-        #
-        # logger.info(f"Epoch: {epoch}\nTrain Loss: {train_epoch_loss}")
+        train_epoch_loss = 0
+        num_update = 0
+        for batch in tqdm(train_dataloader, desc="Knowledge_Train", bar_format=' {l_bar} | {bar:23} {r_bar}'):
+            retriever.train()
+            dialog_token = batch['input_ids']
+            dialog_mask = batch['attention_mask']
+            goal_idx = batch['goal_idx']
+            # response = batch['response']
+            candidate_indice = batch['candidate_indice']
+            candidate_knowledge_token = batch['candidate_knowledge_token']  # [B,2,256]
+            candidate_knowledge_mask = batch['candidate_knowledge_mask']  # [B,2,256]
+            # sampling_results = batch['sampling_results']
+
+            target_knowledge_idx = batch['target_knowledge']  # [B,5,256]
+
+            if args.know_ablation == 'target':
+                # logit = retriever.compute_know_score(dialog_token, dialog_mask, knowledge_index, goal_idx)
+                logit_pos, logit_neg = retriever.knowledge_retrieve(dialog_token, dialog_mask, candidate_indice, candidate_knowledge_token, candidate_knowledge_mask)  # [B, 2]
+                logit = torch.cat([logit_pos, logit_neg], dim=-1)
+                loss = (-torch.log_softmax(logit, dim=1).select(dim=1, index=0)).mean()
+
+            else:
+                logit_pos, logit_neg = retriever.knowledge_retrieve(dialog_token, dialog_mask, candidate_indice, candidate_knowledge_token, candidate_knowledge_mask)  # [B, 2]
+                cumsum_logit = torch.cumsum(logit_pos, dim=1)  # [B, K]  # Grouping
+
+                loss = 0
+                # pseudo_confidences_mask = batch['pseudo_confidences']  # [B, K]
+                for idx in range(args.pseudo_pos_rank):
+                    # confidence = torch.softmax(pseudo_confidences[:, :idx + 1], dim=-1)
+                    # g_logit = torch.sum(logit_pos[:, :idx + 1] * pseudo_confidences_mask[:, :idx + 1], dim=-1) / (torch.sum(pseudo_confidences_mask[:, :idx + 1], dim=-1) + 1e-20)
+                    if args.train_ablation == 'S':
+                        g_logit = logit_pos[:, idx]  # For Sampling
+                    if args.train_ablation == 'RG':
+                        g_logit = cumsum_logit[:, idx] / (idx + 1)  # For GCL!!!!!!! (our best)
+                    # g_logit = cumsum_logit[:, idx] / batch_denominator[:, idx]
+
+                    # g_logit = cumsum_logit[:, idx] / num_samples[:, idx]
+                    g_logit = torch.cat([g_logit.unsqueeze(1), logit_neg], dim=1)
+                    loss += (-torch.log_softmax(g_logit, dim=1).select(dim=1, index=0)).mean()
+
+            train_epoch_loss += loss
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            num_update += 1
+
+        scheduler.step()
+        # if num_update > update_freq:
+        #     update_key_bert(retriever.key_bert, retriever.query_bert)
+        #     num_update = 0
+        #     knowledge_index = knowledge_reindexing(args, knowledge_data, retriever)
+        #     knowledge_index = knowledge_index.to(args.device)
+
+        logger.info(f"Epoch: {epoch}\nTrain Loss: {train_epoch_loss}")
 
         hit1, hit3, hit5, hit10, hit20, hit_movie_result, hit_music_result, hit_qa_result, hit_poi_result, hit_food_result, hit_chat_result, hit1_new, hit3_new, hit5_new, hit10_new, hit20_new = eval_know(args, test_dataloader, retriever, all_knowledgeDB,
                                                                                                                                                                                                             tokenizer)  # HJ: Knowledge text top-k 뽑아서 output만들어 체크하던 코드 분리
