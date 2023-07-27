@@ -125,8 +125,8 @@ class DialogDataset(Dataset):
             # if data['predicted_topic_confidence'][0] > (1 - self.args.topic_conf):
             #     predicted_topic = data['predicted_topic'][0]
             # else:
-            topic_len = len(candidate_topic_entities)
             predicted_topic = '|'.join(candidate_topic_entities)
+        topic_len = len(candidate_topic_entities)
 
         if self.args.input_prompt == 'dialog':
             prefix = ''
