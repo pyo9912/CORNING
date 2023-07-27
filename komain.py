@@ -77,7 +77,7 @@ def main(args=None):
 
     # logger.info(args)
 
-    logger.info("Model Call")
+    logger.info(f"Our Bert Model Call: {args.bert_name}")
     if 'skt' in args.bert_name:
         tokenizer = KoBERTTokenizer.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
         bert_model = BertModel.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
