@@ -1,7 +1,9 @@
 import sys
 import os
 # from transformers import BartForConditionalGeneration, BartTokenizer, BartConfig, AutoConfig, AutoModel,AutoTokenizer
-from transformers import GPT2LMHeadModel, GPT2PreTrainedModel, GPT2Tokenizer, AutoConfig, AutoModel,AutoTokenizer
+from transformers import GPT2LMHeadModel, GPT2PreTrainedModel, GPT2Tokenizer, AutoConfig, AutoModel,AutoTokenizer, BertModel, PreTrainedTokenizerFast
+from transformers import AutoModelForCausalLM 
+
 import torch
 import numpy as np
 from torch.utils.data import DataLoader, Dataset
@@ -16,6 +18,8 @@ import data_utils
 import data_model
 from model_play.ours.train_our_rag_retrieve_gen import make_aug_gt_pred
 from evaluator_conv import ConvEvaluator
+from models.kobart import get_pytorch_kobart_model, get_kobart_tokenizer
+from kobert_tokenizer import KoBERTTokenizer
 # from torch.utils.tensorboard import SummaryWriter
 
 
@@ -26,7 +30,7 @@ def add_ours_specific_args(parser):
     parser.add_argument("--gt_batch_size", type=int, default=16, help=" Method ")
 
     ## For resp
-    parser.add_argument("--gpt_model_name", type=str, default='gpt2', help=" model name ") # gpt2 , gpt2-large, gpt2-large
+    parser.add_argument("--gpt_model_name", type=str, default='gpt2', help=" model name ") # gpt2 , gpt2-medium, gpt2-large
     parser.add_argument("--gpt_batch_size", type=int, default=32, help=" batchsize ")
     # parser.add_argument("--gpt_input_dialog", type=str, default="dialog", help=" input dialog  ")
     parser.add_argument("--gpt_max_input_length", type=int, default=128, help=" input len: 512 ")
@@ -46,21 +50,27 @@ def add_ours_specific_args(parser):
 
 def main(args=None):
     """
-    Only use BART (MLP Layer No Use)
     """
     parser = argparse.ArgumentParser(description="gpt_main.py")
     parser = utils.default_parser(parser)
     parser = add_ours_specific_args(parser)
 
     args = parser.parse_args()
+    # args.version='ko'
+    # args.bert_name = 'skt/kobert-base-v1'
     args = utils.dir_init(args)
     initLogging(args)
     # global tb_writer
     # tb_writer = SummaryWriter(log_dir= os.path.join(args.home, 'temp_code'))
     logger.info("Model Call")
-    bert_model = AutoModel.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
-    bert_config = AutoConfig.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
-    tokenizer = AutoTokenizer.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
+    if 'skt' in args.bert_name:
+        tokenizer = KoBERTTokenizer.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
+        bert_model = BertModel.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
+    else:
+        # raise Exception("Korea Version")
+        bert_model = AutoModel.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
+        bert_config = AutoConfig.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
+        tokenizer = AutoTokenizer.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
     tokenizer.add_special_tokens(bert_special_tokens_dict)  # [TH] add bert special token (<dialog>, <topic> , <type>)
     bert_model.resize_token_embeddings(len(tokenizer))
     args.hidden_size = bert_model.config.hidden_size  # BERT large 쓸 때 대비
@@ -73,11 +83,20 @@ def main(args=None):
     args.topic_num = len(topicDic['int'])
     args.goal_num = len(goalDic['int'])
     args.taskDic = {'goal': goalDic, 'topic': topicDic}
+
+    # logger.info("Read raw file")
+    if 'skt' in args.bert_name:
+        logger.info(f"Read Korea raw file")
+        # args.gpt_model_name = 'skt/kogpt2-base-v2' # bert가 korea라는것 --> GPT도 korea 써야한다는것
+        train_dataset_raw, train_knowledge_base = data_utils.dataset_reader_ko(args, 'train')
+        test_dataset_raw, valid_knowledge_base = data_utils.dataset_reader_ko(args, 'test')
+    else:
+        logger.info("Read Eng raw file")
+        train_dataset_raw, train_knowledge_base, train_knowledge_topic = data_utils.dataset_reader(args, 'train')
+        test_dataset_raw, valid_knowledge_base, test_knowledge_topic = data_utils.dataset_reader(args, 'test')
+        valid_dataset_raw, test_knowledge_base, _ = data_utils.dataset_reader(args, 'dev')
+        valid_knowledge_base += test_knowledge_base
     
-    logger.info("Read raw file")
-    train_dataset_raw, train_knowledge_base, train_knowledge_topic = data_utils.dataset_reader(args, 'train')
-    test_dataset_raw, valid_knowledge_base, test_knowledge_topic = data_utils.dataset_reader(args, 'test')
-    valid_dataset_raw, test_knowledge_base, _ = data_utils.dataset_reader(args, 'dev')
 
     logger.info("Knowledge DB 구축")
     train_knowledgeDB, all_knowledgeDB = set(), set()
@@ -85,7 +104,6 @@ def main(args=None):
 
     all_knowledgeDB.update(train_knowledge_base)
     all_knowledgeDB.update(valid_knowledge_base)
-    all_knowledgeDB.update(test_knowledge_base)
 
     train_knowledgeDB = list(train_knowledgeDB)
     all_knowledgeDB = list(all_knowledgeDB)
@@ -97,15 +115,35 @@ def main(args=None):
     logger.info(f"Length of Pred_Auged Train,Test: {len(train_dataset_aug_pred)}, {len(test_dataset_aug_pred)}")
     logger.info(f"!!Dataset created!!\n")
 
+    # train_dataset_aug_pred, test_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir,'pred_aug', 'temp','gt_train_pred_aug_dataset.pkl')) ,utils.read_pkl(os.path.join(args.data_dir,'pred_aug', 'temp','gt_test_pred_aug_dataset.pkl'))
+    # pred_pkl_stat
+
 
     logger.info(f"Model call {args.gpt_model_name}")
     model_cache_dir = os.path.join(args.home, 'model_cache', args.gpt_model_name)
+    if 'skt' in args.gpt_model_name:
+        assert args.gpt_model_name == 'skt/kogpt2-base-v2'
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(args.gpt_model_name,
+                    bos_token='</s>', eos_token='</s>', unk_token='<unk>',
+                    pad_token='<pad>', mask_token='<mask>')
+        model = GPT2LMHeadModel.from_pretrained(args.gpt_model_name, cache_dir=model_cache_dir)
     # config = BartConfig.from_pretrained(args.gpt_model_name, cache_dir=model_cache_dir)
-    tokenizer = GPT2Tokenizer.from_pretrained(args.gpt_model_name, cache_dir=model_cache_dir)
-    # tokenizer.add_special_tokens({'additional_special_tokens':[]})
-    tokenizer.add_special_tokens({'pad_token':'[PAD]'})
-    # tokenizer.pad_token='[PAD]'
-    model = GPT2LMHeadModel.from_pretrained(args.gpt_model_name, cache_dir=model_cache_dir)
+    elif 'kakao' in args.gpt_model_name:
+        tokenizer = AutoTokenizer.from_pretrained(
+        'kakaobrain/kogpt', revision='KoGPT6B-ryan1.5b-float16',  # or float32 version: revision=KoGPT6B-ryan1.5b
+        bos_token='[BOS]', eos_token='[EOS]', unk_token='[UNK]', pad_token='[PAD]', mask_token='[MASK]'
+        )
+        model = AutoModelForCausalLM.from_pretrained(
+        'kakaobrain/kogpt', revision='KoGPT6B-ryan1.5b-float16',  # or float32 version: revision=KoGPT6B-ryan1.5b
+        pad_token_id=tokenizer.eos_token_id,
+        torch_dtype='auto', low_cpu_mem_usage=True
+        ).to(device='cuda', non_blocking=True)
+    else:
+        tokenizer = GPT2Tokenizer.from_pretrained(args.gpt_model_name, cache_dir=model_cache_dir)
+        # tokenizer.add_special_tokens({'additional_special_tokens':[]})
+        tokenizer.add_special_tokens({'pad_token':'[PAD]'})
+        # tokenizer.pad_token='[PAD]'
+        model = GPT2LMHeadModel.from_pretrained(args.gpt_model_name, cache_dir=model_cache_dir)
     
     model.resize_token_embeddings(len(tokenizer))
     
@@ -113,7 +151,7 @@ def main(args=None):
     model.to(args.device)
 
 
-    # 3711-3711 Fast 
+    # 3711-3711 Fast Du2
     # train_dataset_aug_pred, test_dataset_aug_pred = utils.read_pkl('/home/work/CRSTEST/KEMGCRS/data/2/pred_aug/gt_train_pred_aug_dataset.pkl') , utils.read_pkl('/home/work/CRSTEST/KEMGCRS/data/2/pred_aug/gt_test_pred_aug_dataset.pkl')
     if args.debug: train_dataset_aug_pred, test_dataset_aug_pred, args.gpt_epochs = train_dataset_aug_pred[:50] , test_dataset_aug_pred[:50] , 1
 
@@ -165,7 +203,7 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
             optimizer.step()
             loss.detach()
             contexts.extend(tokenizer.batch_decode(source_ids, skip_special_tokens=skip_specialToken, clean_up_tokenization_spaces=skip_specialToken)) # Train 때는 어떻게 들어갔는지 제대로 확인
-            lm_labels_100changed = torch.where(lm_labels!=-100, lm_labels, 50257)
+            lm_labels_100changed = torch.where(lm_labels!=-100, lm_labels, tokenizer.pad_token_id)
             real_resps.extend(tokenizer.batch_decode(lm_labels_100changed, skip_special_tokens=skip_specialToken, clean_up_tokenization_spaces=skip_specialToken)) # , skip_special_tokens=True, clean_up_tokenization_spaces=False
         else:
             # ctx_len = batch['context_len']
@@ -315,6 +353,9 @@ def log_args(args):
         logger.info("args list: {}".format(' | '.join(arg5)))
     logger.info(f"@@@@@@@@@@@@@@@@")
 
+def pred_pkl_stat(pred_dataset): # goal, topic pred aug 에 대한 점수 출력
+    output_str = []
+    pass
 
 
 if __name__=='__main__':

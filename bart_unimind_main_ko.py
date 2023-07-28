@@ -36,7 +36,7 @@ def add_ours_specific_args(parser):
     parser.add_argument("--uni_pretrain_epochs", type=int, default=15, help=" pretrain_epoch default: 15 ")
     parser.add_argument("--uni_ft_epochs", type=int, default=5, help=" fine-tune epoch default: 5 ")
     parser.add_argument("--uni_epochs", type=int, default=15, help=" resp_Task epoch default: 15 ")
-    parser.add_argument('--uni_lr', type=float, default=5e-5, help='uni Learning rate')
+    parser.add_argument('--uni_lr', type=float, default=1e-5, help='uni Learning rate')
     parser.add_argument("--uni_train_alltype", action='store_true', help="train all type 여부")
     parser.add_argument("--uni_test_alltype", action='store_true', help="test all type 여부")
     
@@ -65,6 +65,7 @@ def main(args=None):
         tokenizer = KoBERTTokenizer.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
         bert_model = BertModel.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
     else:
+        raise Exception("Korea Version")
         bert_model = AutoModel.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
         bert_config = AutoConfig.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
         tokenizer = AutoTokenizer.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
@@ -102,36 +103,26 @@ def main(args=None):
     
     logger.info("Pred-Aug dataset 구축")
     args.rag_train_alltype, args.rag_test_alltype = args.uni_train_alltype, args.uni_test_alltype
-    # train_dataset_aug_pred, test_dataset_aug_pred = make_aug_gt_pred(args, deepcopy(bert_model), tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
-    # logger.info(f"Length of Pred_Auged Train,Test: {len(train_dataset_aug_pred)}, {len(test_dataset_aug_pred)}")
-    # logger.info(f"!!Dataset created!!\n")
+    train_dataset_aug_pred, test_dataset_aug_pred = make_aug_gt_pred(args, deepcopy(bert_model), tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
+    logger.info(f"Length of Pred_Auged Train,Test: {len(train_dataset_aug_pred)}, {len(test_dataset_aug_pred)}")
+    logger.info(f"!!Dataset created!!\n")
     "/home/work/CRSTEST/KEMGCRS/data/ko/pred_aug/temp/gt_test_pred_aug_dataset.pkl"
-    train_dataset_aug_pred, test_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir,'pred_aug', 'temp','gt_train_pred_aug_dataset.pkl')) ,utils.read_pkl(os.path.join(args.data_dir,'pred_aug', 'temp','gt_test_pred_aug_dataset.pkl'))
+    # train_dataset_aug_pred, test_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir,'pred_aug', 'temp','gt_train_pred_aug_dataset.pkl')) ,utils.read_pkl(os.path.join(args.data_dir,'pred_aug', 'temp','gt_test_pred_aug_dataset.pkl'))
     
 
     logger.info(f"Model call {args.uni_model_name}")
 
     tokenizer = get_kobart_tokenizer(cachedir=os.path.join(args.home,'model_cache','kobart'))
     bart = BartForConditionalGeneration.from_pretrained(get_pytorch_kobart_model(cachedir=os.path.join(args.home,'model_cache','kobart')))
-    # model = BartModel.from_pretrained(get_pytorch_kobart_model(cachedir=os.path.join(args.home,'model_cache','kobart')))
-    # tokenizer = get_kobart_tokenizer()    BartForConditionalGeneration.from_pretrained(get_pytorch_kobart_model(cachedir=os.path.join(args.home,'model_cache','kobart')))
-    # model = BartModel.from_pretrained(get_pytorch_kobart_model())
-    # model_cache_dir = os.path.join(args.home, 'model_cache', args.uni_model_name)
-    # config = BartConfig.from_pretrained(args.uni_model_name, cache_dir=model_cache_dir)
-    # tokenizer = BartTokenizer.from_pretrained(args.uni_model_name, cache_dir=model_cache_dir)
-    # bart = BartForConditionalGeneration.from_pretrained(args.uni_model_name, cache_dir=model_cache_dir)
-    
     tokenizer.add_special_tokens({'additional_special_tokens':['goal: ','User: ','System: ','topic: ']})
     bart.resize_token_embeddings(len(tokenizer))
     bart.to(args.device)
 
 
-    # 3711-3711 Fast 
-    # train_dataset_aug_pred, test_dataset_aug_pred = utils.read_pkl('/home/work/CRSTEST/KEMGCRS/data/2/pred_aug/gt_train_pred_aug_dataset.pkl') , utils.read_pkl('/home/work/CRSTEST/KEMGCRS/data/2/pred_aug/gt_test_pred_aug_dataset.pkl')
     if args.debug: train_dataset_aug_pred, test_dataset_aug_pred, args.uni_epochs = train_dataset_aug_pred[:50] , test_dataset_aug_pred[:50] , 1
 
-    train_Dataset = UnimindDataset(args, train_dataset_aug_pred, tokenizer, mode='train', model=args.method)
-    test_Dataset = UnimindDataset(args, test_dataset_aug_pred, tokenizer, mode='test', model=args.method)
+    train_Dataset = UnimindDataset(args, train_dataset_aug_pred, tokenizer, mode='train', method=args.method) # method: bart , unimind
+    test_Dataset = UnimindDataset(args, test_dataset_aug_pred, tokenizer, mode='test', method=args.method)
     train_dataloader = DataLoader(train_Dataset, batch_size=args.uni_batch_size, shuffle=True)
     test_dataloader = DataLoader(test_Dataset, batch_size=args.uni_batch_size, shuffle=False)
 
@@ -229,7 +220,7 @@ class UnimindDataset(Dataset):
         self.target_max_length=args.uni_max_target_length
         self.tokenizer.truncation_side='left'
         self.postfix = "system: "
-        logger.info(f"Dataset For {self.method} task")
+        logger.info(f"Dataset For {self.method} task, len: {len(self.pred_aug_dataset)}")
         ## pipeline 고려하기 (predicted_goal, predicted_topic)
 
 
@@ -247,14 +238,14 @@ class UnimindDataset(Dataset):
         
         context_batch = defaultdict()
         self.tokenizer.truncation_side='left'
-        if self.model=='unimind': 
+        if self.method=='unimind': 
             if self.mode=='train': 
                 input = f"{dialog} goal: {goal} topic: {topic} Generate the response: "
                 labels = response
             else:  # Test
                 input = f"{dialog} goal: {predicted_goal} topic: {predicted_topic} Generate the response: "
                 labels = response
-        elif self.model=='bart':
+        elif self.method=='bart':
                 input = f"{dialog} | Generate the response: "
                 labels = response
         

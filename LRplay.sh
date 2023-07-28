@@ -3,7 +3,29 @@
 
 
 
-python komain.py --gpu=2 --version=ko --task='goal_topic' --log_name="ko_GoalTopic_1e-5"  --lr=1e-5 --num_epochs=15
+
+python gpt_main.py --version='ko' --bert_name='skt/kobert-base-v1' --gpt_model_name='skt/kogpt2-base-v2' --log_name='GPT_37_37_1e-6' --gpt_lr=1e-6 --gpu=3
+python gpt_main.py --version='ko' --bert_name='skt/kobert-base-v1' --gpt_model_name='skt/kogpt2-base-v2' --log_name='GPT_37_37_1e-5' --gpt_lr=1e-5 --gpu=2
+python gpt_main.py --version='ko' --bert_name='skt/kobert-base-v1' --gpt_model_name='skt/kogpt2-base-v2' --log_name='GPT_37_37_1e-4' --gpt_lr=1e-4 --gpu=1
+
+python gpt_main.py --version='ko' --bert_name='skt/kobert-base-v1' --gpt_model_name='kakaobrain/kogpt' --log_name='KAKAOGPT3_37_37_1e-5' --gpt_batch_size=4 --gpt_lr=1e-5 --gpu=1 
+
+# python main.py --gpu=1 --log_name='GT_train_save' --task='goal_topic' 
+# python main.py --gpu=2 --log_name='GT3711_train_save' --task='goal_topic' 
+
+# #============================================#
+# # Korean 230727 UniMIND 실험
+# python bart_unimind_main_ko.py --gpu=1 --log_name="2type_BART_37train_37test_1e4" --method=bart --uni_lr=1e-4
+# python bart_unimind_main_ko.py --gpu=1 --log_name="2type_BART_37train_37test_1e6" --method=bart --uni_lr=1e-6
+# python bart_unimind_main_ko.py --gpu=1 --log_name="2type_BART_37train_37test_1e5" --method=bart --uni_lr=1e-5
+
+# python bart_unimind_main_ko.py --gpu=2 --log_name="2type_UniMIND_37train_37test_1e5" --method=unimind --uni_lr=1e-5
+# python bart_unimind_main_ko.py --gpu=2 --log_name="2type_UniMIND_37train_37test_1e4" --method=unimind --uni_lr=1e-4
+# python bart_unimind_main_ko.py --gpu=2 --log_name="2type_UniMIND_37train_37test_1e6" --method=unimind --uni_lr=1e-6
+
+
+# python komain.py --gpu=2 --version=ko --task='goal_topic' --log_name="ko_GoalTopic_1e-5"  --lr=1e-5 --num_epochs=15
+# python komain.py --gpu=2 --version=ko --task='goal_topic' --log_name="ko_GoalTopic_1e-4"  --lr=1e-4 --num_epochs=15
 # python komain.py --gpu=3 --version=ko --task='goal_topic' --log_name="ko_GoalTopic_1e-6"  --lr=1e-6 --num_epochs=15
 
 

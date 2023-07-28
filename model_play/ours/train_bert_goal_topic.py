@@ -69,7 +69,7 @@ def train_goal_topic_bert(args, retriever, tokenizer, train_data_loader, test_da
                 for i, idx in enumerate(test_data_loader.dataset.idxList):
                     test_data_loader.dataset.augmented_raw_sample[idx][f"predicted_{task}"] = [args.taskDic[task]['int'][test_task_preds[i][j]] for j in range(topk)]  # args.taskDic[task]['int'][test_task_preds[i][0]]
                 ## BEST MODEL SAVE
-                model_path = os.path.join(args.saved_model_path, f"{task}_best_model.pt")
+                model_path = os.path.join(args.saved_model_path, f"{task}_best_model{args.device[-1]}.pt")
                 logger.info(f"{task} Best model saved: {model_path}")
                 torch.save(retriever.state_dict(), model_path)
 

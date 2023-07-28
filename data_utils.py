@@ -150,6 +150,7 @@ def process_augment_sample(raw_data, tokenizer=None, knowledgeDB=None, goal_list
     if tokenizer:
         if tokenizer.eos_token is not None: eos_token = tokenizer.eos_token
         else: eos_token = tokenizer.sep_token
+        if tokenizer.name_or_path=='skt/kobert-base-v1': goal_list=['movie recommendation', 'qa'] # KoBERT일때 처리 
     else: eos_token = '[SEP]'
     for ij in range(len(raw_data)):
         conversation = raw_data[ij]
