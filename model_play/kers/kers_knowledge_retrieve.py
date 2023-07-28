@@ -193,7 +193,9 @@ class KersKnowledgeDataset(Dataset):  # knowledge용 데이터셋
             else:  # Original KERS (Without knowledges) Setting (Related knowledges 가 없을 때 --> E4의 KERS(w/o RelKnow))
                 input = self.tokenizer('<dialog>' + dialog, max_length=self.kers_retrieve_input_length - len(type_token) - len(last_type_token), padding='max_length', truncation=True).input_ids
                 input = input + type_token + last_type_token
-
+        if self.args.version=='ko':
+            candidate_knowledge_label+=self.tokenizer.eos_token
+            target_knowledge+=self.tokenizer.eos_token
         # Train시 label: pseudo knowledge top 1
         pseudo_label = self.tokenizer('<knowledge>' + candidate_knowledge_label, max_length=self.args.max_gen_length, padding='max_length', truncation=True).input_ids
         # Test시 label: gold knowledge
@@ -218,6 +220,7 @@ def know_hit_ratio(args, pred_pt, gold_pt, new_knows=None):
 
     for idx in range(len(gold_pt)):
         pred, gold = pred_pt[idx], gold_pt[idx]
+        if args.version=='ko': pred, gold = [i.replace(" ","") for i in pred], gold.replace(" ","")
         if args.num_beams > 1:
             if gold == pred[0]: hit1 += 1
             if gold in pred[:3]: hit3 += 1

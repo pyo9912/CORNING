@@ -27,7 +27,7 @@ def add_ours_specific_args(parser):
     # parser.add_argument("--asdf", action='store_true', help="~할지 여부")
     parser.add_argument( "--method", type=str, default="gpt", choices=["ours","kers","gpt"], help=" Method " )
     parser.add_argument("--gt_max_length", type=int, default=256, help=" Goal-Topic input max_length ")
-    parser.add_argument("--gt_batch_size", type=int, default=16, help=" Method ")
+    parser.add_argument("--gt_batch_size", type=int, default=32, help=" Method ")
 
     ## For resp
     parser.add_argument("--gpt_model_name", type=str, default='gpt2', help=" model name ") # gpt2 , gpt2-medium, gpt2-large
