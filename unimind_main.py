@@ -20,7 +20,7 @@ from evaluator_conv import ConvEvaluator
 
 def add_ours_specific_args(parser):
     # parser.add_argument("--asdf", action='store_true', help="~할지 여부")
-    parser.add_argument( "--method", type=str, default="UniMIND", choices=["ours","kers","UniMIND"], help=" Method " )
+    parser.add_argument( "--method", type=str, default="UniMIND", choices=["bart","kers","unimind"], help=" Method " )
     parser.add_argument("--gt_max_length", type=int, default=256, help=" Goal-Topic input max_length ")
     parser.add_argument("--gt_batch_size", type=int, default=16, help=" Method ")
 

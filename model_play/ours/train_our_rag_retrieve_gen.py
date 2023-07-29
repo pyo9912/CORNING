@@ -50,8 +50,135 @@ def make_aug_gt_pred(args, bert_model, tokenizer, train_dataset_raw, test_datase
     return train_gt_pred_auged, test_gt_pred_auged
 
 
-# def train_rag_resp(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB, bert_model, tokenizer):
-#     train_aug_pred, test_aug_pred = make_aug_gt_pred(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
+def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB):
+    from models.kobart import get_pytorch_kobart_model, get_kobart_tokenizer
+    from model_play.rag import rag_retrieve
+    logger.info(f"\n  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA\nOUR KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA\n  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA\n")
+    logger.info(f"\n\nOUR {args.rag_our_model}BERT_Retriever model For resp, RAG_OUR_BERT: {args.rag_our_bert}, RAG_OnlyDecoderTune: {args.rag_onlyDecoderTune}\n\n")
+    # if args.rag_onlyDecoderTune: args.rag_batch_size = args.rag_batch_size*2
+
+    train_dataset_aug_pred, test_dataset_aug_pred = make_aug_gt_pred(args, deepcopy(bert_model), tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
+    logger.info(f"Length of Pred_Auged Train,Test: {len(train_dataset_aug_pred)}, {len(test_dataset_aug_pred)}")
+    if args.debug: train_dataset_aug_pred, test_dataset_aug_pred = train_dataset_aug_pred[:50], test_dataset_aug_pred[:50]
+
+    our_best_model = Retriever(args, bert_model)
+    if args.rag_our_model.upper() == 'C2DPR':
+        our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"C2DPR_cotmae_retriever_0719.pt"), map_location=args.device), strict=False)
+        # our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"C2DPR_cotmae_retriever_0719.pt"), map_location=args.device)) # du2에서 retrieval 최고성능이었던 retriever
+    elif args.rag_our_model.upper() == 'DPR': 
+        our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"DPR_retriever.pt"), map_location=args.device), strict=False)
+    else: pass
+    our_best_model.to(args.device)
+    our_question_encoder = deepcopy(our_best_model.query_bert)
+    our_ctx_encoder = deepcopy(our_best_model.rerank_bert)
+
+    knowledgeDB_list = list(all_knowledgeDB)
+    knowledgeDB_csv_path = os.path.join(args.data_dir, 'rag')  # HOME/data/2/rag/"train_knowledge.csv")
+    utils.checkPath(knowledgeDB_csv_path)
+    knowledgeDB_csv_path = os.path.join(knowledgeDB_csv_path, f'my_knowledge_dataset_{args.gpu}' + ('_debug.csv' if args.debug else '.csv'))
+    args.knowledgeDB_csv_path = knowledgeDB_csv_path
+    with open(knowledgeDB_csv_path, 'w', encoding='utf-8') as f:
+        for know in knowledgeDB_list:
+            f.write(f" \t{know}\n")
+    faiss_dataset = load_dataset("csv", data_files=[knowledgeDB_csv_path], split="train", delimiter="\t", column_names=["title", "text"])
+    faiss_dataset = faiss_dataset.map(rag_retrieve.split_documents, batched=True, num_proc=4)
+
+    MODEL_CACHE_DIR = os.path.join(args.home, 'model_cache', 'facebook/dpr-ctx_encoder-multiset-base')
+
+    ctx_encoder = DPRContextEncoder.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR).to(device=args.device)
+    ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR)
+
+    if args.version=='ko':
+        logger.info("\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use ko-Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+        ctx_encoder.ctx_encoder.bert_model = deepcopy(bert_model)
+        ctx_tokenizer = tokenizer
+    if args.rag_our_bert:
+        logger.info("\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use Our Trained Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+        logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use Our Trained Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n\n")
+        ctx_encoder.ctx_encoder.bert_model = our_ctx_encoder
+        ctx_tokenizer = tokenizer
+
+    logger.info("Create Knowledge Dataset")
+    new_features = Features({"text": Value("string"), "title": Value("string"), "embeddings": Sequence(Value("float32"))})  # optional, save as float32 instead of float64 to save space
+    faiss_dataset = faiss_dataset.map(
+        partial(rag_retrieve.embed, ctx_encoder=ctx_encoder, ctx_tokenizer=ctx_tokenizer, args=args),
+        batched=True, batch_size=args.rag_batch_size, features=new_features, )
+
+    passages_path = os.path.join(args.data_dir, 'rag', f"my_knowledge_dataset_{args.gpu}")
+    if args.debug: passages_path += '_debug'
+    args.passages_path = passages_path
+    faiss_dataset.save_to_disk(passages_path)
+
+    index = faiss.IndexHNSWFlat(768, 128, faiss.METRIC_INNER_PRODUCT)
+    faiss_dataset.add_faiss_index('embeddings', custom_index=index)
+    # faiss_dataset.add_faiss_index(column='embeddings', index_name = 'embeddings', custom_index=index, faiss_verbose=True)
+    print(f"Length of Knowledge knowledge_DB : {len(faiss_dataset)}")
+
+    ### MODEL CALL
+    retriever = RagRetriever.from_pretrained('facebook/rag-sequence-nq', index_name='custom', indexed_dataset=faiss_dataset, init_retrieval=True)
+    retriever.set_ctx_encoder_tokenizer(ctx_tokenizer)  # NO TOUCH
+    rag_model = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever).to(args.device)
+    rag_tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
+    rag_model.set_context_encoder_for_training(ctx_encoder)
+    
+    if args.version=='ko':
+        logger.info("\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@ Model Ko-BERT to rag.question_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+        rag_model.rag.question_encoder.question_encoder.bert_model = our_question_encoder
+        rag_tokenizer.question_encoder = tokenizer
+    
+
+
+    if args.rag_our_bert:
+        logger.info("\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@ Model question_encoder changed by ours @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+        logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@ Model question_encoder changed by ours @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n\n")
+        rag_model.rag.question_encoder.question_encoder.bert_model = our_question_encoder
+        rag_tokenizer.question_encoder = tokenizer
+    
+    ## Get Auged, t_pred Dataset
+    # train_aug_pred_path = os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl')
+    # test_aug_pred_path = os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl')
+    # assert os.path.exists(train_aug_pred_path) and os.path.exists(test_aug_pred_path), f"Goal,Topic Predicted file doesn't exist! {train_aug_pred_path}"
+    # train_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
+    # test_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
+
+    train_Dataset = data_model.RagDataset(args, train_dataset_aug_pred, rag_tokenizer, all_knowledgeDB, mode='train')
+    test_Dataset = data_model.RagDataset(args, test_dataset_aug_pred, rag_tokenizer, all_knowledgeDB, mode='test')
+    train_dataloader = DataLoader(train_Dataset, batch_size=args.rag_batch_size, shuffle=True)
+    test_dataloader = DataLoader(test_Dataset, batch_size=args.rag_batch_size, shuffle=False)
+
+    optimizer = torch.optim.AdamW(rag_model.parameters(), lr=args.rag_lr, weight_decay=0.1, eps=5e-9)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.rag_epochs * len(train_dataloader), eta_min=args.rag_lr * 0.1)
+    best_hitdic_ratio = {'total': {'hit1': 0, 'hit3': 0, 'hit5': 0, 'hit1_new': 0, 'hit3_new': 0, 'hit5_new': 0, 'total': 0}}
+    best_hitdic_str = None
+    logger.info(f"Logging Epoch results:                      hit@1, hit@3, hit@5, hit_new@1, hit_new@3, hit_new@5")
+
+    for epoch in range(args.rag_epochs):
+        logger.info(f"RAG_LR: {args.rag_lr}")
+        rag_model.train()
+        if args.rag_onlyDecoderTune:
+            logger.info(f"\n\n*****RAG_Only_Decoder Tune!***** rag_lr: {args.rag_lr}");
+            logger.info(f"*****RAG_Only_Decoder Tune!***** rag_lr: {args.rag_lr}\n\n")
+            rag_model.eval()
+            rag_model.rag.ctx_encoder.eval()
+            rag_model.rag.question_encoder.eval()
+            rag_model.generator.train()
+            for param in rag_model.rag.ctx_encoder.parameters():
+                param.requires_grad = False
+            for param in rag_model.rag.question_encoder.parameters():
+                param.requires_grad = False
+        if epoch == 0: rag_model_weight_logging(args, rag_model, epoch, 'before_train', faiss_dataset)
+        hitDic, hitdic_ratio, output_str = epoch_play(args, rag_tokenizer, rag_model, train_dataloader, optimizer, scheduler, epoch, faiss_dataset, mode = 'train')
+
+        rag_model.eval()
+        with torch.no_grad():
+            hitDic, hitdic_ratio, output_str = epoch_play(args, rag_tokenizer, rag_model, test_dataloader, optimizer, scheduler, epoch, faiss_dataset, mode='test')
+            if best_hitdic_ratio['total']['hit1'] <= hitdic_ratio['total']['hit1']:
+                best_hitdic_ratio = hitdic_ratio
+                best_hitdic_str = output_str
+        if epoch == 0: rag_model_weight_logging(args, rag_model, epoch, 'after_test', faiss_dataset)
+
+    for i in best_hitdic_str:
+        logger.info(f"Test_best {i}")
 
 
 def train_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB):
@@ -65,10 +192,10 @@ def train_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, tes
 
     our_best_model = Retriever(args, bert_model)
     if args.rag_our_model.upper() == 'C2DPR':
-        our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"C2DPR_cotmae_retriever_0719.pt"), map_location=args.device))
+        our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"C2DPR_cotmae_retriever_0719.pt"), map_location=args.device), strict=False)
         # our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"ours_retriever_old_0473.pt"), map_location=args.device))
     elif args.rag_our_model.upper() == 'DPR': 
-        our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"DPR_retriever.pt"), map_location=args.device))
+        our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"DPR_retriever.pt"), map_location=args.device), strict=False)
     else: pass
     our_best_model.to(args.device)
     our_question_encoder = deepcopy(our_best_model.query_bert)

@@ -1,16 +1,20 @@
 #!/bin/bash
 # 아래에 실행시키려는 녀석들 다 입력해놓고, 마지막 echo "" 따옴표 안에 어떤걸 보기위한 실험이었는지 적어놓기
 
-python kers_main.py --version='ko' --bert_name='skt/kobert-base-v1' --log_name="KERS_Retrieve_1e-5"  --lr=1e-5 --gpu=1
-python kers_main.py --version='ko' --bert_name='skt/kobert-base-v1' --log_name="KERS_Retrieve_1e-4"  --lr=1e-4 --gpu=2
 
+python main.py --gpu=1 --rag_our_model=C2DPR --task=resp --log_name="C2DPR_RAG_3711train_3711test_1e-5"  --rag_lr=1e-5 --rag_epochs=15 --rag_our_bert --rag_onlyDecoderTune
+
+# python lm_main_THpaper.py --gpu=3 --log_name="BART-large_3711Train_3711Test" --num_epochs=15 --model_name='facebook/bart-large' 
+# python lm_main_THpaper.py --gpu=2 --log_name="BART-large_3711Train_3711Test_1e-6" --num_epochs=15 --model_name='facebook/bart-large' --lr=1e-6
+
+
+# python kers_main.py --version='ko' --bert_name='skt/kobert-base-v1' --log_name="KERS_Retrieve_1e-5"  --lr=1e-5 --gpu=1  ## kers retrieve task
+# python kers_main.py --version='ko' --bert_name='skt/kobert-base-v1' --log_name="KERS_Retrieve_1e-4"  --lr=1e-4 --gpu=2  ## kers retrieve task
 
 # python gpt_main.py --version='2' --log_name='GPT_37_37_1e-5' --gpt_lr=1e-5 --gpu=3
-
 # python gpt_main.py --version='ko' --bert_name='skt/kobert-base-v1' --gpt_model_name='skt/kogpt2-base-v2' --log_name='GPT_37_37_1e-6' --gpt_lr=1e-6 --gpu=3
 # python gpt_main.py --version='ko' --bert_name='skt/kobert-base-v1' --gpt_model_name='skt/kogpt2-base-v2' --log_name='GPT_37_37_1e-5' --gpt_lr=1e-5 --gpu=2
 # python gpt_main.py --version='ko' --bert_name='skt/kobert-base-v1' --gpt_model_name='skt/kogpt2-base-v2' --log_name='GPT_37_37_1e-4' --gpt_lr=1e-4 --gpu=1
-
 # python gpt_main.py --version='ko' --bert_name='skt/kobert-base-v1' --gpt_model_name='kakaobrain/kogpt' --log_name='KAKAOGPT3_37_37_1e-5' --gpt_batch_size=2 --gpt_lr=1e-5 --gpu=1 
 
 # python main.py --gpu=1 --log_name='GT_train_save' --task='goal_topic' 
