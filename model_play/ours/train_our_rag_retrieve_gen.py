@@ -53,6 +53,7 @@ def make_aug_gt_pred(args, bert_model, tokenizer, train_dataset_raw, test_datase
 def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB):
     from models.kobart import get_pytorch_kobart_model, get_kobart_tokenizer
     from model_play.rag import rag_retrieve
+    assert args.version=='ko', "Version Must Set to 'ko' !!! "
     logger.info(f"\n  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA\nOUR KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA\n  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA\n")
     logger.info(f"\n\nOUR {args.rag_our_model}BERT_Retriever model For resp, RAG_OUR_BERT: {args.rag_our_bert}, RAG_OnlyDecoderTune: {args.rag_onlyDecoderTune}\n\n")
     # if args.rag_onlyDecoderTune: args.rag_batch_size = args.rag_batch_size*2
@@ -88,11 +89,12 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
     ctx_encoder = DPRContextEncoder.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR).to(device=args.device)
     ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR)
 
-    if args.version=='ko':
-        logger.info("\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use ko-Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
-        ctx_encoder.ctx_encoder.bert_model = deepcopy(bert_model)
-        ctx_tokenizer = tokenizer
-    if args.rag_our_bert:
+    
+    logger.info("\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use ko-Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+    ctx_encoder.ctx_encoder.bert_model = deepcopy(bert_model) # SKT-bert
+    ctx_tokenizer = tokenizer # SKT-bert tokenizer
+
+    if args.rag_our_bert: # 학습된 KO리트리버의 our_best_model.query_bert
         logger.info("\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use Our Trained Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
         logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use Our Trained Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n\n")
         ctx_encoder.ctx_encoder.bert_model = our_ctx_encoder
@@ -126,16 +128,15 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
     rag_tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
     rag_model.set_context_encoder_for_training(ctx_encoder)
     
-    if args.version=='ko':
-        logger.info("\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@ Model Ko-BERT to rag.question_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
-        # rag_model.rag.question_encoder.question_encoder.bert_model = our_question_encoder
-        rag_model.rag.question_encoder.question_encoder.bert_model = deepcopy(bert_model)
-        rag_tokenizer.question_encoder = tokenizer
-        
-        rag_model.generator = kobart
-        rag_model.rag.generator = kobart
-        rag_tokenizer.generator = kobart_tokenizer
-        # rag_model.rag.ctx_encoder.ctx_encoder.bert_model = deepcopy(ctx_encoder.ctx_encoder.bert_model)
+    logger.info("\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@ Model Ko-BERT to rag.question_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+    # rag_model.rag.question_encoder.question_encoder.bert_model = our_question_encoder
+    rag_model.rag.question_encoder.question_encoder.bert_model = deepcopy(bert_model)
+    rag_tokenizer.question_encoder = tokenizer
+    
+    rag_model.generator = kobart
+    rag_model.rag.generator = kobart
+    rag_tokenizer.generator = kobart_tokenizer
+    # rag_model.rag.ctx_encoder.ctx_encoder.bert_model = deepcopy(ctx_encoder.ctx_encoder.bert_model)
 
 
     if args.rag_our_bert:

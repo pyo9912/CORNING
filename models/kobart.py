@@ -141,3 +141,14 @@ if __name__ == "__main__":
     model = BartModel.from_pretrained(get_pytorch_kobart_model())
     inputs = kobart_tokenizer(["안녕하세요."], return_tensors="pt")
     print(model(inputs["input_ids"]))
+
+
+if __name__=="__main__":
+    import os
+    from kers.kers_decoder import BartForConditionalGeneration
+    TEMPHOME='/home/work/CRSTEST/KEMGCRS'
+    tokenizer = get_kobart_tokenizer(cachedir=os.path.join(TEMPHOME,'model_cache','kobart'))
+    model = BartForConditionalGeneration.from_pretrained(get_pytorch_kobart_model(cachedir=os.path.join(TEMPHOME,'model_cache','kobart')))
+    
+    input=tokenizer("안녕 너의 이름은 뭐니?")
+    model(input)

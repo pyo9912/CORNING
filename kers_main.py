@@ -15,7 +15,12 @@ from model_play.ours import train_bert_goal_topic
 from model_play.kers import kers_knowledge_retrieve
 from random import shuffle
 # from config import *
+from evaluator_conv import ConvEvaluator
 from model_play.ours.train_our_rag_retrieve_gen import make_aug_gt_pred
+from collections import Counter
+from nltk.translate.bleu_score import corpus_bleu
+import numpy as np
+
 """
 1. ours의 goal, topic model을 통해 data에 predicted goal, topic 레이블 붙이기
 2. knowledge retrieve task 수행 및 평가, output저장
@@ -36,6 +41,9 @@ def add_kers_specific_args(parser):
     parser.add_argument("--gtpred", action='store_true', help="Goal-Topic prediction 해서 label로 추가 할지 여부")
     parser.add_argument("--usePseudoTrain", action='store_true', help="Knowledge Pseudo label을 label로 사용할지 여부 (Train)")
     parser.add_argument("--usePseudoTest", action='store_true', help="Knowledge Pseudo label을 label로 사용할지 여부 (Test)")
+    
+    parser.add_argument("--do_pretrain", action='store_true', help="Pre_train 할 지 여부") ## Kers 가 워낙 못해서 그냥 해줘야할듯
+    parser.add_argument("--originBart", action='store_true', help="KERSBART를할지, BART를 쓸지 (resp)") ## Kers 가 워낙 못해서 그냥 해줘야할듯
 
     parser.add_argument("--inputWithKnowledge", action='store_true', help="Input으로 Dialog 외의 정보들도 줄지 여부")
     parser.add_argument("--inputWithTopic", action='store_true', help="Input에 Topic도 넣어줄지 여부")
@@ -50,6 +58,7 @@ def main():
     # default_args.debug=True
 
     args = parser.parse_args()
+    if args.task not in ['know', 'resp'] : Exception("\n!!! --task should set to 'know' or 'resp' !!!\n")
     # if args.version=='ko':
     #     args.bert_name = 'skt/kobert-base-v1'
 
@@ -104,7 +113,7 @@ def main():
         train_dataset_aug, test_dataset_aug = mk_goal_topic_pred(args=args, aug_train_dataset=train_dataset_resp, aug_test_dataset=test_dataset_resp)
     """
     logger.info("Model Call")
-    if 'skt' in args.bert_name:
+    if 'skt' in args.bert_name or args.version=='ko':
         from kobert_tokenizer import KoBERTTokenizer
         tokenizer = KoBERTTokenizer.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
         bert_model = BertModel.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
@@ -163,9 +172,8 @@ def main():
     
     
     
-    
     # -- For Knowledge Retrieve Task --#
-    kers_knowledge_retrieve_task = True
+    kers_knowledge_retrieve_task = True if args.task=='know' else False
     if kers_knowledge_retrieve_task:
         from transformers import BertTokenizer, BartForConditionalGeneration, BartTokenizer
         model = 'facebook/bart-base' if args.version == '2' else 'fnlp/bart-base-chinese'
@@ -209,15 +217,19 @@ def main():
         logger.info(f'Input with knowledges: {args.inputWithKnowledge}, Input with topic: {args.inputWithTopic}')
         kers_knowledge_retrieve.train_test_pseudo_knowledge_bart(args, model, tokenizer, train_dataset_aug, test_dataset_aug, train_knowledgeDB, all_knowledgeDB)
 
+    
+    
     # For Kers Resp Gen task
-    model_cache_dir = os.path.join(args.home, 'model_cache', model)
+    if args.task!='resp': return
+    model_cache_dir = os.path.join(args.home, 'model_cache', args.bart_name)
     if args.version == 2:
-        tokenizer = BertTokenizer.from_pretrained(model, cache_dir=model_cache_dir)
-        model = BartForConditionalGeneration.from_pretrained(model, cache_dir=model_cache_dir)
+        tokenizer = BertTokenizer.from_pretrained(args.bart_name, cache_dir=model_cache_dir)
+        model = BartForConditionalGeneration.from_pretrained(args.bart_name, cache_dir=model_cache_dir)
     else: # version == 'ko'
         from models.kobart import get_pytorch_kobart_model, get_kobart_tokenizer
+        from models.kers import kers_decoder
         tokenizer = get_kobart_tokenizer(cachedir=os.path.join(args.home,'model_cache','kobart'))
-        model = BartForConditionalGeneration.from_pretrained(get_pytorch_kobart_model(cachedir=os.path.join(args.home,'model_cache','kobart')))
+        model = kers_decoder.BartForConditionalGeneration.from_pretrained(get_pytorch_kobart_model(cachedir=os.path.join(args.home,'model_cache','kobart')))
     print("Use Pretrained Model")
     bert_special_tokens_dict = {'additional_special_tokens': ['<dialog>', '<topic>', '<type>', '<user_profile>', '<situation>', '<last_type>', '<knowledge>']}
     tokenizer.add_special_tokens(bert_special_tokens_dict)
@@ -226,8 +238,179 @@ def main():
     model.to(args.device)
     logger.info(model.config)
 
+    # train_dataset_aug_pred, test_dataset_aug_pred
+    if args.debug: 
+        train_dataset_resp, test_dataset_resp = train_dataset_aug_pred[:32], test_dataset_aug_pred[:32]
+        logger.info(f"For Debugging Dataset length: 32")
+    else: train_dataset_resp, test_dataset_resp = train_dataset_aug_pred, test_dataset_aug_pred
     
+    logger.info(f"Augmented Train dataset: {len(train_dataset_resp)}, Test dataset: {len(test_dataset_resp)}")
+    logger.info(f"train: {len(train_dataset_resp)}, test: {len(test_dataset_resp)}")
+    
+    train_datamodel_resp = Kers_Resp_Dataset(args, train_dataset_resp, tokenizer, mode='train')
+    test_datamodel_resp = Kers_Resp_Dataset(args, test_dataset_resp, tokenizer, mode='test')
+    train_batch_size = batch_size_checker(args, train_datamodel_resp)
+    test_batch_size = batch_size_checker(args, test_datamodel_resp)
+    train_dataloader = DataLoader(train_datamodel_resp, batch_size=train_batch_size, shuffle=True)
+    test_dataloader = DataLoader(test_datamodel_resp, batch_size=test_batch_size, shuffle=False)
+    no_decay = ["bias", "LayerNorm.weight"]
+    optimizer_grouped_parameters = [
+        { "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)], "weight_decay": 0.0,}, 
+        { "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0}]
+    optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.lr, eps=1e-8)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_dc_step, gamma=args.lr_dc)
+    logger.info(f"Logging Epoch results:                      hit@1, hit@3, hit@5, hit_new@1, hit_new@3, hit_new@5")
+    tasks=['resp']
+    for task in tasks:
+        max_train_hit1 = 0
+        test_loss = 1000000000
+        best_outputs = None
+        best_epoch = 0
+        if args.do_pretrain:
+            logger.info("DO PRE-TRAIN")
+            for epoch in range(10):
+                epoch_play(args, tokenizer, model, train_dataloader, optimizer, scheduler, epoch, task, mode='pretrain')
+            torch.save(model.state_dict(), os.path.join(args.home, 'model_save', f'BART-KERS_Pretrained_{args.gpu}.pth'))
+        for epoch in range(args.num_epochs):
+            args.data_mode = 'train'
+            logger.info(f"Epoch_{epoch} {args.data_mode} {task}")
+            model.train()
+            with torch.autograd.set_detect_anomaly(False):
+                loss, perplexity = epoch_play(args, tokenizer, model, train_dataloader, optimizer, scheduler, epoch, task, mode='train')
+            args.data_mode = 'test'
+            model.eval()
+            with torch.no_grad():
+                loss, perplexity = epoch_play(args, tokenizer, model, test_dataloader, optimizer, scheduler, epoch, task, mode='test')
+                if test_loss >= loss:
+                    test_loss = loss
+                    best_epoch = epoch
+                    torch.save(model.state_dict(), os.path.join(args.home, 'model_save', f'kers_BARTtrained_{args.gpu}.pth'))
+                    logger.info(f"Loss: {loss}, Model Saved in {os.path.join(args.home, 'model_save', f'kers_trained_{args.gpu}.pth')}")
+                # for i in output_strings:
+                #     logger.info(f"Epoch_{epoch} {args.data_mode}  {i}")
 
+        logger.info(f"")
+    return test_loss, best_epoch
+
+
+def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch, task, mode):
+    data_loader.dataset.args.task = task
+    data_loader.dataset.mode = mode
+    gradient_accumulation_steps=500
+    epoch_loss = 0
+    torch.cuda.empty_cache()
+    steps=0
+    contexts, resps, task_labels, gen_resps, task_preds, types, knowledges = [], [], [], [], [], [], []
+    evaluator = ConvEvaluator(tokenizer=tokenizer, log_file_path=os.path.join(args.output_dir, f"{epoch}_{mode}_GEN_REPORT.txt"))
+    for batch in tqdm(data_loader, desc=f"Epoch {epoch}__{mode}", bar_format=' {l_bar} | {bar:23} {r_bar}'):
+        dialog_ids, dialog_mask, response, knowledge_ids, knowledge_mask, goal_ids, goal_mask = [batch[i].to(args.device) for i in ["dialog_ids", "dialog_mask", "response", 'knowledge_ids', 'knowledge_mask', 'goal_ids', 'goal_mask']]
+        input_dic = {"input_ids":dialog_ids, 'attention_mask': dialog_mask, 'labels':response}
+
+        if args.originBart: pass
+        else: # knowledge, goal이 들어가기 시작해야함
+            input_dic['knowledge_ids']=knowledge_ids
+            input_dic['knowledge_mask']= knowledge_mask
+            input_dic['goal_ids'] = goal_ids
+            input_dic['goal_mask'] = goal_mask
+        
+        # Model Forwarding
+        outputs = model(**input_dic)
+        
+        contexts.extend(tokenizer.batch_decode(dialog_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True))
+        resps.extend(tokenizer.batch_decode(response, skip_special_tokens=True, clean_up_tokenization_spaces=True))
+        types.extend(tokenizer.batch_decode(goal_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True))
+        knowledges.extend(tokenizer.batch_decode(knowledge_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True))
+
+        if mode == 'test':
+            gen_ids = model.generate(input_ids=dialog_ids, attention_mask=dialog_mask, knowledge_ids=knowledge_ids, knowledge_mask=knowledge_mask, goal_ids=goal_ids, goal_mask=goal_mask,
+                                     num_beams=1, max_length = args.max_gen_length,  early_stopping=True)
+            task_preds.extend(tokenizer.batch_decode(gen_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True))
+            evaluator.evaluate(gen_ids, response, log=True)
+
+        loss = outputs[0]
+        epoch_loss += loss.item()
+        steps += 1
+
+        if 'train' in mode:
+            optimizer.zero_grad()
+            loss.backward()
+            if (steps+1) % gradient_accumulation_steps==0: torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+            optimizer.step()
+            loss.detach()
+            model.zero_grad()
+    if 'train' in mode: scheduler.step()
+
+    perplexity=torch.exp(torch.tensor(epoch_loss/steps))
+    logger.info(f"{mode}_EPOCH_{epoch}_{task} Loss: {epoch_loss}")
+    logger.info(f"{mode}_EPOCH_{epoch}_Perplexity(Original): {perplexity:.3f}")
+    save_preds(args, contexts, task_preds, epoch=epoch, new_knows=None, real_resp=resps, goals=types, knowledges=knowledges, mode=mode)
+    if mode=='test' : 
+        report = evaluator.report()
+        report_text = [f"NEW_{epoch}_{mode}: bleu@1, bleu@2, bleu@3, bleu@4, dist@1, dist@2, dist@3, dist@4",
+                       f"NEW_{epoch}_{mode}:  {report['bleu@1']:.3f},  {report['bleu@2']:.3f},  {report['bleu@3']:.3f},  {report['bleu@4']:.3f},  {report['dist@1']:.3f},  {report['dist@2']:.3f},  {report['dist@3']:.3f},  {report['dist@4']:.3f}"]
+        logger.info(report_text[0])
+        logger.info(report_text[1])
+        evaluator.reset_metric()
+
+        bleu, bleu1, bleu2 = get_bleu(contexts, task_preds)
+        intra_dist1, intra_dist2, inter_dist1, inter_dist2 = distinct(task_preds)
+        logger.info(f"Bleu_score, Bleu_1, Bleu_2: {bleu:.3f}, {bleu1:.3f}, {bleu2:.3f}")
+        logger.info(f"intra_dist1, intra_dist2, inter_dist1, inter_dist2 : {intra_dist1:.3f}, {intra_dist2:.3f}, {inter_dist1:.3f}, {inter_dist2:.3f}")
+    return loss, perplexity
+
+
+
+
+
+
+
+
+
+def save_preds(args, context, pred_words=None, epoch=None, new_knows=None, real_resp=None, goals=None, knowledges=None, mode='train'):
+    # mode = args.data_mode
+    # log_file_path = os.path.join(args.home, 'epoch_output', args.time+'_'+ args.log_name)
+    # utils.checkPath(log_file_path)
+    log_file_name = mode + f'_{str(epoch)}_inout' + '.txt'
+    path = os.path.join(args.output_dir, log_file_name)
+    print(f"Save {mode}, Epoch: {str(epoch)}, generated results in {path}")
+    with open(path , 'w' ,encoding='utf-8') as f:
+        f.write(f"{mode}, Epoch: {str(epoch)} Input and Output results {args.time}\n")
+        f.write(f"Log File Name: {args.log_name} \n")
+        for i,(ctx, label) in enumerate(zip(context, real_resp)):
+            if i==1000: break
+            f.write(f"Source         : {ctx}\n")
+            if goals:      f.write(f"Goal_Input     : {goals[i]}\n")
+            if knowledges: f.write(f"Knowledge_Input: {knowledges[i]}\n")
+            f.write(f"LM_Label       : {label}\n")
+            if new_knows: f.write(f"Is_New_Knows    : {new_knows[i]}\n")
+            if pred_words: f.write(f"Gen  Response  : {pred_words[i]}\n")
+            f.write(f"\n")
+    return
+
+def get_bleu(references, candidates): # From UNIMIND
+    preds = [pred.split(' ') for pred in candidates]
+    ref = [[ctx.lower().split(' ')] for ctx in references]
+    bleu_score = corpus_bleu(ref, preds)
+    bleu1 = corpus_bleu(ref, preds, weights=(1, 0, 0, 0))
+    bleu2 = corpus_bleu(ref, preds, weights=(0.5, 0.5, 0, 0))
+    return bleu_score, bleu1, bleu2
+
+def distinct(candidates): # From UniMIND
+    seqs = [pred.split(' ') for pred in candidates]
+    intra_dist1, intra_dist2 = [], []
+    unigrams_all, bigrams_all = Counter(), Counter()
+    for seq in seqs:
+        unigrams = Counter(seq)
+        bigrams = Counter(zip(seq, seq[1:]))
+        intra_dist1.append((len(unigrams) + 1e-12) / (len(seq) + 1e-5))
+        intra_dist2.append((len(bigrams) + 1e-12) / (max(0, len(seq) - 1) + 1e-5))
+        unigrams_all.update(unigrams)
+        bigrams_all.update(bigrams)
+    inter_dist1 = (len(unigrams_all) + 1e-12) / (sum(unigrams_all.values()) + 1e-5)
+    inter_dist2 = (len(bigrams_all) + 1e-12) / (sum(bigrams_all.values()) + 1e-5)
+    intra_dist1 = np.average(intra_dist1) # Dist
+    intra_dist2 = np.average(intra_dist2) # Dist
+    return intra_dist1, intra_dist2, inter_dist1, inter_dist2
 
 def pseudo_knowledge_shuffle(dataset_aug):
     logger.info(f"************************************* Candidate knowledge Shuffled!! {len(dataset_aug)}*************************************")
@@ -240,162 +423,88 @@ def pseudo_knowledge_shuffle(dataset_aug):
         data['candidate_confidences'] = [i[1] for i in tmp]
     return shuffled_dataset
 
+def batch_size_checker(args, dataset):
+    tmp=args.batch_size
+    while len(dataset) % tmp == 1 : tmp -= 1
+    logger.info(f"Batch_size: {tmp}")
+    return tmp
 
-# def mk_goal_topic_pred(args, aug_train_dataset, aug_test_dataset):
-#     args = deepcopy(args)
-#     args.bert_name = 'bert-base-uncased'
-#     bert_special_tokens_dict = {'additional_special_tokens': ['<dialog>', '<topic>', '<type>', '<user_profile>', '<situation>'], }
-#     logger.info("Load Model")
-#     bert_model = AutoModel.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
-#     tokenizer = AutoTokenizer.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
-#     tokenizer.add_special_tokens(bert_special_tokens_dict)  # [TH] add bert special token (<dialog>, <topic> , <type>)
-#     bert_model.resize_token_embeddings(len(tokenizer))
-#     args.hidden_size = bert_model.config.hidden_size  # BERT large 쓸 때 대비
+class Kers_Resp_Dataset(Dataset):  # knowledge용 데이터셋 -- 아직 KoRec에서만 확인된상태 (DuRec영어는 KERS_HJ에서했었음)
+    def __init__(self, args, data_sample, tokenizer=None, mode='train'):
+        super(Dataset, self).__init__()
+        self.args = args # args.task
+        self.tokenizer = tokenizer
+        self.augmented_raw_sample = data_sample
+        self.mode = mode
+        self.tokenizer.truncation_side='left'
 
-#     logger.info(f"Dataset Length: {len(aug_train_dataset)}, {len(aug_test_dataset)}")
-#     retriever = Retriever(args, bert_model)
-#     model_path = os.path.join(args.saved_model_path, f"goal_best_model.pt")
-#     logger.info(f"Load Goal Model: {model_path}")
-#     retriever.load_state_dict(torch.load(model_path, map_location=args.device))
-#     retriever.to(args.device)
+    def __len__(self): return len(self.augmented_raw_sample)
 
-#     train_datamodel_topic = data_model.GenerationDataset(args, data_sample=aug_train_dataset, knowledgeDB=None, tokenizer=tokenizer, mode='train', subtask='goal')
-#     test_datamodel_topic = data_model.GenerationDataset(args, data_sample=aug_test_dataset, knowledgeDB=None, tokenizer=tokenizer, mode='test', subtask='goal')
-#     pred_goal_topic_aug(args, retriever, tokenizer, train_datamodel_topic, task='goal')
-#     pred_goal_topic_aug(args, retriever, tokenizer, test_datamodel_topic, task='goal')
+    def truncationPadding(self, tokens):
+        if len(tokens)>self.args.max_length: return tokens[-self.args.max_length:]
+        else: return [self.tokenizer.pad_token_id for _ in range(self.args.max_length - len(tokens))] + tokens
+    
+    def __getitem__(self, idx):
+        data = self.augmented_raw_sample[idx]
+        if self.args.version=='ko':
+            cbdicKeys = ['dialog', 'user_profile', 'situation', 'response', 'goal', 'last_goal', 'topic',  'target_knowledge', 'candidate_knowledges']
+            dialog, user_profile, situation, response, type, last_type, topic, target_knowledge, candidate_knowledges = [data[i] for i in cbdicKeys]
+        else: # En version
+            cbdicKeys = ['dialog', 'user_profile', 'situation', 'response', 'type', 'last_type', 'topic', 'related_knowledges', 'augmented_knowledges', 'target_knowledge', 'candidate_knowledges']
+            dialog, user_profile, situation, response, type, last_type, topic, related_knowledges, augmented_knowledges, target_knowledge, candidate_knowledges = [data[i] for i in cbdicKeys]
+        # aug_input_ids, aug_masks, aug_segments = [self.truncationPadding(data[i]) for i in ['augmented_dialog_input_ids','augmented_dialog_input_masks','augmented_dialog_segments']]
+        # task_prompt = self.tokenizer.eos_token + " Predict the next "
+        # task_prompt += "goal: " if self.args.task == 'goal' else "topic: "
+        # if self.args.task=="goal": # '<goal>','<topic>','<user_profile>'
+        #     model_input = dialog + task_prompt
+        #     model_target = type
+        # elif self.args.task=="topic":
+        #     model_input = dialog + type + task_prompt
+        #     model_target = topic
+        # else: # TODO: RESP일 떄, KERS에서 RESP 생성용 Check 필요 (230704) type,topic하기로한 이후 아직 어떻게넣어서 체크할지 구현되지않음
+        #     model_input=dialog
+        #     model_target=response
+        #     # raise Exception("230704 How to make Resp 논의되지 않음")
+        dialog, response = dialog.replace('[SEP]', self.tokenizer.eos_token), response.replace('[SEP]', self.tokenizer.eos_token)
+        if self.mode == 'train':  # input: dialog + prompt + task_label --> output == input # PADDING RIGHT
+            input_dialog = dialog
+            target = response
+        elif self.mode == 'pretrain': 
+            input_dialog = dialog
+            target = dialog
+        else:  # TEST input: dialog + prompt  --> generation만 사용함 # PADDING LEFT
+            input_dialog = dialog
+            target = response
 
-#     model_path = os.path.join(args.saved_model_path, f"topic_best_model_GP.pt")
-#     logger.info(f"Load Topic Model: {model_path}")
-#     retriever.load_state_dict(torch.load(model_path, map_location=args.device))
-#     retriever.to(args.device)
-#     # pred_goal_topic_aug(args, retriever, tokenizer, train_datamodel_topic, task='topic')
-#     pred_auged_train_dataset = pred_goal_topic_aug(args, retriever, tokenizer, train_datamodel_topic, task='topic')
-#     pred_auged_test_dataset = pred_goal_topic_aug(args, retriever, tokenizer, test_datamodel_topic, task='topic')
-#     utils.write_pkl(pred_auged_train_dataset, os.path.join(args.data_dir, 'pred_aug', 'kers_train_gt_pred_auged_dataset.pkl'))
-#     utils.write_pkl(pred_auged_test_dataset, os.path.join(args.data_dir, 'pred_aug', 'kers_test_gt_pred_auged_dataset.pkl'))
-#     return aug_train_dataset, aug_test_dataset
+        ##GPT Tokenize
+        # self.tokenizer.padding_side = 'right' if self.mode == 'train' else 'left'
+        source_input = self.tokenizer(input_dialog, max_length=self.args.max_length, padding='max_length', truncation=True)
+        target = self.tokenizer(target, max_length=self.args.max_length, padding='max_length', truncation=True)
+        knowledges = self.tokenizer(", ".join(set(candidate_knowledges)), max_length=self.args.max_length, padding='max_length', truncation=True)
+        # if self.args.version=='ko':  knowledges = self.tokenizer(", ".join(set(candidate_knowledges)), max_length=self.args.max_length, padding='max_length', truncation=True)
+        # else: knowledges = self.tokenizer(", ".join(set(related_knowledges)), max_length=self.args.max_length, padding='max_length', truncation=True)
+        goals = self.tokenizer(f"goal: {type}, {last_type} ", max_length=self.args.max_length, padding='max_length', truncation=True)
 
+        input_ids = torch.LongTensor(source_input.input_ids)
+        input_masks = torch.LongTensor(source_input.attention_mask)
+        knowledges_ids = torch.LongTensor(knowledges.input_ids)
+        knowledges_masks = torch.LongTensor(knowledges.attention_mask)
+        goal_ids = torch.LongTensor(goals.input_ids)
+        goals_masks = torch.LongTensor(goals.attention_mask)
+        response = torch.LongTensor(target.input_ids)
 
-# def pred_goal_topic_aug(args, retriever, tokenizer, Auged_Dataset, task):
-#     Auged_Dataset.args.task = task
-#     optimizer = None  # torch.optim.Adam(retriever.parameters(), lr=args.lr)
-#     scheduler = None  # torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.num_epochs * len(Auged_Dataset), eta_min=args.lr * 0.1)
-#     data_loader = DataLoader(Auged_Dataset, batch_size=args.batch_size * 20, shuffle=False)
-#     with torch.no_grad():
-#         task_preds, _ = inEpoch_BatchPlay(args, retriever, tokenizer, data_loader, optimizer, scheduler, epoch=0, task=task, mode='test')
-#     for i, dataset in enumerate(Auged_Dataset.augmented_raw_sample):
-#         dataset[f"predicted_{task}"] = [args.taskDic[task]['int'][task_preds[i][j]] for j in range(5)]
-#     return Auged_Dataset.augmented_raw_sample
-
-
-# def inEpoch_BatchPlay(args, retriever, tokenizer, data_loader, optimizer, scheduler, epoch, task, mode='train'):
-#     if task.lower() not in ['goal', 'topic']: raise Exception("Task should be 'goal' or 'topic'")
-#     criterion = torch.nn.CrossEntropyLoss().to(args.device)
-#     data_loader.dataset.args.task = task
-#     data_loader.dataset.subtask = task
-
-#     if task == 'topic':  # TopicTask_Train_Prompt_usePredGoal TopicTask_Test_Prompt_usePredGoal
-#         if data_loader.dataset.TopicTask_Train_Prompt_usePredGoal:
-#             logger.info(f"Topic {mode}에 사용된_prompt input predicted goal hit@1: {sum([aug['predicted_goal'][0] == aug['goal'] for aug in data_loader.dataset.augmented_raw_sample]) / len(data_loader.dataset.augmented_raw_sample):.3f}")
-#         elif data_loader.dataset.TopicTask_Test_Prompt_usePredGoal:
-#             logger.info(f"Topic {mode}에 사용된_prompt input predicted goal hit@1: {sum([aug['predicted_goal'][0] == aug['goal'] for aug in data_loader.dataset.augmented_raw_sample]) / len(data_loader.dataset.augmented_raw_sample):.3f}")
-
-#     gradient_accumulation_steps = 500
-#     epoch_loss, steps = 0, 0
-
-#     torch.cuda.empty_cache()
-#     contexts, resps, task_labels, gen_resps, task_preds, gold_goal, gold_topic, types = [], [], [], [], [], [], [], []
-#     test_hit1, test_hit3, test_hit5 = [], [], []
-#     predicted_goal_True_cnt = []
-#     for batch in tqdm(data_loader, desc=f"Epoch_{epoch}_{task:^5}_{mode:^5}", bar_format=' {l_bar} | {bar:23} {r_bar}'):
-#         # "predicted_goal_idx", "predicted_topic_idx"
-#         input_ids, attention_mask, response, goal_idx, topic_idx = [batch[i].to(args.device) for i in ["input_ids", "attention_mask", "response", 'goal_idx', 'topic_idx']]
-
-#         target = goal_idx if task == 'goal' else topic_idx
-#         # Model Forwarding
-#         dialog_emb = retriever(input_ids=input_ids, attention_mask=attention_mask)  # [B, d]
-#         if task == 'goal':
-#             dialog_emb = retriever.goal_proj(dialog_emb)
-#         elif task == 'topic':
-#             dialog_emb = retriever.topic_proj(dialog_emb)
-#         loss = criterion(dialog_emb, target)
-#         epoch_loss += loss
-#         if 'train' == mode:
-#             optimizer.zero_grad()
-#             loss.backward()
-#             if (steps + 1) % gradient_accumulation_steps == 0: torch.nn.utils.clip_grad_norm_(retriever.parameters(), 1)
-#             optimizer.step()
-#             loss.detach()
-#             retriever.zero_grad()
-#         topk_pred = [list(i) for i in torch.topk(dialog_emb, k=5, dim=-1).indices.detach().cpu().numpy()]
-#         ## For Scoring and Print
-#         contexts.extend(tokenizer.batch_decode(input_ids))
-#         task_preds.extend(topk_pred)
-#         task_labels.extend([int(i) for i in target.detach()])
-#         gold_goal.extend([int(i) for i in goal_idx])
-#         gold_topic.extend([int(i) for i in topic_idx])
-
-#         # if task=='topic' and mode=='test': predicted_goal_True_cnt.extend([real_goal==pred_goal for real_goal, pred_goal  in zip(goal_idx, batch['predicted_goal_idx'])])
-
-#     hit1_ratio = sum([label == preds[0] for preds, label in zip(task_preds, task_labels)]) / len(task_preds)
-
-#     Hitdic, Hitdic_ratio, output_str = HitbyType(args, task_preds, task_labels, gold_goal)
-#     assert Hitdic['Total']['total'] == len(data_loader.dataset)
-#     if mode == 'test':
-#         for i in output_str:
-#             logger.info(f"{mode}_{epoch}_{task} {i}")
-#     if 'train' == mode: scheduler.step()
-#     savePrint(args, contexts, task_preds, task_labels, gold_goal, gold_topic, epoch, task, mode)
-#     torch.cuda.empty_cache()
-#     return task_preds, hit1_ratio
-
-
-# def savePrint(args, contexts, task_preds, task_labels, gold_goal, gold_topic, epoch, task, mode):
-#     if not os.path.exists(args.output_dir): os.mkdir(args.output_dir)
-#     path = os.path.join(args.output_dir, f"{args.log_name}_{epoch}_{task}_{mode}.txt")
-#     with open(path, 'w', encoding='utf-8') as f:
-#         for i in range(len(contexts)):
-#             if i > 400: break
-#             f.write(f"Input: {contexts[i]}\n")
-#             f.write(f"Pred : {', '.join([args.taskDic[task]['int'][i] for i in task_preds[i]])}\n")
-#             f.write(f"Label: {args.taskDic[task]['int'][task_labels[i]]}\n")
-#             f.write(f"Real_Goal : {args.taskDic['goal']['int'][gold_goal[i]]}\n")
-#             f.write(f"Real_Topic: {args.taskDic['topic']['int'][gold_topic[i]]}\n\n")
-
-
-# def HitbyType(args, task_preds, task_labels, gold_goal):
-#     if len(task_preds[0]) != 2: Exception("Task preds sould be list of tok-k(5)")
-#     goal_types = ['Q&A', 'Movie recommendation', 'Music recommendation', 'POI recommendation', 'Food recommendation']
-#     # Hitdit=defaultdict({'hit1':0,'hit3':0,'hit5':0})
-#     Hitdic = {goal_type: {'hit1': 0, 'hit3': 0, 'hit5': 0, 'total': 0} for goal_type in goal_types + ["Others", 'Total']}
-#     for goal, preds, label in zip(gold_goal, task_preds, task_labels):
-#         goal_type = args.taskDic['goal']['int'][goal]
-#         if goal_type in Hitdic:
-#             tmp_goal_type = goal_type
-#         else:
-#             tmp_goal_type = 'Others'
-#         Hitdic[tmp_goal_type]['total'] += 1
-#         Hitdic['Total']['total'] += 1
-#         if label in preds:
-#             Hitdic[tmp_goal_type]['hit5'] += 1
-#             Hitdic['Total']['hit5'] += 1
-#             if label in preds[:3]:
-#                 Hitdic[tmp_goal_type]['hit3'] += 1
-#                 Hitdic['Total']['hit3'] += 1
-#                 if label == preds[0]:
-#                     Hitdic[tmp_goal_type]['hit1'] += 1
-#                     Hitdic['Total']['hit1'] += 1
-#     assert Hitdic['Total']['hit1'] == sum([label == preds[0] for preds, label in zip(task_preds, task_labels)]) and Hitdic['Total']['total'] == len(task_preds)
-#     Hitdic_ratio = {goal_type: {'hit1': 0, 'hit3': 0, 'hit5': 0, 'total': 0} for goal_type in goal_types + ["Others", 'Total']}
-#     output_str = [f"                         hit1,  hit3,  hit5, total_cnt"]
-#     for k in Hitdic_ratio.keys():
-#         Hitdic_ratio[k]['total'] = Hitdic[k]['total']
-#         for hit in ['hit1', 'hit3', 'hit5']:
-#             if Hitdic[k]['total'] > 0:
-#                 Hitdic_ratio[k][hit] = Hitdic[k][hit] / Hitdic[k]['total']
-#         output_str.append(f"{k:^22}: {Hitdic_ratio[k]['hit1']:.3f}, {Hitdic_ratio[k]['hit3']:.3f}, {Hitdic_ratio[k]['hit5']:.3f}, {Hitdic_ratio[k]['total']}")
-#     return Hitdic, Hitdic_ratio, output_str
-
+        return_dic = {
+            "dialog_ids": input_ids,
+            "dialog_mask": input_masks,
+            'knowledge_ids': knowledges_ids,
+            'knowledge_mask': knowledges_masks,
+            'goal_ids': goal_ids,
+            'goal_mask':goals_masks,
+            "response": response,  # response
+            'type': type,
+            'topic': topic,
+        }
+        return return_dic 
 
 if __name__ == '__main__':
     main()

@@ -2078,13 +2078,5 @@ class BartForConditionalGeneration(BartPretrainedModel):
 #             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
 #         return reordered_past
 
-if __name__=="__main__":
-    import utils
-    import os
-    from models.kobart import get_pytorch_kobart_model, get_kobart_tokenizer
-    TEMPHOME='/home/work/CRSTEST/KEMGCRS'
-    tokenizer = get_kobart_tokenizer(cachedir=os.path.join(TEMPHOME,'model_cache','kobart'))
-    model = BartForConditionalGeneration.from_pretrained(get_pytorch_kobart_model(cachedir=os.path.join(TEMPHOME,'model_cache','kobart')))
-    
-    
+
     
