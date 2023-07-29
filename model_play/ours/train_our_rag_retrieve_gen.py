@@ -64,8 +64,8 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
 
     our_best_model = Retriever(args, bert_model)
     if args.rag_our_model.upper() == 'C2DPR':
-        # our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"C2DPR_cotmae_retriever_0719.pt"), map_location=args.device), strict=False)
-        our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"DPR_retriever.pt"), map_location=args.device), strict=False) # C2DPR이 아직 없어서 temp
+        our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"LEMONADE_topic2conf02_retriever.pt"), map_location=args.device), strict=False)
+        # our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"DPR_retriever.pt"), map_location=args.device), strict=False) # C2DPR이 아직 없어서 temp
     elif args.rag_our_model.upper() == 'DPR': 
         our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"DPR_retriever.pt"), map_location=args.device), strict=False)
     else: pass
@@ -82,7 +82,7 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
         for know in knowledgeDB_list:
             f.write(f" \t{know}\n")
     faiss_dataset = load_dataset("csv", data_files=[knowledgeDB_csv_path], split="train", delimiter="\t", column_names=["title", "text"])
-    faiss_dataset = faiss_dataset.map(rag_retrieve.split_documents, batched=True, num_proc=4)
+    faiss_dataset = faiss_dataset.map(rag_retrieve.split_documents, batched=True, num_proc=1)
 
     MODEL_CACHE_DIR = os.path.join(args.home, 'model_cache', 'facebook/dpr-ctx_encoder-multiset-base')
 

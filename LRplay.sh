@@ -1,7 +1,20 @@
 #!/bin/bash
 # 아래에 실행시키려는 녀석들 다 입력해놓고, 마지막 echo "" 따옴표 안에 어떤걸 보기위한 실험이었는지 적어놓기
 
-python kers_main.py --gpu=3 --version=ko --method=kers --do_pretrain --task=resp --bert_name='skt/kobert-base-v1' --log_name="KOKERS_37train_37test_1e-5" --num_epochs=15 --lr=1e-5
+
+# python komain.py --gpu=1 --task=resp --log_name="KO_Sch_RAG_know_resp측정_1e-4" --rag_lr=1e-4 --rag_epochs=10 
+# python komain.py --gpu=1 --task=resp --log_name="KO_Sch_RAG_know_resp측정_1e-5" --rag_lr=1e-5 --rag_epochs=10 
+# python komain.py --gpu=1 --task=resp --log_name="KO_Sch_RAG_know_resp측정_1e-6" --rag_lr=1e-6 --rag_epochs=10 
+
+# python komain.py --gpu=2 --task=resp --log_name="KO_DPR_RAG_1e-4" --rag_onlyDecoderTune --rag_our_bert --rag_our_model=dpr  --rag_lr=1e-4 --rag_epochs=10 
+# python komain.py --gpu=2 --task=resp --log_name="KO_DPR_RAG_1e-5" --rag_onlyDecoderTune --rag_our_bert --rag_our_model=dpr  --rag_lr=1e-5 --rag_epochs=10 
+# python komain.py --gpu=2 --task=resp --log_name="KO_DPR_RAG_1e-6" --rag_onlyDecoderTune --rag_our_bert --rag_our_model=dpr  --rag_lr=1e-6 --rag_epochs=10 
+
+# python komain.py --gpu=3 --task=resp --log_name="KO_C2DPR_RAG_1e-4" --rag_onlyDecoderTune --rag_our_bert --rag_our_model=c2dpr  --rag_lr=1e-4 --rag_epochs=10 
+# python komain.py --gpu=3 --task=resp --log_name="KO_C2DPR_RAG_1e-5" --rag_onlyDecoderTune --rag_our_bert --rag_our_model=c2dpr  --rag_lr=1e-5 --rag_epochs=10 
+# python komain.py --gpu=3 --task=resp --log_name="KO_C2DPR_RAG_1e-6" --rag_onlyDecoderTune --rag_our_bert --rag_our_model=c2dpr  --rag_lr=1e-6 --rag_epochs=10 
+
+# python kers_main.py --gpu=3 --version=ko --method=kers --do_pretrain --task=resp --bert_name='skt/kobert-base-v1' --log_name="KOKERS_37train_37test_1e-5" --num_epochs=15 --lr=1e-5
 
 # python unimind_main.py --version=2 --gpu=2 --method=bart --uni_lr=5e-6 --uni_model_name='facebook/bart-large' --uni_max_input_length=128 --uni_max_target_length=128 # BART-Large 다시 돌려보기
 # python unimind_main.py --version=2 --gpu=1 --method=bart --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=128 --uni_max_target_length=128 --log_name="BART_Large_37train_37test_1e-5" # BART-Large 다시 돌려보기
