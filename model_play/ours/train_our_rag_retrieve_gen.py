@@ -395,6 +395,7 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
 
 def know_hit_ratio(args, pred_pt, gold_pt, new_knows=None, types=None, typelist=['Q&A', 'Movie recommendation', 'Music recommendation', 'POI recommendation', 'Food recommendation']):
     # TODO: Beam처리
+    if args.version=='ko': typelist = ['QA','Movie recommendation']
     hitdic = {type: {'hit1': 0, 'hit3': 0, 'hit5': 0, 'hit1_new': 0, 'hit3_new': 0, 'hit5_new': 0, 'total': 0} for type in typelist + ['Others', 'total']}
     for idx in range(len(gold_pt)):
         goal_type = types[idx]
