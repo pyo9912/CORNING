@@ -80,7 +80,7 @@ class RagDataset(Dataset):
             if not isinstance(v, torch.Tensor):
                 context_batch[k] = torch.as_tensor(v, device=self.args.device)
                 # context_batch[k] = torch.as_tensor(v)
-        context_batch['target_knowledge_label'] = target_knowledge
+        context_batch['target_knowledge_label'] = target_knowledge.replace('\t',' ')
         return context_batch
 
     def __len__(self):

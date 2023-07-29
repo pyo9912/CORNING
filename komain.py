@@ -26,7 +26,7 @@ def add_ours_specific_args(parser):
     # parser.add_argument("--asdf", action='store_true', help="~할지 여부")
     # parser.add_argument( "--method", type=str, default="ours", option=["ours","kers"], help=" Method " )
     parser.add_argument("--gt_max_length", type=int, default=256, help=" Goal-Topic input max_length ")
-    parser.add_argument("--gt_batch_size", type=int, default=16, help=" Method ")
+    parser.add_argument("--gt_batch_size", type=int, default=256, help=" Method ")
     parser.add_argument("--method", type=str, default="ours", help=" Method ")
     parser.add_argument("--TopicTask_Train_Prompt_usePredGoal", action='store_true', help="Topic Task 용 prompt로 pred goal 을 사용할지 여부")
     parser.add_argument("--TopicTask_Test_Prompt_usePredGoal", action='store_true', help="Topic Task 용 prompt로 pred goal 을 사용할지 여부")
