@@ -138,7 +138,7 @@ def main(args=None):
         pad_token_id=tokenizer.eos_token_id,
         torch_dtype='auto', low_cpu_mem_usage=True
         ).to(device='cuda', non_blocking=True)
-    else:
+    else: ## English DuRec2
         tokenizer = GPT2Tokenizer.from_pretrained(args.gpt_model_name, cache_dir=model_cache_dir)
         # tokenizer.add_special_tokens({'additional_special_tokens':[]})
         tokenizer.add_special_tokens({'pad_token':'[PAD]'})

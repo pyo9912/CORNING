@@ -20,7 +20,7 @@ from evaluator_conv import ConvEvaluator
 
 def add_ours_specific_args(parser):
     # parser.add_argument("--asdf", action='store_true', help="~할지 여부")
-    parser.add_argument( "--method", type=str, default="UniMIND", choices=["bart","kers","unimind"], help=" Method " )
+    parser.add_argument( "--method", type=str, default="UniMIND", choices=["bart","unimind"], help=" Method " )
     parser.add_argument("--gt_max_length", type=int, default=256, help=" Goal-Topic input max_length ")
     parser.add_argument("--gt_batch_size", type=int, default=16, help=" Method ")
 
@@ -39,7 +39,6 @@ def add_ours_specific_args(parser):
     parser.add_argument("--uni_test_alltype", action='store_true', help="test all type 여부")
     
     # parser.add_argument("--rag_our_model", default='c2dpr', type=str, help="rag_our_version_bert", choices=['', 'DPR', 'C2DPR', 'dpr','c2dpr'])
-    # parser.add_argument( "--method", type=str, default="ours", help=" Method " )
     return parser
 
 
@@ -111,8 +110,8 @@ def main(args=None):
     # train_dataset_aug_pred, test_dataset_aug_pred = utils.read_pkl('/home/work/CRSTEST/KEMGCRS/data/2/pred_aug/gt_train_pred_aug_dataset.pkl') , utils.read_pkl('/home/work/CRSTEST/KEMGCRS/data/2/pred_aug/gt_test_pred_aug_dataset.pkl')
     if args.debug: train_dataset_aug_pred, test_dataset_aug_pred, args.uni_epochs = train_dataset_aug_pred[:50] , test_dataset_aug_pred[:50] , 1
 
-    train_Dataset = UnimindDataset(args, train_dataset_aug_pred, tokenizer, mode='train', task='resp')
-    test_Dataset = UnimindDataset(args, test_dataset_aug_pred, tokenizer, mode='test', task='resp')
+    train_Dataset = UnimindDataset(args, train_dataset_aug_pred, tokenizer, mode='train', method=args.method)
+    test_Dataset =UnimindDataset(args, test_dataset_aug_pred, tokenizer, mode='test', method=args.method)
     train_dataloader = DataLoader(train_Dataset, batch_size=args.uni_batch_size, shuffle=True)
     test_dataloader = DataLoader(test_Dataset, batch_size=args.uni_batch_size, shuffle=False)
 
@@ -199,12 +198,12 @@ def save_preds(args, context, real_resp, gen_resps=[], epoch=None, mode='train')
 
 class UnimindDataset(Dataset):
     """ For Resp pipeline """
-    def __init__(self, args, pred_aug_dataset, tokenizer, mode='train', task='resp'):
+    def __init__(self, args, pred_aug_dataset, tokenizer, mode='train', method='resp'):
         super(Dataset, self).__init__()
         self.args=args
         self.tokenizer = tokenizer
         self.mode=mode
-        self.task=task
+        self.method=method # unimind, bart, kers (Engligh DuRec Dataset)
         self.pred_aug_dataset=pred_aug_dataset
         self.input_max_length=args.uni_max_input_length
         self.target_max_length=args.uni_max_target_length
@@ -227,13 +226,23 @@ class UnimindDataset(Dataset):
         
         context_batch = defaultdict()
         self.tokenizer.truncation_side='left'
-        if self.mode=='train': 
-            input = f"{dialog} goal: {goal} topic: {topic} Generate the response: "
-            labels = response
-        else:  # Test
-            input = f"{dialog} goal: {predicted_goal} topic: {predicted_topic} Generate the response: "
-            labels = response
-        
+        if self.method=='unimind': 
+            if self.mode=='train': 
+                input = f"{dialog} goal: {goal} topic: {topic} Generate the response: "
+                labels = self.postfix + response
+            else:  # Test
+                input = f"{dialog} goal: {predicted_goal} topic: {predicted_topic} Generate the response: "
+                labels = response
+        elif self.method=='bart':
+            input = f"{dialog}</s>"
+            labels = self.postfix + f"{response}</s>"
+        else: 
+            raise Exception("UniMIND Or Bart For This Dataset Model")
+
+
+
+
+
         input_sentence = self.tokenizer(input).input_ids
         input_sentence = input_sentence[ -self.input_max_length : ]
         input_sentence = input_sentence + [pad_token_id] * (self.input_max_length - len(input_sentence))

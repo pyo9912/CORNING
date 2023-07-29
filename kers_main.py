@@ -209,6 +209,25 @@ def main():
         logger.info(f'Input with knowledges: {args.inputWithKnowledge}, Input with topic: {args.inputWithTopic}')
         kers_knowledge_retrieve.train_test_pseudo_knowledge_bart(args, model, tokenizer, train_dataset_aug, test_dataset_aug, train_knowledgeDB, all_knowledgeDB)
 
+    # For Kers Resp Gen task
+    model_cache_dir = os.path.join(args.home, 'model_cache', model)
+    if args.version == 2:
+        tokenizer = BertTokenizer.from_pretrained(model, cache_dir=model_cache_dir)
+        model = BartForConditionalGeneration.from_pretrained(model, cache_dir=model_cache_dir)
+    else: # version == 'ko'
+        from models.kobart import get_pytorch_kobart_model, get_kobart_tokenizer
+        tokenizer = get_kobart_tokenizer(cachedir=os.path.join(args.home,'model_cache','kobart'))
+        model = BartForConditionalGeneration.from_pretrained(get_pytorch_kobart_model(cachedir=os.path.join(args.home,'model_cache','kobart')))
+    print("Use Pretrained Model")
+    bert_special_tokens_dict = {'additional_special_tokens': ['<dialog>', '<topic>', '<type>', '<user_profile>', '<situation>', '<last_type>', '<knowledge>']}
+    tokenizer.add_special_tokens(bert_special_tokens_dict)
+    
+    model.resize_token_embeddings(len(tokenizer))
+    model.to(args.device)
+    logger.info(model.config)
+
+    
+
 
 def pseudo_knowledge_shuffle(dataset_aug):
     logger.info(f"************************************* Candidate knowledge Shuffled!! {len(dataset_aug)}*************************************")
