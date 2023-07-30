@@ -38,6 +38,7 @@ def eval_goal_topic_model(args, train_auged_Dataset, test_auged_Dataset, retriev
 
 def pred_goal_topic_aug(args, retriever, tokenizer, Auged_Dataset, task):
     # Auged_Dataset.args.task = task
+    retriever.eval()
     Auged_Dataset.subtask = task
     optimizer = torch.optim.Adam(retriever.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.num_epochs * len(Auged_Dataset), eta_min=args.lr * 0.1)

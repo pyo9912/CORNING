@@ -8,14 +8,34 @@
 # python komain.py --gpu=1 --version='ko' --task=resp --log_name="KO_Sch_RAG_know_resp측정_1e-6" --rag_lr=1e-6 --rag_epochs=10 
 
 # 아래 3개: (KO) RAG OUR DPR 에서 resp점수 뽑아봄
+# python komain.py --gpu=2 --version='ko' --task=resp --log_name="KO_DPR_RAG_1e-4_AllTune"  --rag_our_bert --rag_our_model=dpr  --rag_lr=1e-4 --rag_epochs=10 
+# python komain.py --gpu=2 --version='ko' --task=resp --log_name="KO_DPR_RAG_1e-5_AllTune"  --rag_our_bert --rag_our_model=dpr  --rag_lr=1e-5 --rag_epochs=10 
+# python komain.py --gpu=2 --version='ko' --task=resp --log_name="KO_DPR_RAG_1e-6_AllTune"  --rag_our_bert --rag_our_model=dpr  --rag_lr=1e-6 --rag_epochs=10 
+
+# 아래 3개: (KO) RAG OUR C2DPR 에서 resp점수 뽑아봄
+python komain.py --gpu=3 --version='ko' --task=resp --log_name="KO_C2DPR_RAG_1e-4_AllTune"  --rag_our_bert --rag_our_model=c2dpr  --rag_lr=1e-4 --rag_epochs=10 
+python komain.py --gpu=3 --version='ko' --task=resp --log_name="KO_C2DPR_RAG_1e-5_AllTune"  --rag_our_bert --rag_our_model=c2dpr  --rag_lr=1e-5 --rag_epochs=10 
+python komain.py --gpu=3 --version='ko' --task=resp --log_name="KO_C2DPR_RAG_1e-6_AllTune"  --rag_our_bert --rag_our_model=c2dpr  --rag_lr=1e-6 --rag_epochs=10 
+
+
+
+
+
+# ------------------------------------------- 230729_22:00 실행시켜놓은것 아래 9개
+# 아래 3개: (KO) RAG scratch 에서 knowledge retrieve점수와, resp점수까지 같이 뽑아봄
+# python komain.py --gpu=1 --version='ko' --task=resp --log_name="KO_Sch_RAG_know_resp측정_1e-4" --rag_lr=1e-4 --rag_epochs=10 
+# python komain.py --gpu=1 --version='ko' --task=resp --log_name="KO_Sch_RAG_know_resp측정_1e-5" --rag_lr=1e-5 --rag_epochs=10 
+# python komain.py --gpu=1 --version='ko' --task=resp --log_name="KO_Sch_RAG_know_resp측정_1e-6" --rag_lr=1e-6 --rag_epochs=10 
+
+# 아래 3개: (KO) RAG OUR DPR 에서 resp점수 뽑아봄
 # python komain.py --gpu=2 --version='ko' --task=resp --log_name="KO_DPR_RAG_1e-4" --rag_onlyDecoderTune --rag_our_bert --rag_our_model=dpr  --rag_lr=1e-4 --rag_epochs=10 
 # python komain.py --gpu=2 --version='ko' --task=resp --log_name="KO_DPR_RAG_1e-5" --rag_onlyDecoderTune --rag_our_bert --rag_our_model=dpr  --rag_lr=1e-5 --rag_epochs=10 
 # python komain.py --gpu=2 --version='ko' --task=resp --log_name="KO_DPR_RAG_1e-6" --rag_onlyDecoderTune --rag_our_bert --rag_our_model=dpr  --rag_lr=1e-6 --rag_epochs=10 
 
 # 아래 3개: (KO) RAG OUR C2DPR 에서 resp점수 뽑아봄
-python komain.py --gpu=3 --version='ko' --task=resp --log_name="KO_C2DPR_RAG_1e-4" --rag_onlyDecoderTune --rag_our_bert --rag_our_model=c2dpr  --rag_lr=1e-4 --rag_epochs=10 
-python komain.py --gpu=3 --version='ko' --task=resp --log_name="KO_C2DPR_RAG_1e-5" --rag_onlyDecoderTune --rag_our_bert --rag_our_model=c2dpr  --rag_lr=1e-5 --rag_epochs=10 
-python komain.py --gpu=3 --version='ko' --task=resp --log_name="KO_C2DPR_RAG_1e-6" --rag_onlyDecoderTune --rag_our_bert --rag_our_model=c2dpr  --rag_lr=1e-6 --rag_epochs=10 
+# python komain.py --gpu=3 --version='ko' --task=resp --log_name="KO_C2DPR_RAG_1e-4" --rag_onlyDecoderTune --rag_our_bert --rag_our_model=c2dpr  --rag_lr=1e-4 --rag_epochs=10 
+# python komain.py --gpu=3 --version='ko' --task=resp --log_name="KO_C2DPR_RAG_1e-5" --rag_onlyDecoderTune --rag_our_bert --rag_our_model=c2dpr  --rag_lr=1e-5 --rag_epochs=10 
+# python komain.py --gpu=3 --version='ko' --task=resp --log_name="KO_C2DPR_RAG_1e-6" --rag_onlyDecoderTune --rag_our_bert --rag_our_model=c2dpr  --rag_lr=1e-6 --rag_epochs=10 
 
 
 

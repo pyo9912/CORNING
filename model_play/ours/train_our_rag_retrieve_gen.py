@@ -15,7 +15,7 @@ from datasets import Features, Sequence, Value, load_dataset
 from functools import partial
 import faiss
 
-from evaluator_conv import ConvEvaluator
+from evaluator_conv import ConvEvaluator, ConvEvaluator_ByType
 from models.ours.retriever import Retriever
 import utils
 import data_model
@@ -65,7 +65,7 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
     our_best_model = Retriever(args, bert_model)
     if args.rag_our_model.upper() == 'C2DPR':
         logger.info("@@@@@Load Our C2DPR RAG On Bert")
-        our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"LEMONADE_topic2conf02_retriever.pt"), map_location=args.device), strict=False)
+        our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"GCL2_topic5_conf70_KO_retriever.pt"), map_location=args.device), strict=False)
         # our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"DPR_retriever.pt"), map_location=args.device), strict=False) # C2DPR이 아직 없어서 temp
     elif args.rag_our_model.upper() == 'DPR': 
         logger.info("@@@@@Load Our DPR RAG On Bert")
@@ -127,6 +127,7 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
     retriever = RagRetriever.from_pretrained('facebook/rag-sequence-nq', index_name='custom', indexed_dataset=faiss_dataset, init_retrieval=True)
     retriever.set_ctx_encoder_tokenizer(ctx_tokenizer)  # NO TOUCH
     retriever.generator_tokenizer = kobart_tokenizer
+    retriever.question_encoder_tokenizer = tokenizer # TODO: HJHJHHJHJHJHJH
 
     rag_model = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever).to(args.device)
     rag_tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
@@ -317,7 +318,8 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
     torch.cuda.empty_cache()
     contexts, label_gold_knowledges, label_pseudo_knowledges, top5_docs, real_resps, gen_resp, new_knows = [], [], [], [], [], [], []
     types = []
-    evaluator = ConvEvaluator(tokenizer=tokenizer, log_file_path=os.path.join(args.output_dir, f"{epoch}_{mode}_GEN_REPORT.txt"))
+    # evaluator = ConvEvaluator(tokenizer=tokenizer, log_file_path=os.path.join(args.output_dir, f"{epoch}_{mode}_GEN_REPORT.txt") if mode=='test' else None)
+    evaluatortype = ConvEvaluator_ByType(tokenizer=tokenizer, log_file_path=os.path.join(args.output_dir, f"{epoch}_{mode}_GEN_REPORT_TYPE.txt") if mode=='test' else None)
 
     for batch in tqdm(data_loader, desc=f"Epoch {epoch}__{mode}", bar_format=' {l_bar} | {bar:23} {r_bar}'):
         source_ids, source_mask, target_ids = batch["input_ids"].to(args.device), batch["attention_mask"].to(args.device), batch["response"].to(args.device)
@@ -364,38 +366,52 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
             gen_resp.extend(resp_batch)
             # evaluator.log_file.write(f'\n*** Generator Fine-tuning test-{epoch}{mode} ***\n\n')
             # evaluator.evaluate(gen_ids, target_ids, source_ids, log=True)
-            evaluator.evaluate(gen_ids, target_ids, log=True)
+            # evaluator.evaluate(gen_ids, target_ids, log=True)
+            evaluatortype.evaluate(gen_ids, target_ids, batch_types, log=True)
 
     if mode == 'train': scheduler.step()
     perplexity = torch.exp(torch.tensor(epoch_loss / steps))  # perplexity(outputs['logits'][::5], target_ids)
     hitdic, hitdic_ratio, output_str = know_hit_ratio(args, pred_pt=top5_docs, gold_pt=label_gold_knowledges, new_knows=new_knows, types=types)
+    if epoch==0 and mode=='train':
+        for i in output_str:
+            logger.info(f"{mode}_{epoch} {i}")
     if mode == 'test':
-        report = evaluator.report()
+        # report = evaluator.report()
+        # report_text = [f"NEW_{epoch}_{mode}: bleu@1, bleu@2, bleu@3, bleu@4, dist@1, dist@2, dist@3, dist@4",
+        #                f"NEW_{epoch}_{mode}:  {report['bleu@1']:.3f},  {report['bleu@2']:.3f},  {report['bleu@3']:.3f},  {report['bleu@4']:.3f},  {report['dist@1']:.3f},  {report['dist@2']:.3f},  {report['dist@3']:.3f},  {report['dist@4']:.3f}"]
+        # output_str.extend(report_text)
+        report = evaluatortype.report()
         report_text = [f"NEW_{epoch}_{mode}: bleu@1, bleu@2, bleu@3, bleu@4, dist@1, dist@2, dist@3, dist@4",
                        f"NEW_{epoch}_{mode}:  {report['bleu@1']:.3f},  {report['bleu@2']:.3f},  {report['bleu@3']:.3f},  {report['bleu@4']:.3f},  {report['dist@1']:.3f},  {report['dist@2']:.3f},  {report['dist@3']:.3f},  {report['dist@4']:.3f}"]
         output_str.extend(report_text)
-        evaluator.reset_metric()
+        report_type = evaluatortype.report_ByType()
+        for each_type, report in report_type.items():
+            reports_text = [f"NEW_{epoch}_{mode:^5}_{each_type:^21}: bleu@1, bleu@2, bleu@3, bleu@4, dist@1, dist@2, dist@3, dist@4, count",
+                            f"NEW_{epoch}_{mode:^5}_{each_type:^21}:  {report['bleu@1']:.3f},  {report['bleu@2']:.3f},  {report['bleu@3']:.3f},  {report['bleu@4']:.3f},  {report['dist@1']:.3f},  {report['dist@2']:.3f},  {report['dist@3']:.3f},  {report['dist@4']:.3f}, Count: {report['sent_cnt']}",]
+            output_str.extend(reports_text)
+        
+        # evaluator.reset_metric()
+        evaluatortype.reset_metric()
 
         for i in output_str:
             logger.info(f"{mode}_{epoch} {i}")
         logger.info(report_text[0])
         logger.info(report_text[1])
-        logger.info("======------------======")
+        logger.info("======------------============------------============------------============------------============------------======")
         bleu, bleu1, bleu2 = get_bleu(real_resps, gen_resp)
         intra_dist1, intra_dist2, inter_dist1, inter_dist2 = distinct(gen_resp)
         logger.info(f"                    PPL, Bleu_score, Bleu_1, Bleu_2: {perplexity:.3f}, {bleu:.3f}, {bleu1:.3f}, {bleu2:.3f}")
         logger.info(f"intra_dist1, intra_dist2, inter_dist1, inter_dist2 : {intra_dist1:.3f}, {intra_dist2:.3f}, {inter_dist1:.3f}, {inter_dist2:.3f}")
         output_str.append(f"PPL, Bleu_score, Bleu_1, Bleu_2                    : {perplexity:.3f}, {bleu:.3f}, {bleu1:.3f}, {bleu2:.3f}")
         output_str.append(f"intra_dist1, intra_dist2, inter_dist1, inter_dist2 : {intra_dist1:.3f}, {intra_dist2:.3f}, {inter_dist1:.3f}, {inter_dist2:.3f}")
-        utils.write_pkl({'contexts':contexts, 'real_resp': real_resps, 'gen_resp': gen_resp, 'top5_docs':top5_docs, 'label_gold_knowledges':label_gold_knowledges, }, os.path.join(args.output_dir,f"{epoch}_{mode}_inout.pkl"))
+        utils.write_pkl({'contexts':contexts, 'real_resp': real_resps, 'gen_resp': gen_resp, 'top5_docs':top5_docs, 'label_gold_knowledges':label_gold_knowledges, 'types': types}, os.path.join(args.output_dir,f"{epoch}_{mode}_inout.pkl"))
     logger.info(f"{mode} Loss: {epoch_loss:.3f}, PPL: {perplexity:.3f}")
     save_preds(args, contexts, top5_docs, label_gold_knowledges, epoch=epoch, new_knows=new_knows, real_resp=real_resps, gen_resps=gen_resp, mode=mode)
     return hitdic, hitdic_ratio, output_str  # output_strings, hit1_ratio, total_hit1, total_hit3, total_hit5, total_hit1_new, total_hit3_new, total_hit5_new
 
 
 def know_hit_ratio(args, pred_pt, gold_pt, new_knows=None, types=None, typelist=['Q&A', 'Movie recommendation', 'Music recommendation', 'POI recommendation', 'Food recommendation']):
-    # TODO: Beam처리
-    if args.version=='ko': typelist = ['QA','Movie recommendation']
+    if args.version=='ko': typelist = ['QA','Movie Recommendation']
     hitdic = {type: {'hit1': 0, 'hit3': 0, 'hit5': 0, 'hit1_new': 0, 'hit3_new': 0, 'hit5_new': 0, 'total': 0} for type in typelist + ['Others', 'total']}
     for idx in range(len(gold_pt)):
         goal_type = types[idx]
@@ -409,7 +425,7 @@ def know_hit_ratio(args, pred_pt, gold_pt, new_knows=None, types=None, typelist=
         hitdic[tmp_goal]['total'] += 1
         hitdic['total']['total'] += 1
 
-        if args.rag_num_beams > 1:  ## TODO:  and isinstance(pred, list) 추가해야할듯
+        if args.rag_num_beams > 1:  
             if gold in pred:
                 hitdic[tmp_goal]['hit5'] += 1
                 hitdic['total']['hit5'] += 1

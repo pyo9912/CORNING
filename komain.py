@@ -38,7 +38,7 @@ def add_ours_specific_args(parser):
     ## For resp
     # parser.add_argument("--rag_retrieve_input_length", type=int, default=768, help=" Method ")
     # parser.add_argument("--rag_scratch", action='store_false', help="우리의 retriever모델을 쓸지 말지")  # --rag_scratch하면 scratch모델 사용하게됨
-    parser.add_argument("--rag_batch_size", type=int, default=4, help=" Method ")
+    parser.add_argument("--rag_batch_size", type=int, default=6, help=" Method ")
     parser.add_argument("--rag_input_dialog", type=str, default="dialog", help=" Method ")
     parser.add_argument("--rag_max_input_length", type=int, default=128, help=" Method ")
     parser.add_argument("--rag_max_target_length", type=int, default=128, help=" Method ")
@@ -225,8 +225,8 @@ def main(args=None):
         make_cotmae_input(args.output_dir, train_dataset_raw)
 
     if "dsi" in args.task:
-        make_dsi_input(args.output_dir, train_dataset_raw, input_setting='dialog', knowledgeDB=all_knowledgeDB, mode='train')
-        make_dsi_input(args.output_dir, test_dataset_raw, input_setting='dialog', knowledgeDB=all_knowledgeDB, mode='test')
+        make_dsi_input(args, args.output_dir, train_dataset_raw, input_setting='dialog', knowledgeDB=all_knowledgeDB, mode='train')
+        make_dsi_input(args, args.output_dir, test_dataset_raw, input_setting='dialog', knowledgeDB=all_knowledgeDB, mode='test')
 
     if 'know' in args.task:
         train_know_retrieve.train_know(args, train_dataset_raw, test_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB, bert_model, tokenizer)
