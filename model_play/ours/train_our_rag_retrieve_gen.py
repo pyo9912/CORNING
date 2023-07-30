@@ -97,7 +97,6 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
     logger.info("\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use ko-Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
     ctx_encoder.ctx_encoder.bert_model = deepcopy(bert_model) # SKT-bert
     ctx_tokenizer = tokenizer # SKT-bert tokenizer
-
     if args.rag_our_bert: # 학습된 KO리트리버의 our_best_model.query_bert
         logger.info("\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use Our Trained Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
         logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use Our Trained Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n\n")
@@ -106,6 +105,7 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
 
     logger.info("Create Knowledge Dataset")
     new_features = Features({"text": Value("string"), "title": Value("string"), "embeddings": Sequence(Value("float32"))})  # optional, save as float32 instead of float64 to save space
+    ctx_encoder.eval()
     faiss_dataset = faiss_dataset.map(
         partial(rag_retrieve.embed, ctx_encoder=ctx_encoder, ctx_tokenizer=ctx_tokenizer, args=args),
         batched=True, batch_size=args.rag_batch_size, features=new_features, )
@@ -127,11 +127,11 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
     retriever = RagRetriever.from_pretrained('facebook/rag-sequence-nq', index_name='custom', indexed_dataset=faiss_dataset, init_retrieval=True)
     retriever.set_ctx_encoder_tokenizer(ctx_tokenizer)  # NO TOUCH
     retriever.generator_tokenizer = kobart_tokenizer
-    retriever.question_encoder_tokenizer = tokenizer # TODO: HJHJHHJHJHJHJH
+    retriever.question_encoder_tokenizer = tokenizer 
 
     rag_model = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever).to(args.device)
     rag_tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
-    rag_model.set_context_encoder_for_training(ctx_encoder)
+    if args.rag_ctx_training: rag_model.set_context_encoder_for_training(ctx_encoder) # All Fine-tune 때 쓰던 코드같은데 이거 키면 ctx_encoder가 학습됨
     
     logger.info("\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@ Model Ko-BERT to rag.question_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
     # rag_model.rag.question_encoder.question_encoder.bert_model = our_question_encoder
@@ -172,11 +172,12 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
             logger.info(f"\n\n*****RAG_Only_Decoder Tune!***** rag_lr: {args.rag_lr}");
             logger.info(f"*****RAG_Only_Decoder Tune!***** rag_lr: {args.rag_lr}\n\n")
             rag_model.eval()
-            rag_model.rag.ctx_encoder.eval()
+            if rag_model.rag.ctx_encoder: rag_model.rag.ctx_encoder.eval()
             rag_model.rag.question_encoder.eval()
             rag_model.generator.train()
-            for param in rag_model.rag.ctx_encoder.parameters():
-                param.requires_grad = False
+            if rag_model.rag.ctx_encoder: 
+                for param in rag_model.rag.ctx_encoder.parameters():
+                    param.requires_grad = False
             for param in rag_model.rag.question_encoder.parameters():
                 param.requires_grad = False
         if epoch == 0: rag_model_weight_logging(args, rag_model, epoch, 'before_train', faiss_dataset)
