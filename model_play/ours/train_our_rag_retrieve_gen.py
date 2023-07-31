@@ -65,7 +65,7 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
     our_best_model = Retriever(args, bert_model)
     if args.rag_our_model.upper() == 'C2DPR':
         logger.info("@@@@@Load Our C2DPR RAG On Bert")
-        our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"GCL2_topic5_conf70_KO_retriever.pt"), map_location=args.device), strict=False)
+        our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"GCL2_topic3_conf60_KO_retriever.pt"), map_location=args.device), strict=False)
         # our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"DPR_retriever.pt"), map_location=args.device), strict=False) # C2DPR이 아직 없어서 temp
     elif args.rag_our_model.upper() == 'DPR': 
         logger.info("@@@@@Load Our DPR RAG On Bert")

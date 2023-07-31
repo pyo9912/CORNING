@@ -299,7 +299,8 @@ def makeDic(args, data, which):
                 if (type!='' or type!='0') and type:
                     whichset.add(type)
     else: return
-    for i,v in enumerate(whichset):
+    sortedSet = sorted(list(whichset))
+    for i,v in enumerate(sortedSet):
         dic['str'][v] = i
         dic['int'][i] = v
     return dic
