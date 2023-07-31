@@ -64,13 +64,16 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
 
     our_best_model = Retriever(args, bert_model)
     if args.rag_our_model.upper() == 'C2DPR':
-        logger.info("@@@@@Load Our C2DPR RAG On Bert")
-        our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"GCL2_topic3_conf60_KO_retriever.pt"), map_location=args.device), strict=False)
+        load_model_name = os.path.join(args.saved_model_path, f"GCL2_topic3_conf60_KO_retriever.pt")
+        logger.info(f"@@@@@Load Our C2DPR RAG On Bert : {load_model_name}")
+        our_best_model.load_state_dict(torch.load(load_model_name, map_location=args.device), strict=False)
         # our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"DPR_retriever.pt"), map_location=args.device), strict=False) # C2DPR이 아직 없어서 temp
     elif args.rag_our_model.upper() == 'DPR': 
-        logger.info("@@@@@Load Our DPR RAG On Bert")
+        load_model_name = os.path.join(args.saved_model_path, f"DPR_retriever.pt")
+        logger.info(f"@@@@@Load Our DPR RAG On Bert: {load_model_name}")
         our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"DPR_retriever.pt"), map_location=args.device), strict=False)
-    else: logger.info("@@@@@Load Our RAG On Bert")
+    else: logger.info("@@@@@Load Default RAG On Bert")
+    
     our_best_model.to(args.device)
     our_question_encoder = deepcopy(our_best_model.query_bert)
     our_ctx_encoder = deepcopy(our_best_model.rerank_bert)
@@ -94,11 +97,11 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
     ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR)
 
     
-    logger.info("\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use ko-Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+    # logger.info("\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use ko-Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
     ctx_encoder.ctx_encoder.bert_model = deepcopy(bert_model) # SKT-bert
     ctx_tokenizer = tokenizer # SKT-bert tokenizer
     if args.rag_our_bert: # 학습된 KO리트리버의 our_best_model.query_bert
-        logger.info("\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use Our Trained Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+        # logger.info("\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use Our Trained Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
         logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use Our Trained Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n\n")
         ctx_encoder.ctx_encoder.bert_model = our_ctx_encoder
         ctx_tokenizer = tokenizer
@@ -194,7 +197,7 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
     for i in best_hitdic_str:
         logger.info(f"Test_best {i}")
 
-
+"""
 def train_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB):
     logger.info(f"\n\nOUR {args.rag_our_model}BERT_Retriever model For resp, RAG_OUR_BERT: {args.rag_our_bert}, RAG_OnlyDecoderTune: {args.rag_onlyDecoderTune}\n\n")
     from model_play.rag import rag_retrieve
@@ -232,7 +235,7 @@ def train_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, tes
     ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=MODEL_CACHE_DIR)
 
     if args.rag_our_bert:
-        logger.info("\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use Our Trained Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+        # logger.info("\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use Our Trained Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
         logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@@ Use Our Trained Bert For ctx_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n\n")
         ctx_encoder.ctx_encoder.bert_model = our_ctx_encoder
         ctx_tokenizer = tokenizer
@@ -260,7 +263,7 @@ def train_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, tes
     rag_tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
     rag_model.set_context_encoder_for_training(ctx_encoder)
     if args.rag_our_bert:
-        logger.info("\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@ Model question_encoder changed by ours @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+        # logger.info("\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@ Model question_encoder changed by ours @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
         logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@ Model question_encoder changed by ours @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n\n")
         rag_model.rag.question_encoder.question_encoder.bert_model = our_question_encoder
         rag_tokenizer.question_encoder = tokenizer
@@ -311,7 +314,7 @@ def train_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, tes
     for i in best_hitdic_str:
         logger.info(f"Test_best {i}")
 
-
+"""
 def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch, faiss_dataset, mode='train'):
     from tqdm import tqdm
     # data_loader

@@ -67,6 +67,9 @@ class RagDataset(Dataset):
             prefix = ''
         elif self.args.rag_our_model == 'C2DPR' or self.args.rag_our_model == 'c2dpr':
             prefix = '<topic>' + predicted_topic + self.tokenizer.question_encoder.sep_token
+        else: # Scratch DPR
+            prefix = ''
+            
 
         prefix_encoding = self.tokenizer.question_encoder.encode(prefix)[1:-1][:30]
 
