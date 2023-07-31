@@ -49,11 +49,6 @@ class RagDataset(Dataset):
             random.shuffle(predicted_topic_list)
             predicted_goal, predicted_topic = data['predicted_goal'][0], '|'.join(predicted_topic_list)
         else:  # test
-            # predicted_goal = data['predicted_goal'][0]
-            # if data['predicted_topic_confidence'][0] > (1 - self.args.topic_conf):
-            #     predicted_topic = data['predicted_topic'][0]
-            # else:
-            #     predicted_topic = '|'.join(predicted_topic_list)
             cum_prob = 0
             candidate_topic_entities = []
             for topic, conf in zip(predicted_topic_list, predicted_topic_confidence_list):
@@ -71,7 +66,7 @@ class RagDataset(Dataset):
             prefix = ''
             
 
-        prefix_encoding = self.tokenizer.question_encoder.encode(prefix)[1:-1][:30]
+        prefix_encoding = self.tokenizer.question_encoder.encode(prefix)[1:-1][:64] # --> 64까지 늘어나야함
 
         input_sentence = self.tokenizer.question_encoder('<dialog>' + dialog, add_special_tokens=False).input_ids
         input_sentence = [self.tokenizer.question_encoder.cls_token_id] + prefix_encoding + input_sentence[-(self.input_max_length - len(prefix_encoding) - 1):]

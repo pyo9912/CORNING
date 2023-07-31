@@ -40,7 +40,7 @@ def add_ours_specific_args(parser):
     # parser.add_argument("--rag_scratch", action='store_false', help="우리의 retriever모델을 쓸지 말지")  # --rag_scratch하면 scratch모델 사용하게됨
     parser.add_argument("--rag_batch_size", type=int, default=6, help=" Method ")
     parser.add_argument("--rag_input_dialog", type=str, default="dialog", help=" Method ")
-    parser.add_argument("--rag_max_input_length", type=int, default=128, help=" Method ")
+    parser.add_argument("--rag_max_input_length", type=int, default=256, help=" Method ")
     parser.add_argument("--rag_max_target_length", type=int, default=128, help=" Method ")
     parser.add_argument("--rag_num_beams", type=int, default=5, help=" Method ")
     parser.add_argument("--rag_epochs", type=int, default=7, help=" Method ") # 7까지 가면 best가 거의 나옴

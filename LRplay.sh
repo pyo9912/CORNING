@@ -1,6 +1,9 @@
 #!/bin/bash
 # 아래에 실행시키려는 녀석들 다 입력해놓고, 마지막 echo "" 따옴표 안에 어떤걸 보기위한 실험이었는지 적어놓기
 
+# python bart_unimind_main_ko.py --gpu=1 --log_name="2type_BART_37train_37test_1e4" --method=bart --uni_lr=1e-4 # 512 들어가던 시절 -> 256으로 처리해야함
+
+python komain.py --gpu=1 --version='ko' --task=resp --log_name="KO_Sch_RAG_know_resp측정_5e-5" --rag_lr=5e-5 --rag_epochs=10 
 # python komain.py --gpu=2 --version='ko' --task=resp --log_name="KO_DPR_RAG_1e-5_DecTune"  --rag_onlyDecoderTune --rag_our_bert --rag_our_model=dpr  --rag_lr=1e-4 --rag_epochs=10 
 # python komain.py --gpu=3 --version='ko' --task=resp --log_name="KO_C2DPR_70_RAG_1e-5_DecTune"  --rag_onlyDecoderTune --rag_our_bert --rag_our_model=c2dpr  --rag_lr=1e-5 --rag_epochs=10 
 
@@ -72,7 +75,7 @@
 
 # #============================================#
 # # Korean 230727 UniMIND 실험
-# python bart_unimind_main_ko.py --gpu=1 --log_name="2type_BART_37train_37test_1e4" --method=bart --uni_lr=1e-4
+# python bart_unimind_main_ko.py --gpu=1 --log_name="2type_BART_37train_37test_1e4" --method=bart --uni_lr=1e-4 # 512 들어가던 시절
 # python bart_unimind_main_ko.py --gpu=1 --log_name="2type_BART_37train_37test_1e6" --method=bart --uni_lr=1e-6
 # python bart_unimind_main_ko.py --gpu=1 --log_name="2type_BART_37train_37test_1e5" --method=bart --uni_lr=1e-5
 
