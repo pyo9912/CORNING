@@ -328,7 +328,7 @@ def dataset_reader_ko(args, data_name='train'):
 
             # knowledge_seq = [j.replace('\n', '') for j in dialog['knowledge']]
             # knowledge_seq = dialog['knowledge']
-            knowledge_seq = [readData.replace("!", "").replace("<", "").replace(">", "").replace(".", "") for readData in dialog['knowledge']]
+            knowledge_seq = [readData.replace("!", "").replace("<", "").replace(">", "").replace(".", "").replace('\t',' ') for readData in dialog['knowledge']]
             all_knowledge.update(knowledge_seq)
 
             pseudo_knowledge_seq = []
