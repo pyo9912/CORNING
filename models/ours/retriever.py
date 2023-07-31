@@ -10,7 +10,7 @@ class Retriever(nn.Module):
         self.query_bert.pooler = None
                 # Knowledge text 처리를 위한 BERT
         self.rerank_bert = copy.deepcopy(self.query_bert)
-
+        self.which_rag_called='Sch'
         # if args.know_ablation == 'negative_sampling':
         #     self.key_bert = query_bert
         # else:

@@ -57,26 +57,30 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
     logger.info(f"\n  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA\nOUR KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA\n  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA  KOREA\n")
     logger.info(f"\n\nOUR {args.rag_our_model}BERT_Retriever model For resp, RAG_OUR_BERT: {args.rag_our_bert}, RAG_OnlyDecoderTune: {args.rag_onlyDecoderTune}\n\n")
     # if args.rag_onlyDecoderTune: args.rag_batch_size = args.rag_batch_size*2
-
+    ## Topic pre-trained bert를 rag의 시작점으로 잡아보면 어떨까? 
     train_dataset_aug_pred, test_dataset_aug_pred = make_aug_gt_pred(args, deepcopy(bert_model), tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
     logger.info(f"Length of Pred_Auged Train,Test: {len(train_dataset_aug_pred)}, {len(test_dataset_aug_pred)}")
     if args.debug: train_dataset_aug_pred, test_dataset_aug_pred = train_dataset_aug_pred[:50], test_dataset_aug_pred[:50]
 
-    our_best_model = Retriever(args, bert_model)
+    our_best_model = Retriever(args, deepcopy(bert_model))
     if args.rag_our_model.upper() == 'C2DPR':
         load_model_name = os.path.join(args.saved_model_path, f"GCL2_topic3_conf60_KO_retriever.pt")
         logger.info(f"@@@@@Load Our C2DPR RAG On Bert : {load_model_name}")
         our_best_model.load_state_dict(torch.load(load_model_name, map_location=args.device), strict=False)
+        our_best_model.query_bert.name_or_path, our_best_model.rerank_bert.name_or_path = "skt/c2dpr_query_bert", "skt/c2dpr_rerank_bert"
         # our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"DPR_retriever.pt"), map_location=args.device), strict=False) # C2DPR이 아직 없어서 temp
     elif args.rag_our_model.upper() == 'DPR': 
         load_model_name = os.path.join(args.saved_model_path, f"DPR_retriever.pt")
         logger.info(f"@@@@@Load Our DPR RAG On Bert: {load_model_name}")
         our_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"DPR_retriever.pt"), map_location=args.device), strict=False)
+        our_best_model.query_bert.name_or_path, our_best_model.rerank_bert.name_or_path = "skt/dpr_query_bert", "skt/dpr_rerank_bert"
     else: logger.info("@@@@@Load Default RAG On Bert")
     
     our_best_model.to(args.device)
     our_question_encoder = deepcopy(our_best_model.query_bert)
     our_ctx_encoder = deepcopy(our_best_model.rerank_bert)
+    logger.info(f"OUR_question_encoder: {our_question_encoder.encoder.layer[0].attention.self.key.weight[0][:50][0]}")
+    logger.info(f"     OUR_ctx_encoder: {our_ctx_encoder.encoder.layer[0].attention.self.key.weight[0][:50][0]}")
 
     knowledgeDB_list = list(all_knowledgeDB)
     knowledgeDB_csv_path = os.path.join(args.data_dir, 'rag')  # HOME/data/2/rag/"train_knowledge.csv")
@@ -106,9 +110,11 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
         ctx_encoder.ctx_encoder.bert_model = our_ctx_encoder
         ctx_tokenizer = tokenizer
 
+    logger.info(f"ctx_encoder의 bert.encoder.attn.key.weight: {ctx_encoder.ctx_encoder.bert_model.encoder.layer[0].attention.self.key.weight[0][:50][0]}")
     logger.info("Create Knowledge Dataset")
     new_features = Features({"text": Value("string"), "title": Value("string"), "embeddings": Sequence(Value("float32"))})  # optional, save as float32 instead of float64 to save space
     ctx_encoder.eval()
+    ctx_encoder.to(args.device)
     faiss_dataset = faiss_dataset.map(
         partial(rag_retrieve.embed, ctx_encoder=ctx_encoder, ctx_tokenizer=ctx_tokenizer, args=args),
         batched=True, batch_size=args.rag_batch_size, features=new_features, )
@@ -123,9 +129,10 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
     # faiss_dataset.add_faiss_index(column='embeddings', index_name = 'embeddings', custom_index=index, faiss_verbose=True)
     print(f"Length of Knowledge knowledge_DB : {len(faiss_dataset)}")
 
-
     kobart_tokenizer = get_kobart_tokenizer(cachedir=os.path.join(args.home,'model_cache','kobart'))
+    kobart_tokenizer.name_or_path = 'skt/kobart_tokenizer'
     kobart = BartForConditionalGeneration.from_pretrained(get_pytorch_kobart_model(cachedir=os.path.join(args.home,'model_cache','kobart'))).to(args.device)
+    kobart.name_or_path='skt/kobart'
     ### MODEL CALL
     retriever = RagRetriever.from_pretrained('facebook/rag-sequence-nq', index_name='custom', indexed_dataset=faiss_dataset, init_retrieval=True)
     retriever.set_ctx_encoder_tokenizer(ctx_tokenizer)  # NO TOUCH
@@ -134,13 +141,15 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
 
     rag_model = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever).to(args.device)
     rag_tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
-    if args.rag_ctx_training: rag_model.set_context_encoder_for_training(ctx_encoder) # All Fine-tune 때 쓰던 코드같은데 이거 키면 ctx_encoder가 학습됨
+    # if args.rag_ctx_training: 
+    rag_model.set_context_encoder_for_training(ctx_encoder) # All Fine-tune 때 쓰던 코드같은데 이거 키면 ctx_encoder가 학습됨
     
     logger.info("\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@ Model Ko-BERT to rag.question_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
-    # rag_model.rag.question_encoder.question_encoder.bert_model = our_question_encoder
-    rag_model.rag.question_encoder.question_encoder.bert_model = deepcopy(bert_model)
+    rag_model.rag.question_encoder.question_encoder.bert_model = our_question_encoder
+    # rag_model.rag.question_encoder.question_encoder.bert_model = deepcopy(bert_model)
     rag_tokenizer.question_encoder = tokenizer
-    
+
+
     rag_model.generator = kobart
     rag_model.rag.generator = kobart
     rag_tokenizer.generator = kobart_tokenizer
@@ -152,6 +161,7 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
         logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@ Model question_encoder changed by ours @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n\n")
         rag_model.rag.question_encoder.question_encoder.bert_model = our_question_encoder
         rag_tokenizer.question_encoder = tokenizer
+    logger.info(f"RAG Model question_encoder layer0.key.weight: {rag_model.rag.question_encoder.question_encoder.bert_model.encoder.layer[0].attention.self.key.weight[0][:50][0]}")
     
     train_Dataset = data_model.RagDataset(args, train_dataset_aug_pred, rag_tokenizer, all_knowledgeDB, mode='train')
     test_Dataset = data_model.RagDataset(args, test_dataset_aug_pred, rag_tokenizer, all_knowledgeDB, mode='test')
@@ -167,6 +177,7 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
     # if args.debug: 
     #     args.device='cpu'
     #     rag_model.to('cpu')
+    with torch.no_grad(): epoch_play(args, rag_tokenizer, rag_model, test_dataloader, optimizer, scheduler, 0, faiss_dataset, mode='knowledgeCheck')
 
     for epoch in range(args.rag_epochs):
         logger.info(f"RAG_LR: {args.rag_lr}")
@@ -376,7 +387,7 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
     if mode == 'train': scheduler.step()
     perplexity = torch.exp(torch.tensor(epoch_loss / steps))  # perplexity(outputs['logits'][::5], target_ids)
     hitdic, hitdic_ratio, output_str = know_hit_ratio(args, pred_pt=top5_docs, gold_pt=label_gold_knowledges, new_knows=new_knows, types=types)
-    if epoch==0 and mode=='train':
+    if (epoch==0 and mode=='train') or 'knowledge' in mode:
         for i in output_str:
             logger.info(f"{mode}_{epoch} {i}")
     if mode == 'test':
@@ -470,6 +481,34 @@ def know_hit_ratio(args, pred_pt, gold_pt, new_knows=None, types=None, typelist=
     return hitdic, hitdic_ratio, output_str
 
 
+def KOrag_model_weight_logging(args, rag_model, epoch, mode, faiss_dataset):
+    def getweight(bert): return bert.layer[0].attention.self.key.weight[0][:50][0]
+    weight_log_file = os.path.join(args.output_dir, f'{epoch}_weights.txt')
+    if not os.path.exists(args.output_dir): os.makedirs(args.output_dir)
+    with open(weight_log_file, 'a', encoding='utf-8') as f:
+        f.write(f"\n{args.log_name}\n")
+        f.write(f"\n only decoder tune: {args.rag_onlyDecoderTune} // rag_our_bert: {args.rag_our_bert}\n")
+        f.write(f"{epoch}_{mode}\n")
+        f.write(f"model.question_encoder.training: {rag_model.question_encoder.training}\n")
+        f.write(f"model.generator.training: {rag_model.generator.training}\n")
+        f.write(f"model.rag.training: {rag_model.rag.training}\n")
+        f.write(f"model.rag.generator.training: {rag_model.rag.generator.training}\n")
+        if rag_model.rag.ctx_encoder:
+            f.write(f"model.rag.ctx_encoder.training: {rag_model.rag.ctx_encoder.training}\n")
+            f.write(f"\nmodel.rag.ctx_encoder.ctx_encoder.bert_model.encoder.layer[0].attention.self.key.weight[0][:50][0]\n")
+            f.write(f'{rag_model.rag.ctx_encoder.ctx_encoder.bert_model.encoder.layer[0].attention.self.key.weight[0][:50][0]}\n')
+        f.write(f"\nmodel.rag.question_encoder.question_encoder.bert_model.base_model.encoder.layer[0].attention.self.key.weight[0][:50][0]\n")
+        f.write(f"{rag_model.rag.question_encoder.question_encoder.bert_model.base_model.encoder.layer[0].attention.self.key.weight[0][:50][0]}")
+        f.write(f"\nmodel.rag.generator.model.encoder.base_model.layers[0].self_attn.k_proj.weight[0][:50][0]\n")
+        f.write(f"{rag_model.rag.generator.model.encoder.base_model.layers[0].self_attn.k_proj.weight[0][:50][0]}")
+        f.write(f"\nmodel.rag.generator.model.decoder.base_model.layers[0].self_attn.k_proj.weight[0][:50][0]\n")
+        f.write(f'{rag_model.rag.generator.model.decoder.base_model.layers[0].self_attn.k_proj.weight[0][:50][0]}\n')
+        f.write(f"\nfaiss dataset [0,5,10,15][:50][0]\n")
+        f.write(f'{faiss_dataset[0]["embeddings"][:50][0]}, {faiss_dataset[5]["embeddings"][:50][0]}')
+        f.write(f'{faiss_dataset[10]["embeddings"][:50][0]}, {faiss_dataset[15]["embeddings"][:50][0]}')
+        f.write(f'{mode}-----------------End----------------\n\n')
+
+
 def rag_model_weight_logging(args, model, epoch, mode, faiss_dataset):
     # weight_log_file = os.path.join(args.output_dir,f'{epoch}_{mode}_weights.txt')
     weight_log_file = os.path.join(args.output_dir, f'{epoch}_weights.txt')
@@ -552,29 +591,29 @@ def distinct(candidates):  # From UniMIND
     return intra_dist1, intra_dist2, inter_dist1, inter_dist2
 
 
-def index_update(args, model=None, tokenizer=None, dataset=None):
-    if model:
-        ctx_encoder = model.rag.ctx_encoder
-    else:
-        ctx_encoder = DPRContextEncoder.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=os.path.join(args.home, 'model_cache')).to(device=args.device)
-    # ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=os.path.join(args.home,'model_cache'))
-    ctx_tokenizer = tokenizer
-    # knowledgeDB_csv_path=os.path.join(args.home, 'data', 'rag', 'my_knowledge_dataset.csv')
-    dataset = load_dataset("csv", data_files=[args.knowledgeDB_csv_path], split="train", delimiter="\t", column_names=["title", "text"])
-    dataset = dataset.map(split_documents, batched=True, num_proc=4)
+# def index_update(args, model=None, tokenizer=None, dataset=None):
+#     if model:
+#         ctx_encoder = model.rag.ctx_encoder
+#     else:
+#         ctx_encoder = DPRContextEncoder.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=os.path.join(args.home, 'model_cache')).to(device=args.device)
+#     # ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained("facebook/dpr-ctx_encoder-multiset-base", cache_dir=os.path.join(args.home,'model_cache'))
+#     ctx_tokenizer = tokenizer
+#     # knowledgeDB_csv_path=os.path.join(args.home, 'data', 'rag', 'my_knowledge_dataset.csv')
+#     dataset = load_dataset("csv", data_files=[args.knowledgeDB_csv_path], split="train", delimiter="\t", column_names=["title", "text"])
+#     dataset = dataset.map(split_documents, batched=True, num_proc=4)
 
-    new_features = Features({"text": Value("string"), "title": Value("string"), "embeddings": Sequence(Value("float32"))})  # optional, save as float32 instead of float64 to save space
-    logger.info("Create Knowledge Dataset")
-    new_dataset = dataset.map(
-        partial(embed, ctx_encoder=ctx_encoder, ctx_tokenizer=ctx_tokenizer, args=args),
-        batched=True, batch_size=args.batch_size, features=new_features, )
+#     new_features = Features({"text": Value("string"), "title": Value("string"), "embeddings": Sequence(Value("float32"))})  # optional, save as float32 instead of float64 to save space
+#     logger.info("Create Knowledge Dataset")
+#     new_dataset = dataset.map(
+#         partial(embed, ctx_encoder=ctx_encoder, ctx_tokenizer=ctx_tokenizer, args=args),
+#         batched=True, batch_size=args.batch_size, features=new_features, )
 
-    new_dataset.save_to_disk(args.passages_path)
+#     new_dataset.save_to_disk(args.passages_path)
 
-    index = faiss.IndexHNSWFlat(768, 128, faiss.METRIC_INNER_PRODUCT)
-    new_dataset.add_faiss_index("embeddings", custom_index=index)
-    # model.rag.retriever.re_load() # Error
-    model.rag.retriever.init_retrieval()
+#     index = faiss.IndexHNSWFlat(768, 128, faiss.METRIC_INNER_PRODUCT)
+#     new_dataset.add_faiss_index("embeddings", custom_index=index)
+#     # model.rag.retriever.re_load() # Error
+#     model.rag.retriever.init_retrieval()
 
 
 def split_documents(documents: dict) -> dict:
@@ -594,11 +633,11 @@ def split_text(text: str, n=100, character=" ") -> List[str]:
     return [character.join(text[i: i + n]).strip() for i in range(0, len(text), n)]
 
 
-def embed(documents: dict, ctx_encoder: DPRContextEncoder, ctx_tokenizer: DPRContextEncoderTokenizerFast, args) -> dict:
-    """Compute the DPR embeddings of document passages"""
-    input_ids = ctx_tokenizer(documents["title"], documents["text"], truncation=True, padding="longest", return_tensors="pt")["input_ids"]
-    embeddings = ctx_encoder(input_ids.to(device=args.device), return_dict=True).pooler_output
-    return {"embeddings": embeddings.detach().cpu().numpy()}
+# def embed(documents: dict, ctx_encoder: DPRContextEncoder, ctx_tokenizer: DPRContextEncoderTokenizerFast, args) -> dict:
+#     """Compute the DPR embeddings of document passages"""
+#     input_ids = ctx_tokenizer(documents["title"], documents["text"], truncation=True, padding="longest", return_tensors="pt")["input_ids"]
+#     embeddings = ctx_encoder(input_ids.to(device=args.device), return_dict=True).pooler_output
+#     return {"embeddings": embeddings.detach().cpu().numpy()}
 
 # if __name__ == "__main__":
 #     # args = parseargs()
