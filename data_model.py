@@ -24,13 +24,13 @@ class RagDataset(Dataset):
     def __init__(self, args, augmented_raw_sample, tokenizer=None, knowledgeDB=None, mode='train'):
         super(Dataset, self).__init__()
         self.args = args
-        self.mode=mode
+        self.mode = mode
         self.tokenizer = tokenizer
         self.augmented_raw_sample = augmented_raw_sample
-        self.input_max_length=args.rag_max_input_length
-        self.target_max_length=args.rag_max_target_length
+        self.input_max_length = args.rag_max_input_length
+        self.target_max_length = args.rag_max_target_length
         self.knowledgeDB = knowledgeDB
-    
+
     def set_tokenizer(self, tokenizer):
         self.tokenizer = tokenizer
 
@@ -43,33 +43,45 @@ class RagDataset(Dataset):
 
         context_batch = defaultdict()
         predicted_topic_list = deepcopy(data['predicted_topic'][:self.args.topk_topic])
+        predicted_topic_confidence_list = deepcopy(data['predicted_topic_confidence'][:self.args.topk_topic])
 
         if self.mode == 'train':
             random.shuffle(predicted_topic_list)
             predicted_goal, predicted_topic = data['predicted_goal'][0], '|'.join(predicted_topic_list)
-        else: # test
-            predicted_goal = data['predicted_goal'][0]
-            if data['predicted_topic_confidence'][0] > (1 - self.args.topic_conf):
-                predicted_topic = data['predicted_topic'][0]
-            else:
-                predicted_topic = '|'.join(predicted_topic_list)
+        else:  # test
+            # predicted_goal = data['predicted_goal'][0]
+            # if data['predicted_topic_confidence'][0] > (1 - self.args.topic_conf):
+            #     predicted_topic = data['predicted_topic'][0]
+            # else:
+            #     predicted_topic = '|'.join(predicted_topic_list)
+            cum_prob = 0
+            candidate_topic_entities = []
+            for topic, conf in zip(predicted_topic_list, predicted_topic_confidence_list):
+                candidate_topic_entities.append(topic)
+                cum_prob += conf
+                if cum_prob > self.args.topic_conf:
+                    break
+            predicted_topic = '|'.join(candidate_topic_entities)
 
-        prefix = '<topic>' + predicted_topic + self.tokenizer.question_encoder.sep_token
+        if self.args.rag_our_model == 'DPR' or self.args.rag_our_model == 'dpr':
+            prefix = ''
+        elif self.args.rag_our_model == 'C2DPR' or self.args.rag_our_model == 'c2dpr':
+            prefix = '<topic>' + predicted_topic + self.tokenizer.question_encoder.sep_token
 
         prefix_encoding = self.tokenizer.question_encoder.encode(prefix)[1:-1][:30]
-        
+
         input_sentence = self.tokenizer.question_encoder('<dialog>' + dialog, add_special_tokens=False).input_ids
-        input_sentence = [self.tokenizer.question_encoder.cls_token_id] + prefix_encoding + input_sentence[-(self.input_max_length - len(prefix_encoding) - 1) : ]
+        input_sentence = [self.tokenizer.question_encoder.cls_token_id] + prefix_encoding + input_sentence[-(self.input_max_length - len(prefix_encoding) - 1):]
         input_sentence = input_sentence + [pad_token_id] * (self.input_max_length - len(input_sentence))
 
         context_batch['input_ids'] = torch.LongTensor(input_sentence).to(self.args.device)
         attention_mask = context_batch['input_ids'].ne(pad_token_id)
         context_batch['attention_mask'] = attention_mask
         # response에서 [SEP] token 제거
-        
-        if '[SEP]' in response: response = response[ : response.index("[SEP]")]
-        
-        labels = self.tokenizer.generator(response, max_length=self.target_max_length, padding='max_length', truncation=True)['input_ids'] 
+
+        if '[SEP]' in response: response = response[: response.index("[SEP]")]
+
+        labels = self.tokenizer.generator(response, max_length=self.target_max_length, padding='max_length', truncation=True)['input_ids']
 
         context_batch['response'] = labels
         context_batch['goal_idx'] = self.args.goalDic['str'][goal]  # index로 바꿈
@@ -80,11 +92,12 @@ class RagDataset(Dataset):
             if not isinstance(v, torch.Tensor):
                 context_batch[k] = torch.as_tensor(v, device=self.args.device)
                 # context_batch[k] = torch.as_tensor(v)
-        context_batch['target_knowledge_label'] = target_knowledge.replace('\t',' ')
+        context_batch['target_knowledge_label'] = target_knowledge.replace('\t', ' ')
         return context_batch
 
     def __len__(self):
         return len(self.augmented_raw_sample)
+
 
 class GenerationDataset(Dataset):
     """
@@ -101,8 +114,8 @@ class GenerationDataset(Dataset):
         self.subtask = subtask  # goal , topic, resp
         self.generate_prompt_ids = self.tokenizer.convert_tokens_to_ids(self.tokenizer.tokenize('System:'))
         self.idxList = deque(maxlen=len(self.augmented_raw_sample))
-        self.TopicTask_Train_Prompt_usePredGoal = False # args.TopicTask_Train_Prompt_usePredGoal 
-        self.TopicTask_Test_Prompt_usePredGoal = True # args.TopicTask_Test_Prompt_usePredGoal -- Topic GP
+        self.TopicTask_Train_Prompt_usePredGoal = False  # args.TopicTask_Train_Prompt_usePredGoal
+        self.TopicTask_Test_Prompt_usePredGoal = True  # args.TopicTask_Test_Prompt_usePredGoal -- Topic GP
         # TopicTask_Train_Prompt_usePredGoal TopicTask_Test_Prompt_usePredGoal
 
     def __getitem__(self, idx):  # TODO 구현 전
@@ -181,6 +194,7 @@ class GenerationDataset(Dataset):
     def __len__(self):
         return len(self.augmented_raw_sample)
 
+
 class ResponseDataset(Dataset):
     """
     response용
@@ -208,7 +222,7 @@ class ResponseDataset(Dataset):
         pad_token_id = self.tokenizer.pad_token_id
         context_batch = defaultdict()
 
-        if self.subtask=='resp':
+        if self.subtask == 'resp':
             encoder_tokenizer = None
             decoder_tokenizer = None
 
@@ -279,6 +293,7 @@ class ResponseDataset(Dataset):
 
     def __len__(self):
         return len(self.augmented_raw_sample)
+
 
 def convert_idx_to_docid(idx): return f"{idx}"
 
