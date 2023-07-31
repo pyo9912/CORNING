@@ -30,7 +30,7 @@ def add_ours_specific_args(parser):
     parser.add_argument("--uni_model_name", type=str, default='facebook/bart-base', help=" model name ")
     parser.add_argument("--uni_batch_size", type=int, default=32, help=" batchsize ")
     # parser.add_argument("--uni_input_dialog", type=str, default="dialog", help=" input dialog  ")
-    parser.add_argument("--uni_max_input_length", type=int, default=512, help=" input len: 512 ")
+    parser.add_argument("--uni_max_input_length", type=int, default=128, help=" input len: 512 ")
     parser.add_argument("--uni_max_target_length", type=int, default=100, help=" output len: 100 ")
     parser.add_argument("--uni_num_beams", type=int, default=1, help=" num beam ") # Only one
     parser.add_argument("--uni_pretrain_epochs", type=int, default=15, help=" pretrain_epoch default: 15 ")

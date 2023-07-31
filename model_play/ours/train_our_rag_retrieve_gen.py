@@ -131,7 +131,9 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
 
     kobart_tokenizer = get_kobart_tokenizer(cachedir=os.path.join(args.home,'model_cache','kobart'))
     kobart_tokenizer.name_or_path = 'skt/kobart_tokenizer'
+    kobart_tokenizer.add_special_tokens({'additional_special_tokens': ['<dialog>', '<topic>', '<type>', '<user_profile>', '<situation>','user: ','system: '],})
     kobart = BartForConditionalGeneration.from_pretrained(get_pytorch_kobart_model(cachedir=os.path.join(args.home,'model_cache','kobart'))).to(args.device)
+    kobart.resize_token_embeddings(len(kobart_tokenizer))
     kobart.name_or_path='skt/kobart'
     ### MODEL CALL
     retriever = RagRetriever.from_pretrained('facebook/rag-sequence-nq', index_name='custom', indexed_dataset=faiss_dataset, init_retrieval=True)
@@ -142,7 +144,7 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
     rag_model = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever).to(args.device)
     rag_tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
     # if args.rag_ctx_training: 
-    rag_model.set_context_encoder_for_training(ctx_encoder) # All Fine-tune 때 쓰던 코드같은데 이거 키면 ctx_encoder가 학습됨
+    # rag_model.set_context_encoder_for_training(ctx_encoder) # All Fine-tune 때 쓰던 코드같은데 이거 키면 ctx_encoder가 학습됨
     
     logger.info("\n\n@@@@@@@@@@@@@@@@@@@@@@@@@@ Model Ko-BERT to rag.question_encoder @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
     rag_model.rag.question_encoder.question_encoder.bert_model = our_question_encoder
@@ -169,7 +171,8 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
     test_dataloader = DataLoader(test_Dataset, batch_size=args.rag_batch_size, shuffle=False)
 
     optimizer = torch.optim.AdamW(rag_model.parameters(), lr=args.rag_lr, weight_decay=0.1, eps=5e-9)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.rag_epochs * len(train_dataloader), eta_min=args.rag_lr * 0.1)
+    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.rag_epochs * len(train_dataloader), eta_min=args.rag_lr * 0.1)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_dc_step, gamma=args.lr_dc)
     best_hitdic_ratio = {'total': {'hit1': 0, 'hit3': 0, 'hit5': 0, 'hit1_new': 0, 'hit3_new': 0, 'hit5_new': 0, 'total': 0}}
     best_hitdic_str = None
     logger.info(f"Logging Epoch results:                      hit@1, hit@3, hit@5, hit_new@1, hit_new@3, hit_new@5")
