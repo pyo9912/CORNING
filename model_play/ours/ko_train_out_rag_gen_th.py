@@ -190,7 +190,7 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
     for epoch in range(args.rag_epochs):
         logger.info(f"RAG_LR: {args.rag_lr}")
         rag_model.train()
-        if args.rag_onlyDecoderTune:
+        if args.rag_onlyDecoderTune or args.rag_our_bert:
             logger.info(f"\n\n*****RAG_Only_Decoder Tune!***** rag_lr: {args.rag_lr}");
             logger.info(f"*****RAG_Only_Decoder Tune!***** rag_lr: {args.rag_lr}\n\n")
             rag_model.eval()
