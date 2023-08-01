@@ -67,7 +67,7 @@ class RagDataset(Dataset):
             prefix = ''
         
 
-        prefix_encoding = self.tokenizer.question_encoder.encode(prefix)[1:-1][:64] # --> 64까지 늘어나야함
+        prefix_encoding = self.tokenizer.question_encoder.encode(prefix)[1:-1][:self.input_max_length // 4] # --> 64까지 늘어나야함
 
         input_sentence = self.tokenizer.question_encoder(f'<dialog> {dialog} Generate the response: ', add_special_tokens=False).input_ids
         input_sentence = [self.tokenizer.question_encoder.cls_token_id] + prefix_encoding + input_sentence[-(self.input_max_length - len(prefix_encoding) - 1):]
@@ -97,7 +97,9 @@ class RagDataset(Dataset):
                 context_batch['context_knowledges'] = [self.knowledgeDB.index(i) for i in candidate_knowledges[:5]]
         ## END ##
 
-        context_batch['response'] = labels
+        # context_batch['response'] = labels
+        context_batch['response'] = [self.tokenizer.generator.bos_token_id] + labels
+        
         context_batch['goal_idx'] = self.args.goalDic['str'][goal]  # index로 바꿈
         context_batch['topic_idx'] = self.args.topicDic['str'][topic]  # index로 바꿈
         # context_batch['topic'] = self.tokenizer(topic, truncation=True, padding='max_length', max_length=32).input_ids
