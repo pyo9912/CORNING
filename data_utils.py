@@ -336,7 +336,7 @@ def dataset_reader_ko(args, data_name='train'):
             if 'know_candidates' in dialog:
                 know_candidates = dialog['know_candidates']
                 for idx, know_conf_list in enumerate(know_candidates):
-                    positive_candidates = [know[0] for know in know_conf_list]
+                    positive_candidates = [know[0].replace('\t', ' ') for know in know_conf_list]
 
                     conf_list = [know[1] for know in know_conf_list]
                     pseudo_knowledge_seq.append(positive_candidates)
