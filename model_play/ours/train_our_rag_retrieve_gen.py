@@ -131,7 +131,7 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
 
     kobart_tokenizer = get_kobart_tokenizer(cachedir=os.path.join(args.home,'model_cache','kobart'))
     kobart_tokenizer.name_or_path = 'skt/kobart_tokenizer'
-    kobart_tokenizer.add_special_tokens({'additional_special_tokens': ['<dialog>', '<topic>', '<type>', '<user_profile>', '<situation>','user: ','system: '],})
+    # kobart_tokenizer.add_special_tokens({'additional_special_tokens': ['<dialog>', '<topic>', '<type>', '<user_profile>', '<situation>','user: ','system: '],})
     kobart = BartForConditionalGeneration.from_pretrained(get_pytorch_kobart_model(cachedir=os.path.join(args.home,'model_cache','kobart'))).to(args.device)
     kobart.resize_token_embeddings(len(kobart_tokenizer))
     kobart.name_or_path='skt/kobart'
