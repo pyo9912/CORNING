@@ -1,7 +1,7 @@
 #!/bin/bash
 # 아래에 실행시키려는 녀석들 다 입력해놓고, 마지막 echo "" 따옴표 안에 어떤걸 보기위한 실험이었는지 적어놓기
 
-
+python bart_unimind_main_ko.py --gpu=2 --log_name="2type_256_UniMIND_37train_37test_1e4_NoSpecialTokens" --method=unimind --uni_lr=1e-4 --uni_max_input_length=256 
 
 python komain.py --gpu=3 --version='ko' --task=resp --log_name="KO_Sch_256RAG_know_resp측정_1e-4" --rag_lr=1e-4 --rag_epochs=10 
 python komain.py --gpu=3 --version='ko' --task=resp --log_name="KO_Sch_256RAG_know_resp측정_1e-5" --rag_lr=1e-5 --rag_epochs=10 

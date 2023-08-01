@@ -114,7 +114,8 @@ def main(args=None):
 
     tokenizer = get_kobart_tokenizer(cachedir=os.path.join(args.home,'model_cache','kobart'))
     bart = BartForConditionalGeneration.from_pretrained(get_pytorch_kobart_model(cachedir=os.path.join(args.home,'model_cache','kobart')))
-    tokenizer.add_special_tokens({'additional_special_tokens':['goal: ','User: ','System: ','topic: ']})
+    # tokenizer.add_special_tokens({'additional_special_tokens':['goal: ','User: ','System: ','topic: ']})
+    # tokenizer.add_special_tokens({'additional_special_tokens':['goal: ','User: ','System: ','topic: ']})
     bart.resize_token_embeddings(len(tokenizer))
     bart.to(args.device)
 

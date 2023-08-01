@@ -235,8 +235,8 @@ def main(args=None):
         # eval_know_retrieve.eval_know(args, test_dataloader, retriever, all_knowledge_data, all_knowledgeDB, tokenizer, write=False)  # HJ: Knowledge text top-k 뽑아서 output만들어 체크하던 코드 분리
 
     if 'resp' in args.task:
-        from model_play.ours import train_our_rag_retrieve_gen
-        train_our_rag_retrieve_gen.train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
+        from model_play.ours import ko_train_our_rag_gen
+        ko_train_our_rag_gen.train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
     
     logger.info("THE END")
     return

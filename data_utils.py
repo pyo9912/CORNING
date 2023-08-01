@@ -325,6 +325,7 @@ def dataset_reader_ko(args, data_name='train'):
             dialog = json.loads(line)
             role_seq = dialog['role']#[i.split(':')[0] for i in conversation]
             conversation = [f"{role}: {utt}" for role, utt in zip(role_seq, dialog['conversation'])]
+            # conversation = [f"{'사용자' if role=='user' else '시스템'}: {utt}" for role, utt in zip(role_seq, dialog['conversation'])]
 
             # knowledge_seq = [j.replace('\n', '') for j in dialog['knowledge']]
             # knowledge_seq = dialog['knowledge']
