@@ -132,7 +132,7 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
 
     kobart_tokenizer = get_kobart_tokenizer(cachedir=os.path.join(args.home,'model_cache','kobart'))
     kobart_tokenizer.name_or_path = 'skt/kobart_tokenizer'
-    # kobart_tokenizer.add_special_tokens({'additional_special_tokens': ['<dialog>', '<topic>', '<type>', '<user_profile>', '<situation>','user: ','system: '],})
+    kobart_tokenizer.add_special_tokens({'additional_special_tokens': ['<dialog>', '<topic>', '<type>', '<user_profile>', '<situation>','user: ','system: '],})
     kobart = BartForConditionalGeneration.from_pretrained(get_pytorch_kobart_model(cachedir=os.path.join(args.home,'model_cache','kobart'))).to(args.device)
     kobart.resize_token_embeddings(len(kobart_tokenizer))
     kobart.name_or_path='skt/kobart'
@@ -166,9 +166,17 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
         rag_tokenizer.question_encoder = tokenizer
     logger.info(f"RAG Model question_encoder layer0.key.weight: {rag_model.rag.question_encoder.question_encoder.bert_model.encoder.layer[0].attention.self.key.weight[0][:50][0]}")
     
+    # if args.rag_our_bert:
     train_Dataset = data_model.RagDataset(args, train_dataset_aug_pred, rag_tokenizer, all_knowledgeDB, mode='train')
     test_Dataset = data_model.RagDataset(args, test_dataset_aug_pred, rag_tokenizer, all_knowledgeDB, mode='test')
-    # UnimindDataset(args, pred_aug_dataset, tokenizer, mode='train', method='unimind')
+    # else:
+    #     ## UniMIND Dataset으로 Sch rag에 넣기
+    #     args.uni_max_input_length, args.uni_max_target_length = args.rag_max_input_length, args.rag_max_target_length
+    #     train_Dataset = data_model.UnimindDataset(args, train_dataset_aug_pred, rag_tokenizer, mode='train', method='unimind')
+    #     test_Dataset = data_model.UnimindDataset(args, test_dataset_aug_pred, rag_tokenizer, mode='test', method='unimind')
+    
+    
+    
     train_dataloader = DataLoader(train_Dataset, batch_size=args.rag_batch_size, shuffle=True)
     test_dataloader = DataLoader(test_Dataset, batch_size=args.rag_batch_size, shuffle=False)
 
