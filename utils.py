@@ -263,8 +263,8 @@ def default_parser(parser):
     parser.add_argument('--max_length', default=128, type=int, help="dataset name")  # max_length_know 로 변경 예정
     parser.add_argument("--know_ablation", default='pseudo', type=str, help="know_ablation", choices=['target', 'pseudo'])
     parser.add_argument("--train_ablation", default='RG', type=str, help="train ablation", choices=['R', 'S', 'RG', 'LG', 'G', 'O'])
-    parser.add_argument('--topk_topic', default=2, type=int, help="num of topics for input prompt")
-    parser.add_argument('--topic_conf', type=float, default=0.2, help='Minimum threshold for topic confidence')
+    parser.add_argument('--topk_topic', default=3, type=int, help="num of topics for input prompt")
+    parser.add_argument('--topic_conf', type=float, default=0.6, help='Minimum threshold for topic confidence')
     parser.add_argument('--know_conf', type=float, default=0.2, help='Minimum threshold for topic confidence')
     parser.add_argument("--know_max_length", type=int, default=128, help=" Knowledge Max Length ")
 

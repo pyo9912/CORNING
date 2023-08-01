@@ -38,6 +38,81 @@ class RagDataset(Dataset):
         data = self.augmented_raw_sample[item]
         cbdicKeys = ['dialog', 'user_profile', 'response', 'goal', 'topic', 'situation', 'target_knowledge', 'candidate_knowledges', 'candidate_confidences']
         dialog, user_profile, response, goal, topic, situation, target_knowledge, candidate_knowledges, candidate_confidences = [data[i] for i in cbdicKeys]
+
+        pad_token_id = self.tokenizer.question_encoder.pad_token_id
+
+        context_batch = defaultdict()
+        predicted_topic_list = deepcopy(data['predicted_topic'][:self.args.topk_topic])
+        predicted_topic_confidence_list = deepcopy(data['predicted_topic_confidence'][:self.args.topk_topic])
+
+        if self.mode == 'train':
+            random.shuffle(predicted_topic_list)
+            predicted_goal, predicted_topic = data['predicted_goal'][0], '|'.join(predicted_topic_list)
+        else:  # test
+            cum_prob = 0
+            candidate_topic_entities = []
+            for topic, conf in zip(predicted_topic_list, predicted_topic_confidence_list):
+                candidate_topic_entities.append(topic)
+                cum_prob += conf
+                if cum_prob > self.args.topic_conf:
+                    break
+            predicted_topic = '|'.join(candidate_topic_entities)
+
+        if self.args.rag_our_model == 'DPR' or self.args.rag_our_model == 'dpr':
+            prefix = ''
+        elif self.args.rag_our_model == 'C2DPR' or self.args.rag_our_model == 'c2dpr':
+            prefix = '<topic>' + predicted_topic + self.tokenizer.question_encoder.sep_token
+        else:  # Scratch DPR
+            prefix = ''
+
+        prefix_encoding = self.tokenizer.question_encoder.encode(prefix)[1:-1][:self.input_max_length//4]  # --> 64까지 늘어나야함
+
+        input_sentence = self.tokenizer.question_encoder('<dialog>' + dialog, add_special_tokens=False).input_ids
+        input_sentence = [self.tokenizer.question_encoder.cls_token_id] + prefix_encoding + input_sentence[-(self.input_max_length - len(prefix_encoding) - 1):]
+        input_sentence = input_sentence + [pad_token_id] * (self.input_max_length - len(input_sentence))
+
+        context_batch['input_ids'] = torch.LongTensor(input_sentence).to(self.args.device)
+        attention_mask = context_batch['input_ids'].ne(pad_token_id)
+        context_batch['attention_mask'] = attention_mask
+        # response에서 [SEP] token 제거
+
+        if '[SEP]' in response: response = response[: response.index("[SEP]")]
+
+        labels = self.tokenizer.generator(response, max_length=self.target_max_length, padding='max_length', truncation=True)['input_ids']
+
+        context_batch['response'] = [self.tokenizer.generator.bos_token_id] + labels
+        context_batch['goal_idx'] = self.args.goalDic['str'][goal]  # index로 바꿈
+        context_batch['topic_idx'] = self.args.topicDic['str'][topic]  # index로 바꿈
+        # context_batch['topic'] = self.tokenizer(topic, truncation=True, padding='max_length', max_length=32).input_ids
+        # context_batch['target_knowledge_label'] = self.knowledgeDB.index(target_knowledge)
+        for k, v in context_batch.items():
+            if not isinstance(v, torch.Tensor):
+                context_batch[k] = torch.as_tensor(v, device=self.args.device)
+                # context_batch[k] = torch.as_tensor(v)
+        context_batch['target_knowledge_label'] = target_knowledge.replace('\t', ' ')
+        return context_batch
+
+    def __len__(self):
+        return len(self.augmented_raw_sample)
+
+class RagDataset_EN(Dataset):
+    def __init__(self, args, augmented_raw_sample, tokenizer=None, knowledgeDB=None, mode='train'):
+        super(Dataset, self).__init__()
+        self.args = args
+        self.mode = mode
+        self.tokenizer = tokenizer
+        self.augmented_raw_sample = augmented_raw_sample
+        self.input_max_length = args.rag_max_input_length
+        self.target_max_length = args.rag_max_target_length
+        self.knowledgeDB = knowledgeDB
+
+    def set_tokenizer(self, tokenizer):
+        self.tokenizer = tokenizer
+
+    def __getitem__(self, item):
+        data = self.augmented_raw_sample[item]
+        cbdicKeys = ['dialog', 'user_profile', 'response', 'goal', 'topic', 'situation', 'target_knowledge', 'candidate_knowledges', 'candidate_confidences']
+        dialog, user_profile, response, goal, topic, situation, target_knowledge, candidate_knowledges, candidate_confidences = [data[i] for i in cbdicKeys]
         dialog = dialog.replace('[SEP]', '</s> ')# .replace('user: ', '사용자: ').replace('system: ', '시스템: ')
         response = response.replace('[SEP]', '</s>')# .replace('system: ', '시스템: ')
         pad_token_id = self.tokenizer.question_encoder.pad_token_id
@@ -83,22 +158,23 @@ class RagDataset(Dataset):
 
         ## Context_input_ids 사용하기 Start ##
         if self.args.rag_our_bert:
+            top5_knows, top5_confs = data['predicted_know'], data['predicted_know_confidence'] # candidate_knowledges[:5], candidate_knowledges[:5]]
             context_batch['context_input_ids']=[]
             context_batch['context_input_attention_mask']=[]
             context_batch['context_doc_scores'] =[]
             context_batch['context_knowledges'] =[]
-            context_input5 = [f"{i} , {dialog} Generate the response: "  for i in candidate_knowledges[:5]]
+            context_input5 = [f"{i} , {dialog} Generate the response: "  for i in top5_knows]
             context_input5_tokenizes = self.tokenizer.generator(context_input5, max_length=self.input_max_length, padding='max_length', truncation=True)
             doc_scores = candidate_confidences[:5]
             for context_input5_input_ids,context_input5_attention_masks, doc_score in zip(context_input5_tokenizes.input_ids, context_input5_tokenizes.attention_mask, doc_scores):
                 context_batch['context_input_ids'].append(context_input5_input_ids)
                 context_batch['context_input_attention_mask'].append(context_input5_attention_masks)
                 context_batch['context_doc_scores'].append(doc_score)
-                context_batch['context_knowledges'] = [self.knowledgeDB.index(i) for i in candidate_knowledges[:5]]
+                context_batch['context_knowledges'] = [self.knowledgeDB.index(i) for i in top5_confs]
         ## END ##
 
-        # context_batch['response'] = labels
-        context_batch['response'] = [self.tokenizer.generator.bos_token_id] + labels
+        context_batch['response'] = labels
+        # context_batch['response'] = [self.tokenizer.generator.bos_token_id] + labels
         
         context_batch['goal_idx'] = self.args.goalDic['str'][goal]  # index로 바꿈
         context_batch['topic_idx'] = self.args.topicDic['str'][topic]  # index로 바꿈
@@ -113,7 +189,6 @@ class RagDataset(Dataset):
 
     def __len__(self):
         return len(self.augmented_raw_sample)
-
 
 class GenerationDataset(Dataset):
     """

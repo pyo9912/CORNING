@@ -40,7 +40,7 @@ def add_ours_specific_args(parser):
     # parser.add_argument("--rag_scratch", action='store_false', help="우리의 retriever모델을 쓸지 말지")  # --rag_scratch하면 scratch모델 사용하게됨
     parser.add_argument("--rag_batch_size", type=int, default=6, help=" Method ")
     parser.add_argument("--rag_input_dialog", type=str, default="dialog", help=" Method ")
-    parser.add_argument("--rag_max_input_length", type=int, default=256, help=" Method ")
+    parser.add_argument("--rag_max_input_length", type=int, default=128, help=" Method ")
     parser.add_argument("--rag_max_target_length", type=int, default=128, help=" Method ")
     parser.add_argument("--rag_num_beams", type=int, default=5, help=" 현재 안쓰이고있음 ")
     parser.add_argument("--rag_epochs", type=int, default=7, help=" Method ") # 7까지 가면 best가 거의 나옴
@@ -52,6 +52,9 @@ def add_ours_specific_args(parser):
     parser.add_argument("--rag_ctx_training", action='store_true', help="rag 의 ctx_encoder또한 학습시킬지 말지 (scratch에서 사용)")
     
     parser.add_argument("--rag_our_model", default='', type=str, help="rag_our_version_bert", choices=['', 'DPR', 'C2DPR', 'dpr','c2dpr'])
+    
+    
+    parser.add_argument("--rag_context_input_length", type=int, default=256, help=" Method ")
     # parser.add_argument( "--method", type=str, default="ours", help=" Method " )
     return parser
 
@@ -236,8 +239,8 @@ def main(args=None):
 
     if 'resp' in args.task:
         from model_play.ours import ko_train_out_rag_gen_th ,ko_train_our_rag_gen
-        # ko_train_out_rag_gen_th.train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
-        ko_train_our_rag_gen.train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
+        ko_train_out_rag_gen_th.train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
+        # ko_train_our_rag_gen.train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
     
     logger.info("THE END")
     return

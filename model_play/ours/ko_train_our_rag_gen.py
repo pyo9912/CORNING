@@ -59,6 +59,7 @@ def make_know_pred(args, our_best_model, tokenizer, aug_Dataset, knowledge_index
         q_vector = our_best_model.query_bert(source_ids, source_mask).last_hidden_state[:, 0, :]
         doc_all_scores = (q_vector @ knowledge_index_rerank.transpose(1, 0))
         retrieved_doc_ids = torch.topk(doc_all_scores, k=5).indices
+        
         types.extend([args.goalDic['int'][int(idx)] for idx in batch['goal_idx']])
         pred_know_texts.extend([[dataloader.dataset.knowledgeDB[int(j)] for j in i ] for i in retrieved_doc_ids])
         pred_know_confs.extend([[float(j) for j in i] for i in torch.topk(doc_all_scores, k=5).values])
