@@ -147,7 +147,7 @@ class DialogDataset(Dataset):
         else:
             assert Exception
 
-        prefix_encoding = self.tokenizer.encode(prefix)[1:-1][:self.max_length/4]
+        prefix_encoding = self.tokenizer.encode(prefix)[1:-1][:self.args.max_length / 4]
         input_sentence = self.tokenizer('<dialog>' + dialog, add_special_tokens=False).input_ids
 
         input_sentence = [self.tokenizer.cls_token_id] + prefix_encoding + input_sentence[-(self.args.max_length - len(prefix_encoding) - 1):]
