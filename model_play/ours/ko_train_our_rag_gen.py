@@ -595,6 +595,7 @@ def distinct(candidates):  # From UniMIND
 
 from collections import defaultdict
 import random
+
 class Rag_context_Dataset(Dataset):
     def __init__(self, args, augmented_raw_sample, tokenizer=None, knowledgeDB=None, mode='train'):
         super(Dataset, self).__init__()
@@ -631,17 +632,15 @@ class Rag_context_Dataset(Dataset):
                 cum_prob += conf
                 if cum_prob > self.args.topic_conf:
                     break
-            predicted_topic = '|'.join(candidate_topic_entities)
+            predicted_goal, predicted_topic = data['predicted_goal'][0],  '|'.join(candidate_topic_entities)
 
-        if self.args.rag_our_model == 'DPR' or self.args.rag_our_model == 'dpr':
-            prefix = ''
-        elif self.args.rag_our_model == 'C2DPR' or self.args.rag_our_model == 'c2dpr':
-            prefix = '<topic>' + predicted_topic + self.tokenizer.question_encoder.sep_token
-        else:  # Scratch DPR
-            prefix = ''
+        if self.args.rag_our_model == 'DPR' or self.args.rag_our_model == 'dpr': prefix = ''
+        elif self.args.rag_our_model == 'C2DPR' or self.args.rag_our_model == 'c2dpr': prefix = '<topic>' + predicted_topic + self.tokenizer.question_encoder.sep_token
+        else: prefix = '' # Scratch DPR
+            
+
 
         prefix_encoding = self.tokenizer.question_encoder.encode(prefix)[1:-1][:self.input_max_length//4]  # --> 64까지 늘어나야함
-
         input_sentence = self.tokenizer.question_encoder('<dialog>' + dialog, add_special_tokens=False).input_ids
         input_sentence = [self.tokenizer.question_encoder.cls_token_id] + prefix_encoding + input_sentence[-(self.input_max_length - len(prefix_encoding) - 1):]
         input_sentence = input_sentence + [pad_token_id] * (self.input_max_length - len(input_sentence))
@@ -662,7 +661,9 @@ class Rag_context_Dataset(Dataset):
             context_batch['context_input_attention_mask']=[]
             context_batch['context_doc_scores'] =[]
             context_batch['context_knowledges'] =[]
-            context_input5 = [f"<s>{i}</s>{dialog} Generate the response: </s>"  for i in top5_knows]
+            # if self.args.rag_our_model
+            #  f"{dialog} goal: {predicted_goal} topic: {predicted_topic} Generate the response: "
+            context_input5 = [f"<s>{pred_know}</s>{dialog}</s> goal: {predicted_goal} </s> topic: {predicted_topic} Generate the response: </s>"  for pred_know in top5_knows]
             context_input5_tokenizes = self.tokenizer.generator(context_input5, max_length=self.input_max_length, padding='max_length', truncation=True)
             doc_scores = candidate_confidences[:5]
             for context_input5_input_ids,context_input5_attention_masks, doc_score in zip(context_input5_tokenizes.input_ids, context_input5_tokenizes.attention_mask, doc_scores):
@@ -724,8 +725,7 @@ class RagDataset(Dataset):
             for topic, conf in zip(predicted_topic_list, predicted_topic_confidence_list):
                 candidate_topic_entities.append(topic)
                 cum_prob += conf
-                if cum_prob > self.args.topic_conf:
-                    break
+                if cum_prob > self.args.topic_conf: break
             predicted_topic = '|'.join(candidate_topic_entities)
 
         if self.args.rag_our_model == 'DPR' or self.args.rag_our_model == 'dpr':

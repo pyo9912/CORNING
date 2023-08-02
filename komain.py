@@ -46,12 +46,12 @@ def add_ours_specific_args(parser):
     parser.add_argument("--rag_num_beams", type=int, default=5, help=" 현재 안쓰이고있음 ")
     parser.add_argument("--rag_epochs", type=int, default=7, help=" Method ") # 7까지 가면 best가 거의 나옴
     parser.add_argument('--rag_lr', type=float, default=1e-4, help='RAG Learning rate')
-    parser.add_argument("--rag_our_bert", action='store_true', help="우리의 retriever모델을 쓸지 말지")  # --rag_scratch하면 scratch모델 사용하게됨
-    parser.add_argument("--rag_train_alltype", action='store_true', help="우리의 retriever모델을 쓸지 말지")  
-    parser.add_argument("--rag_test_alltype", action='store_true', help="우리의 retriever모델을 쓸지 말지")  
-    parser.add_argument("--rag_onlyDecoderTune", action='store_true', help="rag decoder를 쓸 때, retriever부분 freeze하도록 세팅")
+    parser.add_argument("--rag_train_alltype", action='store_true', help="Input으로 넣을 때 all type할지 말지")  
+    parser.add_argument("--rag_test_alltype", action='store_true', help="Input으로 넣을 때 all type할지 말지")  
     parser.add_argument("--rag_ctx_training", action='store_true', help="rag 의 ctx_encoder또한 학습시킬지 말지 (scratch에서 사용)")
     
+    parser.add_argument("--rag_onlyDecoderTune", action='store_true', help="rag decoder를 쓸 때, retriever부분 freeze하도록 세팅")
+    parser.add_argument("--rag_our_bert", action='store_true', help="우리의 retriever모델을 쓸지 말지")  # --rag_scratch하면 scratch모델 사용하게됨
     parser.add_argument("--rag_our_model", default='', type=str, help="rag_our_version_bert", choices=['', 'DPR', 'C2DPR', 'dpr','c2dpr'])
     
     
