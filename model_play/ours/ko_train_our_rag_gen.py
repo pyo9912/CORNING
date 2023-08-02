@@ -363,9 +363,9 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
 def epoch_play_by_context_input_ids(args, tokenizer, model, data_loader, optimizer, scheduler, epoch, faiss_dataset, mode='train'):
     logger.info("Retrieve된 input으로 받아서 생성 (context_input_ids)")
     from tqdm import tqdm
-    epoch_loss, steps, gradient_accumulation_steps , cleanup = 0, 0, 500, True if epoch==0 else False
+    epoch_loss, steps, gradient_accumulation_steps , cleanup = 0, 0, 500, False if epoch==0 else False
     torch.cuda.empty_cache()
-    contexts, label_gold_knowledges, label_pseudo_knowledges, top5_docs, real_resps, gen_resp, new_knows = [], [], [], [], [], [], []
+    rag_contexts, contexts, label_gold_knowledges, label_pseudo_knowledges, top5_docs, real_resps, gen_resp, new_knows = [], [], [], [], [], [], [],[]
     types = []
     evaluatortype = ConvEvaluator_ByType(tokenizer=tokenizer, log_file_path=os.path.join(args.output_dir, f"{epoch}_{mode}_GEN_REPORT_TYPE.txt") if mode=='test' else None)
     for batch in tqdm(data_loader, desc=f"Epoch {epoch}__{mode}", bar_format=' {l_bar} | {bar:23} {r_bar}'):
@@ -403,7 +403,7 @@ def epoch_play_by_context_input_ids(args, tokenizer, model, data_loader, optimiz
         label_gold_knowledges.extend(knowledge_gold_label)
         # label_pseudo_knowledges.extend(knowledge_pseudo_label)
         types.extend(batch_types)
-
+        rag_contexts.extend(tokenizer.generator.batch_decode([i[0] for i in batch["context_input_ids"]]))
         if mode == 'test':
             gen_ids = model.generate(
                         context_input_ids = batch["context_input_ids"].reshape(-1, args.rag_context_input_length).to(args.device)
@@ -458,7 +458,7 @@ def epoch_play_by_context_input_ids(args, tokenizer, model, data_loader, optimiz
         output_str.append(f"intra_dist1, intra_dist2, inter_dist1, inter_dist2 : {intra_dist1:.3f}, {intra_dist2:.3f}, {inter_dist1:.3f}, {inter_dist2:.3f}")
         utils.write_pkl({'contexts':contexts, 'real_resp': real_resps, 'gen_resp': gen_resp, 'top5_docs':top5_docs, 'label_gold_knowledges':label_gold_knowledges, 'types': types}, os.path.join(args.output_dir,f"{epoch}_{mode}_inout.pkl"))
     logger.info(f"{mode} Loss: {epoch_loss:.3f}, PPL: {perplexity:.3f}")
-    save_preds(args, contexts, top5_docs, label_gold_knowledges, epoch=epoch, new_knows=new_knows, real_resp=real_resps, gen_resps=gen_resp, mode=mode)
+    save_preds(args, contexts, top5_docs, label_gold_knowledges, epoch=epoch, new_knows=new_knows, real_resp=real_resps, gen_resps=gen_resp, mode=mode, rag_context=rag_contexts)
     return hitdic, hitdic_ratio, output_str  # output_strings, hit1_ratio, total_hit1, total_hit3, total_hit5, total_hit1_new, total_hit3_new, total_hit5_new
 
 
@@ -543,7 +543,7 @@ def rag_model_weight_logging(args, model, epoch, mode, faiss_dataset):
         f.write(f'{mode}-----------------End----------------\n\n')
 
 
-def save_preds(args, context, pred_words, label_words, epoch=None, new_knows=None, real_resp=None, gen_resps=None, mode='train'):
+def save_preds(args, context, pred_words, label_words, epoch=None, new_knows=None, real_resp=None, gen_resps=None, mode='train', rag_context=None):
     # HJ: 동일 파일 덮어쓰면서 맨 윗줄에 몇번째 에폭인지만 쓰도록 수정
     log_file_name = mode + f'{str(epoch)}_' + args.log_name
     path = os.path.join(args.output_dir, log_file_name)
@@ -554,6 +554,7 @@ def save_preds(args, context, pred_words, label_words, epoch=None, new_knows=Non
         for i, (ctx, pred, label) in enumerate(zip(context, pred_words, label_words)):
             if i == 500: break
             f.write(f"Source: {ctx}\n")
+            if rag_context: f.write(f"Context_Input Top1: {rag_context[i]}\n")
             if new_knows: f.write(f"Is_New_Knows: {new_knows[i]}\n")
             f.write(f"Pred  : {pred}\n")
             f.write(f"Label : {label}\n")
@@ -663,7 +664,7 @@ class Rag_context_Dataset(Dataset):
             context_batch['context_knowledges'] =[]
             # if self.args.rag_our_model
             #  f"{dialog} goal: {predicted_goal} topic: {predicted_topic} Generate the response: "
-            context_input5 = [f"<s>{pred_know}</s>{dialog}</s> goal: {predicted_goal} </s> topic: {predicted_topic} Generate the response: </s>"  for pred_know in top5_knows]
+            context_input5 = [f"<s>{pred_know}</s>{dialog} goal: {predicted_goal} </s> topic: {predicted_topic} Generate the response: </s>"  for pred_know in top5_knows]
             context_input5_tokenizes = self.tokenizer.generator(context_input5, max_length=self.input_max_length, padding='max_length', truncation=True)
             doc_scores = candidate_confidences[:5]
             for context_input5_input_ids,context_input5_attention_masks, doc_score in zip(context_input5_tokenizes.input_ids, context_input5_tokenizes.attention_mask, doc_scores):
