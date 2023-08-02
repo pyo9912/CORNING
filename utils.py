@@ -216,6 +216,7 @@ def save_json(args, filename, saved_jsonlines):
 
 def default_parser(parser):
     # Default For All
+    parser.add_argument("--hj", action='store_true', help="Whether to Use hj temp.")
     parser.add_argument("--earlystop", action='store_true', help="Whether to Use EarlyStopping.")
     parser.add_argument("--task", default='know', type=str, help="Choose the task")
     parser.add_argument("--subtask", default='topic', type=str, help="Choose the task")

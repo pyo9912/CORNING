@@ -26,6 +26,7 @@ def add_ours_specific_args(parser):
     # parser.add_argument("--asdf", action='store_true', help="~할지 여부")
     # parser.add_argument( "--method", type=str, default="ours", option=["ours","kers"], help=" Method " )
     parser.add_argument("--gt_max_length", type=int, default=256, help=" Goal-Topic input max_length ")
+    parser.add_argument("--know_input_length", type=int, default=128, help=" knowledge retrieve input max_length ")
     parser.add_argument("--gt_batch_size", type=int, default=64, help=" Method ")
     parser.add_argument("--method", type=str, default="ours", help=" Method ")
     parser.add_argument("--TopicTask_Train_Prompt_usePredGoal", action='store_true', help="Topic Task 용 prompt로 pred goal 을 사용할지 여부")
@@ -38,13 +39,13 @@ def add_ours_specific_args(parser):
     ## For resp
     # parser.add_argument("--rag_retrieve_input_length", type=int, default=768, help=" Method ")
     # parser.add_argument("--rag_scratch", action='store_false', help="우리의 retriever모델을 쓸지 말지")  # --rag_scratch하면 scratch모델 사용하게됨
-    parser.add_argument("--rag_batch_size", type=int, default=6, help=" Method ")
+    parser.add_argument("--rag_batch_size", type=int, default=16, help=" Method ")
     parser.add_argument("--rag_input_dialog", type=str, default="dialog", help=" Method ")
     parser.add_argument("--rag_max_input_length", type=int, default=128, help=" Method ")
     parser.add_argument("--rag_max_target_length", type=int, default=128, help=" Method ")
     parser.add_argument("--rag_num_beams", type=int, default=5, help=" 현재 안쓰이고있음 ")
     parser.add_argument("--rag_epochs", type=int, default=7, help=" Method ") # 7까지 가면 best가 거의 나옴
-    parser.add_argument('--rag_lr', type=float, default=1e-5, help='RAG Learning rate')
+    parser.add_argument('--rag_lr', type=float, default=1e-4, help='RAG Learning rate')
     parser.add_argument("--rag_our_bert", action='store_true', help="우리의 retriever모델을 쓸지 말지")  # --rag_scratch하면 scratch모델 사용하게됨
     parser.add_argument("--rag_train_alltype", action='store_true', help="우리의 retriever모델을 쓸지 말지")  
     parser.add_argument("--rag_test_alltype", action='store_true', help="우리의 retriever모델을 쓸지 말지")  
@@ -239,8 +240,8 @@ def main(args=None):
 
     if 'resp' in args.task:
         from model_play.ours import ko_train_out_rag_gen_th ,ko_train_our_rag_gen
-        ko_train_out_rag_gen_th.train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
-        # ko_train_our_rag_gen.train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
+        if args.hj:  ko_train_our_rag_gen.train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
+        else: ko_train_out_rag_gen_th.train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
     
     logger.info("THE END")
     return

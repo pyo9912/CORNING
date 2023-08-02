@@ -51,7 +51,7 @@ def make_aug_gt_pred(args, bert_model, tokenizer, train_dataset_raw, test_datase
     return train_gt_pred_auged, test_gt_pred_auged
 
 def make_know_pred(args, our_best_model, tokenizer, aug_Dataset, knowledge_index_rerank,  all_knowledgeDB):
-    dataloader = DataLoader(aug_Dataset, batch_size=args.rag_batch_size, shuffle=False)
+    dataloader = DataLoader(aug_Dataset, batch_size=args.rag_batch_size*4, shuffle=False)
 
     types, pred_know_texts, pred_know_confs, label_gold_knowledges = [], [], [],[]
     for batch in tqdm(dataloader, desc=f"Epoch {'KnowRetrieve'}__{0}", bar_format=' {l_bar} | {bar:23} {r_bar}'):
@@ -60,11 +60,11 @@ def make_know_pred(args, our_best_model, tokenizer, aug_Dataset, knowledge_index
         doc_all_scores = (q_vector @ knowledge_index_rerank.transpose(1, 0))
         retrieved_doc_ids = torch.topk(doc_all_scores, k=5).indices
         
-        types.extend([args.goalDic['int'][int(idx)] for idx in batch['goal_idx']])
+        # types.extend([args.goalDic['int'][int(idx)] for idx in batch['goal_idx']])
         pred_know_texts.extend([[dataloader.dataset.knowledgeDB[int(j)] for j in i ] for i in retrieved_doc_ids])
         pred_know_confs.extend([[float(j) for j in i] for i in torch.topk(doc_all_scores, k=5).values])
         types.extend([args.taskDic['goal']['int'][int(i)] for i in batch['goal_idx']])
-
+        label_gold_knowledges.extend(batch['target_knowledge_label'])
     hitdic, hitdic_ratio, output_str = know_hit_ratio(args, pred_pt=pred_know_texts, gold_pt=label_gold_knowledges, new_knows=None, types=types)
     for i in output_str:
         logger.info(f"Knowledge_Check: {i}")
@@ -201,14 +201,15 @@ def train_KO_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, 
     #     train_Dataset = data_model.UnimindDataset(args, train_dataset_aug_pred, rag_tokenizer, mode='train', method='unimind')
     #     test_Dataset = data_model.UnimindDataset(args, test_dataset_aug_pred, rag_tokenizer, mode='test', method='unimind')
     
-    if args.rag_our_bert:
+    if args.rag_our_bert or args.rag_our_model:
         knowledge_data = KnowledgeDataset(args, all_knowledgeDB, tokenizer)  # KTH: FOR RETRIEVE
         knowledge_index_rerank = knowledge_reindexing(args, knowledge_data, our_best_model, stage='rerank')  # KTH: FOR RETRIEVE
         knowledge_index_rerank = knowledge_index_rerank.to(args.device)  # KTH: FOR RETRIEVE
         know_aug_train_dataset = make_know_pred(args, our_best_model, tokenizer, train_Dataset, knowledge_index_rerank, all_knowledgeDB)
-        # for pred, conf in zip(tmp_preds, tmp_confs):
         know_aug_test_dataset = make_know_pred(args, our_best_model, tokenizer, test_Dataset, knowledge_index_rerank, all_knowledgeDB)
-    
+        train_Dataset = Rag_context_Dataset(args, know_aug_train_dataset, rag_tokenizer, all_knowledgeDB, mode='train')
+        test_Dataset = Rag_context_Dataset(args, know_aug_test_dataset, rag_tokenizer, all_knowledgeDB, mode='train')
+        logger.info(f"Dataset Knowledge Augmented Finish")
     train_dataloader = DataLoader(train_Dataset, batch_size=args.rag_batch_size, shuffle=True)
     test_dataloader = DataLoader(test_Dataset, batch_size=args.rag_batch_size, shuffle=False)
     
@@ -373,8 +374,8 @@ def epoch_play_by_context_input_ids(args, tokenizer, model, data_loader, optimiz
         # batch["context_input_ids"].reshape(-1, args.rag_max_input_length), batch["context_doc_scores"]
         #### Whole Model 사용시
         outputs = model(
-                    context_input_ids = batch["context_input_ids"].reshape(-1, args.rag_max_input_length).to(args.device)
-                    ,context_attention_mask = batch["context_input_attention_mask"].reshape(-1,args.rag_max_input_length).to(args.device)
+                    context_input_ids = batch["context_input_ids"].reshape(-1, args.rag_context_input_length).to(args.device)
+                    ,context_attention_mask = batch["context_input_attention_mask"].reshape(-1,args.rag_context_input_length).to(args.device)
                     ,decoder_input_ids = batch["response"].to(args.device)
                     ,doc_scores = batch['context_doc_scores'].to(args.device)
                     , labels = target_ids
@@ -405,8 +406,8 @@ def epoch_play_by_context_input_ids(args, tokenizer, model, data_loader, optimiz
 
         if mode == 'test':
             gen_ids = model.generate(
-                        context_input_ids = batch["context_input_ids"].reshape(-1, args.rag_max_input_length).to(args.device)
-                        ,context_attention_mask = batch["context_input_attention_mask"].reshape(-1,args.rag_max_input_length).to(args.device)
+                        context_input_ids = batch["context_input_ids"].reshape(-1, args.rag_context_input_length).to(args.device)
+                        ,context_attention_mask = batch["context_input_attention_mask"].reshape(-1,args.rag_context_input_length).to(args.device)
                         ,doc_scores = batch['context_doc_scores'].to(args.device)
                         ,num_beams=1, early_stopping=True
                     )
@@ -592,21 +593,190 @@ def distinct(candidates):  # From UniMIND
     intra_dist2 = np.average(intra_dist2)  # Dist
     return intra_dist1, intra_dist2, inter_dist1, inter_dist2
 
+from collections import defaultdict
+import random
+class Rag_context_Dataset(Dataset):
+    def __init__(self, args, augmented_raw_sample, tokenizer=None, knowledgeDB=None, mode='train'):
+        super(Dataset, self).__init__()
+        self.args = args
+        self.mode = mode
+        self.tokenizer = tokenizer
+        self.augmented_raw_sample = augmented_raw_sample
+        self.input_max_length = args.rag_context_input_length     # TODO: TEMP args.rag_max_input_length=args.rag_context_input_length
+        self.target_max_length = args.rag_max_target_length   # TODO: TEMP
+        self.knowledgeDB = knowledgeDB
+
+    def set_tokenizer(self, tokenizer):
+        self.tokenizer = tokenizer
+
+    def __getitem__(self, item):
+        data = self.augmented_raw_sample[item]
+        cbdicKeys = ['dialog', 'user_profile', 'response', 'goal', 'topic', 'situation', 'target_knowledge', 'candidate_knowledges', 'candidate_confidences']
+        dialog, user_profile, response, goal, topic, situation, target_knowledge, candidate_knowledges, candidate_confidences = [data[i] for i in cbdicKeys]
+        dialog, response = dialog.replace('[SEP]','</s>') , response.replace('[SEP]','</s>')
+        pad_token_id = self.tokenizer.question_encoder.pad_token_id
+
+        context_batch = defaultdict()
+        predicted_topic_list = deepcopy(data['predicted_topic'][:self.args.topk_topic])
+        predicted_topic_confidence_list = deepcopy(data['predicted_topic_confidence'][:self.args.topk_topic])
+
+        if self.mode == 'train':
+            random.shuffle(predicted_topic_list)
+            predicted_goal, predicted_topic = data['predicted_goal'][0], '|'.join(predicted_topic_list)
+        else:  # test
+            cum_prob = 0
+            candidate_topic_entities = []
+            for topic, conf in zip(predicted_topic_list, predicted_topic_confidence_list):
+                candidate_topic_entities.append(topic)
+                cum_prob += conf
+                if cum_prob > self.args.topic_conf:
+                    break
+            predicted_topic = '|'.join(candidate_topic_entities)
+
+        if self.args.rag_our_model == 'DPR' or self.args.rag_our_model == 'dpr':
+            prefix = ''
+        elif self.args.rag_our_model == 'C2DPR' or self.args.rag_our_model == 'c2dpr':
+            prefix = '<topic>' + predicted_topic + self.tokenizer.question_encoder.sep_token
+        else:  # Scratch DPR
+            prefix = ''
+
+        prefix_encoding = self.tokenizer.question_encoder.encode(prefix)[1:-1][:self.input_max_length//4]  # --> 64까지 늘어나야함
+
+        input_sentence = self.tokenizer.question_encoder('<dialog>' + dialog, add_special_tokens=False).input_ids
+        input_sentence = [self.tokenizer.question_encoder.cls_token_id] + prefix_encoding + input_sentence[-(self.input_max_length - len(prefix_encoding) - 1):]
+        input_sentence = input_sentence + [pad_token_id] * (self.input_max_length - len(input_sentence))
+
+        context_batch['input_ids'] = torch.LongTensor(input_sentence).to(self.args.device)
+        attention_mask = context_batch['input_ids'].ne(pad_token_id)
+        context_batch['attention_mask'] = attention_mask
+        # response에서 [SEP] token 제거
+
+        if '[SEP]' in response: response = response[: response.index("[SEP]")]
+
+        labels = self.tokenizer.generator(response, max_length=self.target_max_length, padding='max_length', truncation=True)['input_ids']
+
+        ## Context_input_ids 사용하기 Start ##
+        if self.args.rag_our_bert:
+            top5_knows, top5_confs = data['predicted_know'], data['predicted_know_confidence'] # candidate_knowledges[:5], candidate_knowledges[:5]]
+            context_batch['context_input_ids']=[]
+            context_batch['context_input_attention_mask']=[]
+            context_batch['context_doc_scores'] =[]
+            context_batch['context_knowledges'] =[]
+            context_input5 = [f"<s>{i}</s>{dialog} Generate the response: </s>"  for i in top5_knows]
+            context_input5_tokenizes = self.tokenizer.generator(context_input5, max_length=self.input_max_length, padding='max_length', truncation=True)
+            doc_scores = candidate_confidences[:5]
+            for context_input5_input_ids,context_input5_attention_masks, doc_score in zip(context_input5_tokenizes.input_ids, context_input5_tokenizes.attention_mask, doc_scores):
+                context_batch['context_input_ids'].append(context_input5_input_ids)
+                context_batch['context_input_attention_mask'].append(context_input5_attention_masks)
+                context_batch['context_doc_scores'].append(doc_score)
+                context_batch['context_knowledges'] = [self.args.all_knowledgeDB.index(i) for i in top5_knows]
+        ## END ##
 
 
 
-def split_documents(documents: dict) -> dict:
-    """Split documents into passages"""
-    titles, texts = [], []
-    for title, text in zip(documents["title"], documents["text"]):
-        if text is not None:
-            for passage in split_text(text):
-                titles.append(title if title is not None else "")
-                texts.append(passage)
-    return {"title": titles, "text": texts}
+        context_batch['response'] = [self.tokenizer.generator.bos_token_id] + labels # kobart <s> issue
+        context_batch['goal_idx'] = self.args.goalDic['str'][goal]  # index로 바꿈
+        context_batch['topic_idx'] = self.args.topicDic['str'][topic]  # index로 바꿈
+        # context_batch['topic'] = self.tokenizer(topic, truncation=True, padding='max_length', max_length=32).input_ids
+        # context_batch['target_knowledge_label'] = self.knowledgeDB.index(target_knowledge)
+        for k, v in context_batch.items():
+            if not isinstance(v, torch.Tensor):
+                context_batch[k] = torch.as_tensor(v, device=self.args.device)
+                # context_batch[k] = torch.as_tensor(v)
+        context_batch['target_knowledge_label'] = target_knowledge.replace('\t', ' ')
+        return context_batch
+
+    def __len__(self):
+        return len(self.augmented_raw_sample)
+
+        
+class RagDataset(Dataset):
+    def __init__(self, args, augmented_raw_sample, tokenizer=None, knowledgeDB=None, mode='train'):
+        super(Dataset, self).__init__()
+        self.args = args
+        self.mode = mode
+        self.tokenizer = tokenizer
+        self.augmented_raw_sample = augmented_raw_sample
+        self.input_max_length = 128# args.rag_max_input_length
+        self.target_max_length = 128# args.rag_max_target_length
+        self.knowledgeDB = knowledgeDB
+
+    def set_tokenizer(self, tokenizer):
+        self.tokenizer = tokenizer
+
+    def __getitem__(self, item):
+        data = self.augmented_raw_sample[item]
+        cbdicKeys = ['dialog', 'user_profile', 'response', 'goal', 'topic', 'situation', 'target_knowledge', 'candidate_knowledges', 'candidate_confidences']
+        dialog, user_profile, response, goal, topic, situation, target_knowledge, candidate_knowledges, candidate_confidences = [data[i] for i in cbdicKeys]
+
+        pad_token_id = self.tokenizer.question_encoder.pad_token_id
+
+        context_batch = defaultdict()
+        predicted_topic_list = deepcopy(data['predicted_topic'][:self.args.topk_topic])
+        predicted_topic_confidence_list = deepcopy(data['predicted_topic_confidence'][:self.args.topk_topic])
+
+        if self.mode == 'train':
+            random.shuffle(predicted_topic_list)
+            predicted_goal, predicted_topic = data['predicted_goal'][0], '|'.join(predicted_topic_list)
+        else:  # test
+            cum_prob = 0
+            candidate_topic_entities = []
+            for topic, conf in zip(predicted_topic_list, predicted_topic_confidence_list):
+                candidate_topic_entities.append(topic)
+                cum_prob += conf
+                if cum_prob > self.args.topic_conf:
+                    break
+            predicted_topic = '|'.join(candidate_topic_entities)
+
+        if self.args.rag_our_model == 'DPR' or self.args.rag_our_model == 'dpr':
+            prefix = ''
+        elif self.args.rag_our_model == 'C2DPR' or self.args.rag_our_model == 'c2dpr':
+            prefix = '<topic>' + predicted_topic + self.tokenizer.question_encoder.sep_token
+        else:  # Scratch DPR
+            prefix = ''
+
+        prefix_encoding = self.tokenizer.question_encoder.encode(prefix)[1:-1][:self.input_max_length//4]  # --> 64까지 늘어나야함
+
+        input_sentence = self.tokenizer.question_encoder('<dialog>' + dialog, add_special_tokens=False).input_ids
+        input_sentence = [self.tokenizer.question_encoder.cls_token_id] + prefix_encoding + input_sentence[-(self.input_max_length - len(prefix_encoding) - 1):]
+        input_sentence = input_sentence + [pad_token_id] * (self.input_max_length - len(input_sentence))
+
+        context_batch['input_ids'] = torch.LongTensor(input_sentence).to(self.args.device)
+        attention_mask = context_batch['input_ids'].ne(pad_token_id)
+        context_batch['attention_mask'] = attention_mask
+        # response에서 [SEP] token 제거
+
+        if '[SEP]' in response: response = response[: response.index("[SEP]")]
+
+        labels = self.tokenizer.generator(response, max_length=self.target_max_length, padding='max_length', truncation=True)['input_ids']
+
+        context_batch['response'] = [self.tokenizer.generator.bos_token_id] + labels
+        context_batch['goal_idx'] = self.args.goalDic['str'][goal]  # index로 바꿈
+        context_batch['topic_idx'] = self.args.topicDic['str'][topic]  # index로 바꿈
+        # context_batch['topic'] = self.tokenizer(topic, truncation=True, padding='max_length', max_length=32).input_ids
+        # context_batch['target_knowledge_label'] = self.knowledgeDB.index(target_knowledge)
+        for k, v in context_batch.items():
+            if not isinstance(v, torch.Tensor):
+                context_batch[k] = torch.as_tensor(v, device=self.args.device)
+                # context_batch[k] = torch.as_tensor(v)
+        context_batch['target_knowledge_label'] = target_knowledge.replace('\t', ' ')
+        return context_batch
+
+    def __len__(self):
+        return len(self.augmented_raw_sample)
+
+# def split_documents(documents: dict) -> dict:
+#     """Split documents into passages"""
+#     titles, texts = [], []
+#     for title, text in zip(documents["title"], documents["text"]):
+#         if text is not None:
+#             for passage in split_text(text):
+#                 titles.append(title if title is not None else "")
+#                 texts.append(passage)
+#     return {"title": titles, "text": texts}
 
 
-def split_text(text: str, n=100, character=" ") -> List[str]:
-    """Split the text every ``n``-th occurrence of ``character``"""
-    text = text.split(character)
-    return [character.join(text[i: i + n]).strip() for i in range(0, len(text), n)]
+# def split_text(text: str, n=100, character=" ") -> List[str]:
+#     """Split the text every ``n``-th occurrence of ``character``"""
+#     text = text.split(character)
+#     return [character.join(text[i: i + n]).strip() for i in range(0, len(text), n)]

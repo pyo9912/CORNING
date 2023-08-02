@@ -1,5 +1,10 @@
 #!/bin/bash
 # 아래에 실행시키려는 녀석들 다 입력해놓고, 마지막 echo "" 따옴표 안에 어떤걸 보기위한 실험이었는지 적어놓기
+python komain.py --gpu=0 --version='ko' --task=resp --log_name="HJ_C2DPR_ctx256_RAG_1e-5" --rag_epochs=20 --rag_lr=1e-5 --topic_conf=0.6 --topk_topic=3 --rag_our_bert --rag_our_model=c2dpr  --rag_onlyDecoderTune --hj
+python komain.py --gpu=0 --version='ko' --task=resp --log_name="HJ_DPR_ctx256_RAG_1e-5" --rag_epochs=20 --rag_lr=1e-5 --topic_conf=0.6 --topk_topic=3 --rag_our_bert --rag_our_model=dpr  --rag_onlyDecoderTune --hj
+
+# python komain.py --gpu=2 --version='ko' --task=resp --log_name="HJ_C2DPR_ctx256_RAG_1e-4" --rag_epochs=20 --rag_lr=1e-4 --topic_conf=0.6 --topk_topic=3 --rag_our_bert --rag_our_model=c2dpr  --rag_onlyDecoderTune --hj
+# python komain.py --gpu=2 --version='ko' --task=resp --log_name="HJ_DPR_ctx256_RAG_1e-4" --rag_epochs=20 --rag_lr=1e-4 --topic_conf=0.6 --topk_topic=3 --rag_our_bert --rag_our_model=dpr  --rag_onlyDecoderTune --hj
 
 
 # python komain.py --gpu=0 --version='ko' --task=resp --log_name="KO_Sch_128RAG_know_resp측정_1e-4" --rag_lr=1e-4 --rag_epochs=20 
