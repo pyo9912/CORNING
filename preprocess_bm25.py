@@ -1,5 +1,3 @@
-import parser
-
 from rank_bm25 import BM25Okapi
 import pickle
 import os
@@ -12,6 +10,26 @@ from nltk.tokenize import word_tokenize
 from nltk.tokenize import RegexpTokenizer
 from transformers import AutoModel, AutoTokenizer, BartForConditionalGeneration, GPT2LMHeadModel, GPT2Config
 from datetime import datetime
+import argparse
+import torch
+from itertools import chain
+import random
+
+HOME = os.path.dirname(os.path.realpath(__file__))
+VERSION = 2
+DATA_DIR = os.path.join(HOME, 'data', str(VERSION))
+BERT_NAME = 'bert-base-uncased'
+CACHE_DIR = os.path.join(HOME, "model_cache", BERT_NAME)
+stop_words = set(stopwords.words('english'))
+word_piece_tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased', cache_dir=CACHE_DIR)
+
+
+def set_seed(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
 
 def custom_tokenizer(text):
@@ -26,7 +44,6 @@ def softmax(x):
     return e_x / e_x.sum(axis=0)  # only difference
 
 
-# phrase list를 정규 표현식으로 변환
 def readDic(filename, out=None):
     output_idx_str = dict()
     output_idx_int = dict()
@@ -47,170 +64,248 @@ def readDic(filename, out=None):
         return {'str': output_idx_str, 'int': output_idx_int}
 
 
-def make(mode):
+def clean_know_texts(know):
+    output = []
+    output.append(clean_know_text(know[0]))
+    output.append(clean_know_text(know[1]))
+    output.append(clean_know_text(know[2]))
+    return output
 
-    cnt = 0
-    response_knowledge = []
-    all_entities = set()
-    all_relation = set()
 
-    train_knowledges = []
-    all_knowledges = []
-    with open('data/2/en_train.txt', 'r', encoding='utf8') as f:
-        for line in tqdm(f, desc="Dataset Read", bar_format='{l_bar} | {bar:23} {r_bar}'):
-            dialog = json.loads(line)
-            knowledge_seq = dialog['knowledge']
-            for know in knowledge_seq:
-                if know:
-                    if know not in all_knowledges:
-                        all_knowledges.append(know)
-                        train_knowledges.append(know)
+def clean_know_text(text):
+    output = text.replace('℃', ' degrees Celsius')
+    return output
 
-    with open('data/2/en_dev.txt', 'r', encoding='UTF-8') as f:
-        for line in tqdm(f, desc="Dataset Read", bar_format='{l_bar} | {bar:23} {r_bar}'):
-            dialog = json.loads(line)
-            knowledge_seq = dialog['knowledge']
-            for know in knowledge_seq:
-                if know:
-                    if know not in all_knowledges:
-                        all_knowledges.append(know)
 
-    with open('data/2/en_test.txt', 'r', encoding='UTF-8') as f:
-        for line in tqdm(f, desc="Dataset Read", bar_format='{l_bar} | {bar:23} {r_bar}'):
-            dialog = json.loads(line)
-            knowledge_seq = dialog['knowledge']
-            for know in knowledge_seq:
-                if know:
-                    if know not in all_knowledges:
-                        all_knowledges.append(know)
-
-    if mode == 'train':
-        all_knowledges = train_knowledges
-
-    corpus = []
-    for know in all_knowledges:
-        # know[0] = know[0].replace('\xa0', ' ')
-        # know[1] = know[1].replace('\xa0', ' ')
-        # know[2] = know[2].replace('\xa0', ' ')
-
+def clean_join_triple(know):
+    if isinstance(know, list) and len(know) > 0:
+        know = clean_know_texts(know)
         if know[1] == 'Sings':
-            corpus.append(' '.join([know[0], 'singer', know[2]]))
+            return ' '.join([know[0], 'singer', know[2]])
         elif know[1] == 'Stars':
-            corpus.append(' '.join([know[0], 'star', know[2]]))
+            return ' '.join([know[0], 'star', know[2]])
         elif know[1] == 'Intro':
-            corpus.append(' '.join([know[0], 'is', know[2]]))
+            return ' '.join([know[0], 'is', know[2]])
         elif know[1] == 'Birthday':
-            corpus.append(' '.join([know[0], know[1], datetime.strptime(know[2].replace(' ', ''), '%Y-%m-%d').strftime('%Y %B %dth')]))
+            return ' '.join([know[0], know[1], datetime.strptime(know[2].replace(' ', ''), '%Y-%m-%d').strftime('%Y %B %dth')])
         else:
-            corpus.append(' '.join(know))
+            return ' '.join(know)
+    else:
+        return ""
 
-    # topicDic = readDic("data/2/topic2id.txt")
-    # all_entities.update(topicDic['str'].keys())
-    # phrase_list = list(topicDic['str'].keys())
-    # # phrase_list = ['taeho kim', 'taehoon kim']
-    # phrase_list = [token.lower() for token in phrase_list]
-    # # pattern = r'\b(' + '|'.join(phrase_list) + r')\b|\w+'
 
-    # word_piece_tokenizer.add_tokens(phrase_list)
-
-    # tokenizer 생성
-    # tokenizer = RegexpTokenizer(pattern)
-
-    filtered_corpus = []
-    for sentence in corpus:
-        tokenized_sentence = custom_tokenizer(sentence)
-        # tokenized_sentence = [word for word in tokenized_sentence if word not in stop_words]
-        filtered_corpus.append(tokenized_sentence)
-
-    # tokenized_corpus = [doc.split(" ") for doc in corpus]
-
+def make(args, mode, dialogs, start=0, end=0, m=None):
+    cnt = 0
+    filtered_corpus = args.train_know_tokens if mode == 'train' else args.all_know_tokens
     bm25 = BM25Okapi(filtered_corpus)
 
-    print(mode)
-    with open(f'data/2/en_{mode}.txt', 'r', encoding='UTF-8') as f, open(f'en_{mode}_know_cand_score20_new.txt', 'a', encoding='utf8') as fw:
-        for line in tqdm(f, desc="Dataset Read", bar_format='{l_bar} | {bar:23} {r_bar}'):
-            cnt += 1
-            dialog = json.loads(line)
-            dialog['know_candidates'] = []
-            conversation = dialog['conversation']
-            knowledge_seq = dialog['knowledge']
-            topic_seq = dialog['goal_topic_list']
-            entity_set = set()
-            for idx, know in enumerate(knowledge_seq):
-                if know:
-                    if not know[1][0].isnumeric():
-                        all_relation.add(know[1])
-                    # goal = dialog['goal_type_list'][idx]
-                    # if goal == 'Movie recommendation' or goal == 'POI recommendation' or goal == 'Music recommendation' or goal == 'Q&A' or goal == 'Chat about stars':
-                    if len(know[0]) < 30 and know[0] != '':
-                        entity_set.add(know[0])
-                    if len(know[2]) < 30 and know[2] != '':
-                        entity_set.add(know[2])
+    # print(mode)
+    corpus = list(args.all_knowledges)
+    dataset_psd = []
+    # with open(f'{HOME}/data/2/en_{mode}.txt', 'r', encoding='UTF-8') as f:
+    for index in tqdm(range(start, end), desc=f"{mode.upper()}_Dataset Read", bar_format='{l_bar} | {bar:23} {r_bar}'):
+        cnt += 1
+        dialog = dialogs[index]
+        # if cnt==20: break
+        # dialog = json.loads(line)
+        dialog['know_candidates'] = []
+        conversation, knowledge_seq = dialog['conversation'], dialog['knowledge']
+        topic_seq, goal_seq = dialog['goal_topic_list'], dialog['goal_type_list']
 
-            all_entities.update(entity_set)
-            goal_seq = dialog['goal_type_list']
-            role_seq = ["User", "System"] if dialog['goal_type_list'][0] != 'Greetings' else ["System", "User"]
-            for i in range(2, len(conversation)):
-                role_seq.append(role_seq[i % 2])
+        role_seq = ["User", "System"] if dialog['goal_type_list'][0] != 'Greetings' else ["System", "User"]
+        for i in range(2, len(conversation)):
+            role_seq.append(role_seq[i % 2])
 
-            for i in range(len(conversation)):  # HJ: [1],[2] 같은 text 제거, conversation 추가해넣는코드
-                conversation[i] = conversation[i] if conversation[i][0] != '[' else conversation[i][4:]
+        for i in range(len(conversation)):
+            conversation[i] = conversation[i] if conversation[i][0] != '[' else conversation[i][4:]
 
-            uidx = -1
-            prev_topic = ''
-            for (goal, role, utt, know, topic) in zip(goal_seq, role_seq, conversation, knowledge_seq, topic_seq):
-                uidx += 1
-                if uidx > 0:
-                    response = conversation[uidx - 1] + utt
-                else:
-                    response = utt
+        uidx = -1
+        prev_topic = ''
+        for (goal, role, utt, know, topic) in zip(goal_seq, role_seq, conversation, knowledge_seq, topic_seq):
+            uidx += 1
 
-                response = word_piece_tokenizer.decode(word_piece_tokenizer.encode(response)[1:-1])
-                if prev_topic != topic:
-                    response = prev_topic + "|" + topic + "|" + response
-                else:
-                    response = topic + "|" + response
+            if uidx > 0:
+                response = conversation[uidx - 1] + utt
+            else:
+                response = utt
 
-                if know and (goal == 'Movie recommendation' or goal == 'POI recommendation' or goal == 'Music recommendation' or goal == 'Q&A' or goal == 'Chat about stars'):
-                    if know[1] == 'Sings':
-                        know = ' '.join([know[0], 'singer', know[2]])
-                    elif know[1] == 'Stars':
-                        know = ' '.join([know[0], 'star', know[2]])
-                    elif know[1] == 'Intro':
-                        know = ' '.join([know[0], 'is', know[2]])
-                    elif know[1] == 'Birthday':
-                        know = ' '.join([know[0], know[1], datetime.strptime(know[2].replace(' ', ''), '%Y-%m-%d').strftime('%Y %B %dth')])
-                    else:
-                        know = ' '.join(know)
-                    know_idx = corpus.index(know)
-                    response_knowledge.append((response.lower(), know.lower(), know_idx, goal, topic, prev_topic))
+            if goal == 'Food recommendation': response = ' '.join(conversation[:uidx]) + utt
+            response = response.replace('℃', ' degrees Celsius')
 
-                    tokenized_query = custom_tokenizer(response.lower())
-                    doc_scores = bm25.get_scores(tokenized_query)
-                    doc_scores = np.array(doc_scores)
-                    sorted_rank = doc_scores.argsort()[::-1]
-                    top1000_retrieved = [corpus[idx] for idx in sorted_rank[:1000]]
-                    for rank in range(len(top1000_retrieved)):
-                        if topic not in top1000_retrieved[rank]:
-                            doc_scores[sorted_rank[rank]] = -1
-                    re_sorted_rank = doc_scores.argsort()[::-1]
-                    prob = softmax(doc_scores)
+            response = word_piece_tokenizer.decode(word_piece_tokenizer.encode(response)[1:-1])
+            if prev_topic != topic:
+                response = prev_topic + "|" + topic + "|" + response
+            else:
+                response = topic + "|" + response
 
-                    candidates_positive_tokens = [all_knowledges[idx] for idx in re_sorted_rank[:20]]
-                    canditates_postivie_probs = [doc_scores[idx] for idx in re_sorted_rank[:20]]
-                    know_candidates = []
-                    for idx, (tokens, prob) in enumerate(zip(candidates_positive_tokens, canditates_postivie_probs)):
-                        # if idx == 0 or prob > 0.1:
-                        know_candidates.append((tokens, prob))
-                    dialog["know_candidates"].append(know_candidates)
-                else:
-                    dialog["know_candidates"].append([])
-                prev_topic = topic
+            if know:
+                # know = clean_know_texts(know)
+                know = clean_join_triple(know)
+                # know_idx = corpus.index(know)
+                # response_knowledge.append((response.lower(), know.lower(), know_idx, goal, topic, prev_topic))
+
+                tokenized_query = custom_tokenizer(response.lower())
+                doc_scores = bm25.get_scores(tokenized_query)
+
+                # doc_scores_tensor = torch.Tensor(doc_scores).to('cuda')
+                doc_scores = np.array(doc_scores)
+
+                sorted_rank = doc_scores.argsort()[::-1]
+                # sorted_rank_tensor = doc_scores_tensor.argsort(descending=False)
+                top1000_retrieved = [corpus[idx] for idx in sorted_rank[:1000]]
+                # top1000_retrieved = [corpus[idx] for idx in sorted_rank_tensor[:1000]]
+                for rank in range(len(top1000_retrieved)):
+                    if topic not in top1000_retrieved[rank]:
+                        doc_scores[sorted_rank[rank]] = -1
+                        # doc_scores[sorted_rank_tensor[rank]] = -1
+                re_sorted_rank = doc_scores.argsort()[::-1]
+                # re_sorted_rank_tensor = doc_scores_tensor.argsort(descending=True)
+                # prob = softmax(doc_scores)
+
+                candidates_positive_triple = [args.all_knowledges[corpus[idx]] for idx in re_sorted_rank[:20]]
+                canditates_postivie_probs = [doc_scores[idx] for idx in re_sorted_rank[:20]]
+
+                # candidates_positive_triple = [args.all_knowledges[corpus[idx]] for idx in re_sorted_rank_tensor[:20]]
+                # canditates_postivie_probs = [doc_scores[idx] for idx in re_sorted_rank_tensor[:20]]
+
+                know_candidates = []
+                for idx, (tokens, prob) in enumerate(zip(candidates_positive_triple, canditates_postivie_probs)):
+                    know_candidates.append((tokens, prob))
+                dialog["know_candidates"].append(know_candidates)
+            else:
+                dialog["know_candidates"].append([])
+            prev_topic = topic
+        dataset_psd.append(dialog)
+        # if m: m.append([index, dialog])
+        if m: m.put([index, dialog])
+    # eval(dataset_psd)
+    # if args.save: save(mode, dataset_psd)
+    return dataset_psd
+
+
+def eval(dataset_psd):
+    GOAL_LIST = ['Movie recommendation', 'POI recommendation', 'Music recommendation', 'Q&A', 'Food recommendation']
+    hitDic = {f'Top{i}_hit': 0 for i in range(1, 11)}
+    hitDic['count'] = 0
+    for dialog in dataset_psd:
+        knows = [clean_join_triple(i) for i in dialog['knowledge']]
+        know_cands = [[clean_join_triple(j[0]) for j in i] for i in dialog['know_candidates']]
+        # know_cands = [clean_join_triple(i) for i in dialog['know_candidates']]
+        role_seq = ["User", "System"] if dialog['goal_type_list'][0] != 'Greetings' else ["System", "User"]
+        for i in range(2, len(dialog['goal_type_list'])):
+            role_seq.append(role_seq[i % 2])
+        for know, know_cand, goal, role in zip(knows, know_cands, dialog['goal_type_list'], role_seq):
+            if know and goal in GOAL_LIST and role == 'System' and len(know_cand) > 0:  # 3711
+                hitDic['count'] += 1
+                for i in range(10):
+                    if know_cand[i] == know:
+                        hitDic[f'Top{i + 1}_hit'] += 1
+                        break
+    for i in range(1, 11):
+        print(f"Top{i}_hit_ratio: {hitDic[f'Top{i}_hit'] / hitDic['count'] :.3f}")
+    print(f"Total count: {hitDic['count']}")
+
+
+def save(dataset_psd, mode):
+    with open(f'{HOME}/data/2/en_{mode}_know_cand_score20_newhj.txt', 'a', encoding='utf8') as fw:
+        for dialog in dataset_psd:
             fw.write(json.dumps(dialog) + "\n")
 
+
+def default_parser(parser):
+    # Default For All
+    parser.add_argument("--version", default='2', type=str, help="Choose the task")
+    parser.add_argument('--bert_name', default='bert-base-uncased', type=str, help="BERT Model Name")
+    parser.add_argument('--mode', default='train', type=str, help="Train/dev/test")
+    parser.add_argument('--home', default=os.path.dirname(os.path.realpath(__file__)), type=str, help="Home path")
+    parser.add_argument("--save", action='store_true', help="Whether to SAVE")
+    return parser
+
+
 if __name__ == "__main__":
-    word_piece_tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
-    stop_words = set(stopwords.words('english'))
-    make('train')
-    make('dev')
-    make('test')
+    import multiprocessing
+
+    set_seed()
+
+    args = default_parser(argparse.ArgumentParser(description="ours_main.py")).parse_args()
+    args.home = os.path.dirname(os.path.realpath(__file__))
+
+    all_knowledges, train_knowledges, valid_knowledges, test_knowledges = dict(), dict(), dict(), dict()
+    train_dialogs, dev_dialogs, test_dialogs = list(), list(), list()
+    with open(f'{HOME}/data/2/en_train.txt', 'r', encoding='utf8') as f:
+        for line in tqdm(f, desc="Dataset Read", bar_format='{l_bar} | {bar:23} {r_bar}'):
+            dialog = json.loads(line)
+            train_dialogs.append(dialog)
+            for know in dialog['knowledge']:
+                if know: train_knowledges[clean_join_triple(know)] = know
+
+    with open(f'{HOME}/data/2/en_dev.txt', 'r', encoding='UTF-8') as f:
+        for line in tqdm(f, desc="Dataset Read", bar_format='{l_bar} | {bar:23} {r_bar}'):
+            dialog = json.loads(line)
+            dev_dialogs.append(dialog)
+            for know in dialog['knowledge']:
+                if know: valid_knowledges[clean_join_triple(know)] = know
+
+    with open(f'{HOME}/data/2/en_test.txt', 'r', encoding='UTF-8') as f:
+        for line in tqdm(f, desc="Dataset Read", bar_format='{l_bar} | {bar:23} {r_bar}'):
+            dialog = json.loads(line)
+            test_dialogs.append(dialog)
+            for know in dialog['knowledge']:
+                if know: test_knowledges[clean_join_triple(know)] = know
+
+    filtered_corpus_train = []
+    filtered_corpus_all = []
+    for knows in [train_knowledges, valid_knowledges, test_knowledges]:
+        for k, v in knows.items():
+            all_knowledges[k] = v
+
+    args.train_knowledges = train_knowledges
+    args.all_knowledges = all_knowledges
+
+    for sent in tqdm(args.train_knowledges, desc="Train_know_tokenize", bar_format='{l_bar} | {bar:23} {r_bar}'):
+        filtered_corpus_train.append(custom_tokenizer(sent))
+    for sent in tqdm(args.all_knowledges, desc="Test_know_tokenize", bar_format='{l_bar} | {bar:23} {r_bar}'):
+        filtered_corpus_all.append(custom_tokenizer(sent))
+    args.train_know_tokens, args.all_know_tokens = filtered_corpus_train[:], filtered_corpus_all[:]
+    dataset_psd = []
+
+    n_cpu = os.cpu_count() // 2
+    pool = multiprocessing.Pool(n_cpu)
+    if 'train' in args.mode:
+        # dataset_psd=make(args,'train', train_dialogs, 0, len(train_dialogs))
+        results = pool.starmap(make, [(args, 'train', train_dialogs, st, ed) for st, ed in [[i * len(train_dialogs) // n_cpu, (i + 1) * len(train_dialogs) // n_cpu] for i in range(n_cpu)]])
+        pool.close()
+        pool.join()
+
+        dataset_psd = list(chain.from_iterable(results))
+        for origin, new in zip(train_dialogs, dataset_psd):
+            assert origin['goal'] == new['goal']
+        print('CLEAR')
+        eval(dataset_psd)
+        save(dataset_psd, 'train')
+
+    if 'dev' in args.mode:
+        # dataset_psd=make(args,'dev', dev_dialogs, 0, len(dev_dialogs))
+        results = pool.starmap(make, [(args, 'dev', dev_dialogs, st, ed) for st, ed in [[i * len(dev_dialogs) // n_cpu, (i + 1) * len(dev_dialogs) // n_cpu] for i in range(n_cpu)]])
+        pool.close()
+        pool.join()
+
+        dataset_psd = list(chain.from_iterable(results))
+        for origin, new in zip(dev_dialogs, dataset_psd):
+            assert origin['goal'] == new['goal']
+        print('CLEAR')
+        eval(dataset_psd)
+        save(dataset_psd, 'dev')
+
+    if 'test' in args.mode:
+        # dataset_psd=make(args,'test', test_dialogs, 0, len(test_dialogs))
+        results = pool.starmap(make, [(args, 'test', test_dialogs, st, ed) for st, ed in [[i * len(test_dialogs) // n_cpu, (i + 1) * len(test_dialogs) // n_cpu] for i in range(n_cpu)]])
+        pool.close()
+        pool.join()
+
+        dataset_psd = list(chain.from_iterable(results))
+        for origin, new in zip(test_dialogs, dataset_psd):
+            assert origin['goal'] == new['goal']
+        print('CLEAR')
+        eval(dataset_psd)
+        save(dataset_psd, 'test')
