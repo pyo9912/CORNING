@@ -10,9 +10,6 @@ from copy import deepcopy
 
 def truncationPadding(input_ids, max_length, prefix=[], suffix=[]):
     truncate_size = max_length - len(prefix) - len(suffix)
-    # input_ids = prefix + input_ids[-truncate_size:] + suffix
-    # input_ids = input_ids + [0] * (max_length - len(input_ids))
-    # return input_ids
     if truncate_size <= len(input_ids):
         input_ids = prefix + input_ids[len(input_ids) - truncate_size:] + suffix
     else:
@@ -65,7 +62,7 @@ class RagDataset(Dataset):
         else:  # Scratch DPR
             prefix = ''
 
-        prefix_encoding = self.tokenizer.question_encoder.encode(prefix)[1:-1][:self.input_max_length//4]  # --> 64까지 늘어나야함
+        prefix_encoding = self.tokenizer.question_encoder.encode(prefix)[1:-1][:64]  # --> 64까지 늘어나야함
 
         input_sentence = self.tokenizer.question_encoder('<dialog>' + dialog, add_special_tokens=False).input_ids
         input_sentence = [self.tokenizer.question_encoder.cls_token_id] + prefix_encoding + input_sentence[-(self.input_max_length - len(prefix_encoding) - 1):]
@@ -80,115 +77,18 @@ class RagDataset(Dataset):
 
         labels = self.tokenizer.generator(response, max_length=self.target_max_length, padding='max_length', truncation=True)['input_ids']
 
-        context_batch['response'] = [self.tokenizer.generator.bos_token_id] + labels
-        context_batch['goal_idx'] = self.args.goalDic['str'][goal]  # index로 바꿈
-        context_batch['topic_idx'] = self.args.topicDic['str'][topic]  # index로 바꿈
-        # context_batch['topic'] = self.tokenizer(topic, truncation=True, padding='max_length', max_length=32).input_ids
-        # context_batch['target_knowledge_label'] = self.knowledgeDB.index(target_knowledge)
-        for k, v in context_batch.items():
-            if not isinstance(v, torch.Tensor):
-                context_batch[k] = torch.as_tensor(v, device=self.args.device)
-                # context_batch[k] = torch.as_tensor(v)
-        context_batch['target_knowledge_label'] = target_knowledge.replace('\t', ' ')
-        return context_batch
-
-    def __len__(self):
-        return len(self.augmented_raw_sample)
-
-class RagDataset_EN(Dataset):
-    def __init__(self, args, augmented_raw_sample, tokenizer=None, knowledgeDB=None, mode='train'):
-        super(Dataset, self).__init__()
-        self.args = args
-        self.mode = mode
-        self.tokenizer = tokenizer
-        self.augmented_raw_sample = augmented_raw_sample
-        self.input_max_length = args.rag_max_input_length
-        self.target_max_length = args.rag_max_target_length
-        self.knowledgeDB = knowledgeDB
-
-    def set_tokenizer(self, tokenizer):
-        self.tokenizer = tokenizer
-
-    def __getitem__(self, item):
-        data = self.augmented_raw_sample[item]
-        cbdicKeys = ['dialog', 'user_profile', 'response', 'goal', 'topic', 'situation', 'target_knowledge', 'candidate_knowledges', 'candidate_confidences']
-        dialog, user_profile, response, goal, topic, situation, target_knowledge, candidate_knowledges, candidate_confidences = [data[i] for i in cbdicKeys]
-        dialog = dialog.replace('[SEP]', '</s> ')# .replace('user: ', '사용자: ').replace('system: ', '시스템: ')
-        response = response.replace('[SEP]', '</s>')# .replace('system: ', '시스템: ')
-        pad_token_id = self.tokenizer.question_encoder.pad_token_id
-
-        context_batch = defaultdict()
-        predicted_topic_list = deepcopy(data['predicted_topic'][:self.args.topk_topic])
-        predicted_topic_confidence_list = deepcopy(data['predicted_topic_confidence'][:self.args.topk_topic])
-
-        if self.mode == 'train':
-            random.shuffle(predicted_topic_list)
-            predicted_goal, predicted_topic = data['predicted_goal'][0], '|'.join(predicted_topic_list)
-        else:  # test
-            cum_prob = 0
-            candidate_topic_entities = []
-            for topic, conf in zip(predicted_topic_list, predicted_topic_confidence_list):
-                candidate_topic_entities.append(topic)
-                cum_prob += conf
-                if cum_prob > self.args.topic_conf:
-                    break
-            predicted_topic = '|'.join(candidate_topic_entities)
-
-        if self.args.rag_our_model == 'DPR' or self.args.rag_our_model == 'dpr':
-            prefix = ''
-        elif self.args.rag_our_model == 'C2DPR' or self.args.rag_our_model == 'c2dpr':
-            prefix = '<topic>' + predicted_topic + self.tokenizer.question_encoder.sep_token
-        else: # Scratch DPR
-            prefix = ''
-        
-
-        prefix_encoding = self.tokenizer.question_encoder.encode(prefix)[1:-1][:self.input_max_length // 4] # --> 64까지 늘어나야함
-
-        input_sentence = self.tokenizer.question_encoder(f'<dialog> {dialog} Generate the response: ', add_special_tokens=False).input_ids
-        input_sentence = [self.tokenizer.question_encoder.cls_token_id] + prefix_encoding + input_sentence[-(self.input_max_length - len(prefix_encoding) - 1):]
-        input_sentence = input_sentence + [pad_token_id] * (self.input_max_length - len(input_sentence))
-
-        context_batch['input_ids'] = torch.LongTensor(input_sentence).to(self.args.device)
-        attention_mask = context_batch['input_ids'].ne(pad_token_id)
-        context_batch['attention_mask'] = attention_mask
-        # response에서 [SEP] token 제거
-
-        if '[SEP]' in response: response = response[: response.index("[SEP]")]
-        labels = self.tokenizer.generator(response, max_length=self.target_max_length, padding='max_length', truncation=True)['input_ids']
-
-        ## Context_input_ids 사용하기 Start ##
-        if self.args.rag_our_bert:
-            top5_knows, top5_confs = data['predicted_know'], data['predicted_know_confidence'] # candidate_knowledges[:5], candidate_knowledges[:5]]
-            context_batch['context_input_ids']=[]
-            context_batch['context_input_attention_mask']=[]
-            context_batch['context_doc_scores'] =[]
-            context_batch['context_knowledges'] =[]
-            context_input5 = [f"{i} , {dialog} Generate the response: "  for i in top5_knows]
-            context_input5_tokenizes = self.tokenizer.generator(context_input5, max_length=self.input_max_length, padding='max_length', truncation=True)
-            doc_scores = candidate_confidences[:5]
-            for context_input5_input_ids,context_input5_attention_masks, doc_score in zip(context_input5_tokenizes.input_ids, context_input5_tokenizes.attention_mask, doc_scores):
-                context_batch['context_input_ids'].append(context_input5_input_ids)
-                context_batch['context_input_attention_mask'].append(context_input5_attention_masks)
-                context_batch['context_doc_scores'].append(doc_score)
-                context_batch['context_knowledges'] = [self.knowledgeDB.index(i) for i in top5_confs]
-        ## END ##
-
         context_batch['response'] = labels
-        # context_batch['response'] = [self.tokenizer.generator.bos_token_id] + labels
-        
         context_batch['goal_idx'] = self.args.goalDic['str'][goal]  # index로 바꿈
         context_batch['topic_idx'] = self.args.topicDic['str'][topic]  # index로 바꿈
-        # context_batch['topic'] = self.tokenizer(topic, truncation=True, padding='max_length', max_length=32).input_ids
-        # context_batch['target_knowledge_label'] = self.knowledgeDB.index(target_knowledge)
         for k, v in context_batch.items():
             if not isinstance(v, torch.Tensor):
                 context_batch[k] = torch.as_tensor(v, device=self.args.device)
-                # context_batch[k] = torch.as_tensor(v)
         context_batch['target_knowledge_label'] = target_knowledge.replace('\t', ' ')
         return context_batch
 
     def __len__(self):
         return len(self.augmented_raw_sample)
+
 
 class GenerationDataset(Dataset):
     """
@@ -205,9 +105,8 @@ class GenerationDataset(Dataset):
         self.subtask = subtask  # goal , topic, resp
         self.generate_prompt_ids = self.tokenizer.convert_tokens_to_ids(self.tokenizer.tokenize('System:'))
         self.idxList = deque(maxlen=len(self.augmented_raw_sample))
-        self.TopicTask_Train_Prompt_usePredGoal = False  # args.TopicTask_Train_Prompt_usePredGoal
-        self.TopicTask_Test_Prompt_usePredGoal = True  # args.TopicTask_Test_Prompt_usePredGoal -- Topic GP
-        # TopicTask_Train_Prompt_usePredGoal TopicTask_Test_Prompt_usePredGoal
+        self.TopicTask_Train_Prompt_usePredGoal = False
+        self.TopicTask_Test_Prompt_usePredGoal = True
 
     def __getitem__(self, idx):  # TODO 구현 전
         data = self.augmented_raw_sample[idx]
@@ -221,7 +120,7 @@ class GenerationDataset(Dataset):
         resp_batch = []
         context_len_batch = []
 
-        ## Prompt 관련
+        ## Prompt
         prefix = ''
         if self.subtask == 'topic':
             if self.TopicTask_Test_Prompt_usePredGoal:
@@ -242,8 +141,7 @@ class GenerationDataset(Dataset):
         else:
             prefix, prompt = [], []
 
-        ## Dialog input 관련
-        # dialog = self.tokenizer('<dialog>' + dialog, max_length=self.args.gt_max_length - len(prompt), truncation=True).input_ids
+        ## Dialog input
         if self.subtask in ['goal', 'topic']:
             dialog = self.tokenizer('<dialog>' + dialog).input_ids[-(self.args.gt_max_length - len(prefix) - len(prompt)):]
         else:  # 'resp
@@ -262,14 +160,12 @@ class GenerationDataset(Dataset):
         context_ids = context_ids + [pad_token_id] * (self.args.gt_max_length - len(context_ids))
         label = label + [pad_token_id] * (self.args.max_gen_length - len(label))
         resp_batch = [token_id if token_id != self.tokenizer.pad_token_id else -100 for token_id in label]
-        # resp_batch = label
         context_batch['input_ids'] = torch.LongTensor(context_ids)
         context_batch['attention_mask'] = torch.ne(context_batch['input_ids'], pad_token_id)
         context_batch['response'] = torch.LongTensor(resp_batch)
 
         context_batch['goal_idx'] = self.args.goalDic['str'][goal]  # index로 바꿈
         context_batch['topic_idx'] = self.args.topicDic['str'].get(topic, 0)  # index로 바꿈
-        # context_batch['predicted_goal_idx']
 
         if 'predicted_goal' in data:
             context_batch['predicted_goal_idx'] = self.args.goalDic['str'][data['predicted_goal'][0]]
@@ -279,7 +175,6 @@ class GenerationDataset(Dataset):
         for k, v in context_batch.items():
             if not isinstance(v, torch.Tensor):
                 context_batch[k] = torch.as_tensor(v, device=self.args.device)
-                # context_batch[k] = torch.as_tensor(v)
         return context_batch
 
     def __len__(self):
@@ -288,7 +183,7 @@ class GenerationDataset(Dataset):
 
 class ResponseDataset(Dataset):
     """
-    response용
+    Goal,Topic
     """
 
     def __init__(self, args, data_sample, knowledgeDB, tokenizer, mode='train', subtask='resp'):
@@ -298,12 +193,11 @@ class ResponseDataset(Dataset):
         self.knowledgeDB = knowledgeDB
         self.augmented_raw_sample = data_sample
         self.mode = mode  # train , test
-        self.subtask = subtask  # goal , topic, resp
+        self.subtask = subtask  # goal , topic
         self.generate_prompt_ids = self.tokenizer.convert_tokens_to_ids(self.tokenizer.tokenize('System:'))
         self.idxList = deque(maxlen=len(self.augmented_raw_sample))
         self.TopicTask_Train_Prompt_usePredGoal = args.TopicTask_Train_Prompt_usePredGoal
         self.TopicTask_Test_Prompt_usePredGoal = args.TopicTask_Test_Prompt_usePredGoal
-        # TopicTask_Train_Prompt_usePredGoal TopicTask_Test_Prompt_usePredGoal
 
     def __getitem__(self, idx):  # TODO 구현 전
         data = self.augmented_raw_sample[idx]
@@ -342,8 +236,7 @@ class ResponseDataset(Dataset):
         else:
             prefix, prompt = [], []
 
-        ## Dialog input 관련
-        # dialog = self.tokenizer('<dialog>' + dialog, max_length=self.args.gt_max_length - len(prompt), truncation=True).input_ids
+        ## Dialog input
         if self.subtask in ['goal', 'topic']:
             dialog = self.tokenizer('<dialog>' + dialog).input_ids[-(self.args.gt_max_length - len(prefix) - len(prompt)):]
         else:  # 'resp
@@ -362,14 +255,12 @@ class ResponseDataset(Dataset):
         context_ids = context_ids + [pad_token_id] * (self.args.gt_max_length - len(context_ids))
         label = label + [pad_token_id] * (self.args.max_gen_length - len(label))
         resp_batch = [token_id if token_id != self.tokenizer.pad_token_id else -100 for token_id in label]
-        # resp_batch = label
         context_batch['input_ids'] = torch.LongTensor(context_ids)
         context_batch['attention_mask'] = torch.ne(context_batch['input_ids'], pad_token_id)
         context_batch['response'] = torch.LongTensor(resp_batch)
 
-        context_batch['goal_idx'] = self.args.goalDic['str'][goal]  # index로 바꿈
-        context_batch['topic_idx'] = self.args.topicDic['str'][topic]  # index로 바꿈
-        # context_batch['predicted_goal_idx']
+        context_batch['goal_idx'] = self.args.goalDic['str'][goal]  # index
+        context_batch['topic_idx'] = self.args.topicDic['str'][topic]  # index
 
         if 'predicted_goal' in data:
             context_batch['predicted_goal_idx'] = self.args.goalDic['str'][data['predicted_goal'][0]]
@@ -379,7 +270,6 @@ class ResponseDataset(Dataset):
         for k, v in context_batch.items():
             if not isinstance(v, torch.Tensor):
                 context_batch[k] = torch.as_tensor(v, device=self.args.device)
-                # context_batch[k] = torch.as_tensor(v)
         return context_batch
 
     def __len__(self):
@@ -393,68 +283,3 @@ def softmax(x):
     """Compute softmax values for each sets of scores in x."""
     e_x = np.exp(x - np.max(x))
     return e_x / e_x.sum(axis=0)
-
-
-
-class UnimindDataset(Dataset):
-    """ For Resp pipeline RAG에 UniMIND넣던방식대로 넣어보려고 작업"""
-    def __init__(self, args, pred_aug_dataset, tokenizer, mode='train', method='unimind'):
-        super(Dataset, self).__init__()
-        self.args=args
-        self.tokenizer = tokenizer
-        self.mode=mode
-        self.method=method
-        self.pred_aug_dataset=pred_aug_dataset
-        self.input_max_length=args.uni_max_input_length
-        self.target_max_length=args.uni_max_target_length
-        self.tokenizer.truncation_side='left'
-        self.postfix = "system: "
-        logger.info(f"Dataset For {self.method} task, len: {len(self.pred_aug_dataset)}")
-        ## pipeline 고려하기 (predicted_goal, predicted_topic)
-
-
-    def __len__(self):
-        return len(self.pred_aug_dataset)
-
-    def __getitem__(self, index):
-        data = self.pred_aug_dataset[index]
-        cbdicKeys = ['dialog', 'user_profile', 'response', 'goal', 'topic', 'situation', 'target_knowledge', 'candidate_knowledges', 'candidate_confidences']
-        dialog, user_profile, response, goal, topic, situation, target_knowledge, candidate_knowledges, candidate_confidences = [data[i] for i in cbdicKeys]
-        predicted_goal, predicted_topic = data['predicted_goal'][0], data['predicted_topic'][0]
-        q_pad_token_id = self.tokenizer.question_encoder.pad_token_id
-        g_pad_token_id = self.tokenizer.generator.pad_token_id
-        dialog = dialog.replace('[SEP]', ' ')
-        response = response.replace('[SEP]', ' ')
-        
-        context_batch = defaultdict()
-        self.tokenizer.question_encoder.truncation_side='left'
-        if self.method=='unimind': 
-            if self.mode=='train': 
-                input = f"{dialog} goal: {goal} topic: {topic} Generate the response: "
-                labels = response
-            else:  # Test
-                input = f"{dialog} goal: {predicted_goal} topic: {predicted_topic} Generate the response: "
-                labels = response
-        elif self.method=='bart':
-                input = f"{dialog} | Generate the response: "
-                labels = response
-        
-        input_sentence = self.tokenizer.question_encoder(input).input_ids
-        input_sentence = input_sentence[ -self.input_max_length : ]
-        input_sentence = input_sentence + [q_pad_token_id] * (self.input_max_length - len(input_sentence))
-        
-        context_batch['input_ids'] = torch.LongTensor(input_sentence).to(self.args.device)
-        attention_mask = context_batch['input_ids'].ne(q_pad_token_id)
-        context_batch['attention_mask'] = attention_mask
-        labels = self.tokenizer.generator(labels, max_length = self.target_max_length, padding='max_length', truncation=True)['input_ids']
-        context_batch['labels'] = labels
-        context_batch['response'] = labels
-
-        context_batch['goal_idx'] = self.args.goalDic['str'][goal]  # index로 바꿈
-        context_batch['topic_idx'] = self.args.topicDic['str'][topic]  # index로 바꿈
-
-        for k, v in context_batch.items():
-            if not isinstance(v, torch.Tensor):
-                context_batch[k] = torch.as_tensor(v, device=self.args.device)
-        context_batch['target_knowledge_label'] = target_knowledge.replace('\t', ' ')
-        return context_batch
