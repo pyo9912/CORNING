@@ -57,7 +57,7 @@ def eval_know(args, test_dataloader, retriever, knowledgeDB, tokenizer, write=No
     hit1_goal, hit3_goal, hit5_goal, hit10_goal, hit20_goal = defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list)
     hit1, hit5, hit3, hit10, hit20 = [], [], [], [], []
     hit1_new, hit5_new, hit3_new, hit10_new, hit20_new = [], [], [], [], []
-
+    hit1_topic = []
     hit20_p1, hit20_p2, hit20_p3, hit20_p23 = [], [], [], []
 
     cnt = 0
@@ -72,6 +72,8 @@ def eval_know(args, test_dataloader, retriever, knowledgeDB, tokenizer, write=No
         dialog_mask = batch['attention_mask']
         response = batch['response']
         new_knowledge = batch['new_knowledge']
+        candidate_topic_entities = batch['candidate_topic_entities']
+
         topic_lens.extend(batch['topic_len'].tolist())
         # candidate_indice = batch['candidate_indice']
         # candidate_knowledge_token = batch['candidate_knowledge_token']  # [B,5,256]
@@ -86,21 +88,20 @@ def eval_know(args, test_dataloader, retriever, knowledgeDB, tokenizer, write=No
         # if args.stage == 'retrieve':
         dot_score = retriever.compute_know_score_candidate(dialog_token, dialog_mask, knowledge_index_rerank)  # todo: DPR용 (1/2)
 
-        # if write:
-        #     top_candidate = torch.topk(dot_score, k=args.know_topk, dim=1).indices  # [B, K]
-        #     input_text = '||'.join(tokenizer.batch_decode(dialog_token, skip_special_tokens=True))
-        #     target_knowledge_text = knowledgeDB[target_knowledge_idx]
-        #     retrieved_knowledge_text = [knowledgeDB[idx].lower() for idx in top_candidate[0]]  # list
-        #     correct = target_knowledge_idx in top_candidate
-        #
-        #     response = '||'.join(tokenizer.batch_decode(response, skip_special_tokens=True))
-        #     query = topic_idx[0] + "|" + response
-        #     bm_scores = args.bm25.get_scores(bm_tokenizer(query, tokenizer))
-        #     retrieved_knowledge_score = bm_scores[top_candidate[0].cpu().numpy()]
-        #     jsonlineSave.append({'goal_type': goal_idx[0], 'topic': topic_idx[0], 'tf': correct, 'dialog': input_text, 'target': target_knowledge_text, 'response': response, "predict5": retrieved_knowledge_text, "score5": retrieved_knowledge_score})
-        #     # save_json(args, f"{args.time}_{args.model_name}_inout", jsonlineSave)
+        if write:
+            top_candidate = torch.topk(dot_score, k=5, dim=1).indices  # [B, K]
+            input_text = '||'.join(tokenizer.batch_decode(dialog_token, skip_special_tokens=True))
+            target_knowledge_text = knowledgeDB[target_knowledge_idx]
+            retrieved_knowledge_text = [knowledgeDB[idx].lower() for idx in top_candidate[0]]  # list
+            correct = target_knowledge_idx in top_candidate
 
-        for idx, (score, target, pseudo_targets, goal, new) in enumerate(zip(dot_score, target_knowledge_idx, batch['pseudo_targets'], goal_idx, new_knowledge)):
+            response = '||'.join(tokenizer.batch_decode(response, skip_special_tokens=True))
+            jsonlineSave.append(
+                {'goal_type': goal_idx[0], 'topic': topic_idx[0], 'tf': correct, 'dialog': input_text, 'target': target_knowledge_text, 'response': response, "predict5": retrieved_knowledge_text, 'topic_len': batch['topic_len'].tolist()[0],
+                 'candidate_topic_entities': [args.topicDic['int'][i.item()] for i in candidate_topic_entities[0]]})
+            # save_json(args, f"{args.time}_{args.model_name}_inout", jsonlineSave)
+
+        for idx, (score, target, pseudo_targets, goal, new, topic) in enumerate(zip(dot_score, target_knowledge_idx, batch['pseudo_targets'], goal_idx, new_knowledge, topic_idx)):
             if new:
                 new_cnt += 1
             for k in [1, 3, 5, 10]:
@@ -112,6 +113,7 @@ def eval_know(args, test_dataloader, retriever, knowledgeDB, tokenizer, write=No
                 for t in target:
                     correct_k |= (t in top_candidate)
                 if k == 1:
+                    hit1_topic.append(topic.lower() in knowledgeDB[top_candidate[0]].lower())
                     hit1.append(correct_k)
                     hit1_goal[goal].append(correct_k)
                     if new:
@@ -143,6 +145,7 @@ def eval_know(args, test_dataloader, retriever, knowledgeDB, tokenizer, write=No
     hit5 = np.average(hit5)
     hit10 = np.average(hit10)
     hit20 = np.average(hit20)
+    hit1_topic = np.average(hit1_topic)
 
     hit1_new = np.average(hit1_new)
     hit3_new = np.average(hit3_new)
@@ -172,46 +175,30 @@ def eval_know(args, test_dataloader, retriever, knowledgeDB, tokenizer, write=No
         # TODO HJ: 입출력 저장 args처리 필요시 args.save_know_output 에 store_true 옵션으로 만들 필요
         write_pkl(obj=jsonlineSave, filename='jsonline.pkl')  # 입출력 저장
         save_json(args, f"{args.time}_{args.model_name}_inout", jsonlineSave)
-    else:
-        logger.info(f"avg topic: %.2f" % topic_len_avg)
-        logger.info(f"Test Hit@1: %.4f" % np.average(hit1))
-        logger.info(f"Test Hit@3: %.4f" % np.average(hit3))
-        logger.info(f"Test Hit@5: %.4f" % np.average(hit5))
-        logger.info(f"Test Hit@10: %.4f" % np.average(hit10))
-        logger.info(f"Test Hit@20: %.4f" % np.average(hit20))
 
-        logger.info(f"Test New Hit@1: %.4f" % np.average(hit1_new))
-        logger.info(f"Test New Hit@3: %.4f" % np.average(hit3_new))
-        logger.info(f"Test New Hit@5: %.4f" % np.average(hit5_new))
-        logger.info(f"Test New Hit@10: %.4f" % np.average(hit10_new))
-        logger.info(f"Test New Hit@20: %.4f" % np.average(hit20_new))
+    logger.info(f"avg topic: %.2f" % topic_len_avg)
+    logger.info(f"Test Hit@1: %.4f" % np.average(hit1))
+    logger.info(f"Test Hit@3: %.4f" % np.average(hit3))
+    logger.info(f"Test Hit@5: %.4f" % np.average(hit5))
+    logger.info(f"Test Hit@10: %.4f" % np.average(hit10))
+    logger.info(f"Test Hit@20: %.4f" % np.average(hit20))
 
-        # logger.info(f"Test Hit@20_P1: %.4f" % np.average(hit20_p1))
-        # logger.info(f"Test Hit@20_P2: %.4f" % np.average(hit20_p2))
+    logger.info(f"Test New Hit@1: %.4f" % np.average(hit1_new))
+    logger.info(f"Test New Hit@3: %.4f" % np.average(hit3_new))
+    logger.info(f"Test New Hit@5: %.4f" % np.average(hit5_new))
+    logger.info(f"Test New Hit@10: %.4f" % np.average(hit10_new))
+    logger.info(f"Test New Hit@20: %.4f" % np.average(hit20_new))
+    logger.info(f"Test Hit Topic: %.4f" % np.average(hit1_topic))
 
-        logger.info("Movie recommendation\t" + "\t".join(hit_movie_result))
-        logger.info("Music recommendation\t" + "\t".join(hit_music_result))
-        logger.info("Q&A\t" + "\t".join(hit_qa_result))
-        logger.info("POI recommendation\t" + "\t".join(hit_poi_result))
-        logger.info("Food recommendation\t" + "\t".join(hit_food_result))
-        logger.info("Chat about stars\t" + "\t".join(hit_chat_result))
+    # logger.info(f"Test Hit@20_P1: %.4f" % np.average(hit20_p1))
+    # logger.info(f"Test Hit@20_P2: %.4f" % np.average(hit20_p2))
+
+    logger.info("Movie recommendation\t" + "\t".join(hit_movie_result))
+    logger.info("Music recommendation\t" + "\t".join(hit_music_result))
+    logger.info("Q&A\t" + "\t".join(hit_qa_result))
+    logger.info("POI recommendation\t" + "\t".join(hit_poi_result))
+    logger.info("Food recommendation\t" + "\t".join(hit_food_result))
+    logger.info("Chat about stars\t" + "\t".join(hit_chat_result))
 
     logger.info("new knowledge %d" % new_cnt)
     return [hit1, hit3, hit5, hit10, hit20, hit_movie_result, hit_music_result, hit_qa_result, hit_poi_result, hit_food_result, hit_chat_result, hit1_new, hit3_new, hit5_new, hit10_new, hit20_new]
-
-
-# def bm_tokenizer(text, tokenizer):
-#     # # 특정 구문을 임시 토큰으로 대체
-#     # for phrase in phrase_list:
-#     #     text = text.replace(phrase, phrase.replace(' ', '_'))
-#     #
-#     # # 기본 NLTK tokenizer를 사용하여 텍스트를 토큰화
-#     # tokens = nltk.word_tokenize(text)
-#     #
-#     # # 임시 토큰을 원래 구문으로 되돌리기
-#     # for i, token in enumerate(tokens):
-#     #     tokens[i] = token.replace('_', ' ')
-#     text = " ".join([word for word in text.split() if word not in stop_words])
-#     tokens = tokenizer.encode(text)[1:-1]
-#
-#     return tokens

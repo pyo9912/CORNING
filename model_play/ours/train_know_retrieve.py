@@ -1,17 +1,14 @@
 import sys
-
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torch import optim
-# from data_temp import DialogDataset_TEMP
 from transformers import AutoConfig, AutoTokenizer, AutoModel
 
 from data_model_know import KnowledgeDataset, DialogDataset
 from data_utils import process_augment_sample
 from model_play.ours.eval_know_retrieve import knowledge_reindexing, eval_know  #### Check
-from metric import EarlyStopping
-from models.ours.cotmae import BertForCotMAE
+# from models.ours.cotmae import BertForCotMAE
 from utils import *
 # from models import *
 import logging
@@ -29,37 +26,12 @@ def update_key_bert(key_bert, query_bert):
 
 
 def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB, bert_model, tokenizer):
-    # bert_model = AutoModel.from_pretrained(args.bert_name, cache_dir=os.path.join("cache", args.bert_name))
-    # args.know_ablation = 'target'
-    # KNOWLEDGE TASk
     from models.ours.retriever import Retriever
-    saved_model_path = os.path.join(args.saved_model_path, 'cotmae')
-    if args.cotmae:
-        logger.info("Initialize with pre-trained CoTMAE")
-        model_cache_dir = os.path.join(args.home, 'model_cache', 'cotmae')
-        cotmae_config = AutoConfig.from_pretrained(saved_model_path, cache_dir=model_cache_dir)
-        # cotmae_tokenizer = AutoTokenizer.from_pretrained(
-        #     saved_model_path, cache_dir=model_cache_dir, use_fast=False
-        # )
-        cotmae_model = BertForCotMAE.from_pretrained(
-            pretrained_model_name_or_path=saved_model_path,
-            from_tf=bool(".ckpt" in saved_model_path),
-            config=cotmae_config,
-            cache_dir=model_cache_dir,
-            use_decoder_head=True,
-            n_head_layers=2,
-            enable_head_mlm=True,
-            head_mlm_coef=1.0,
-        )
-        cotmae_model.bert.resize_token_embeddings(len(tokenizer))
-        bert_model = cotmae_model.bert
     retriever = Retriever(args, bert_model)
-
-    # if args.saved_model_path != '':
-    #     retriever.load_state_dict(torch.load(os.path.join(args.model_dir, f"{args.saved_model_path}.pt"), map_location=args.device))
+    # retriever.load_state_dict(torch.load("model_save/2/GCL2_topic2_conf20_retriever.pt", map_location='cuda:0'))
+    args.know_topk = 5
 
     retriever = retriever.to(args.device)
-    # train_knowledge_data = KnowledgeDataset(args, train_knowledgeDB, tokenizer)  # knowledge dataset class
     goal_list = []
     if 'Movie' in args.goal_list: goal_list.append('Movie recommendation')
     if 'POI' in args.goal_list: goal_list.append('POI recommendation')
@@ -75,14 +47,16 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
     valid_dataset = process_augment_sample(valid_dataset_raw, tokenizer, all_knowledgeDB, goal_list=goal_list)
     test_dataset = process_augment_sample(test_dataset_raw, tokenizer, all_knowledgeDB, goal_list=goal_list)  # gold-topic
 
-    train_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
+    train_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'train_pred_aug_dataset.pkl'))
     train_dataset_pred_aug = [data for data in train_dataset_pred_aug if data['target_knowledge'] != '' and data['goal'].lower() in goal_list]
     for idx, data in enumerate(train_dataset):
         data['predicted_goal'] = train_dataset_pred_aug[idx]['predicted_goal']
         data['predicted_topic'] = train_dataset_pred_aug[idx]['predicted_topic']
         data['predicted_topic_confidence'] = train_dataset_pred_aug[idx]['predicted_topic_confidence']
 
-    test_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
+    test_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'test_pred_aug_dataset.pkl'))
+    # test_dataset_pred_aug2 = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'test_pred_aug_dataset_know.pkl'))
+
     test_dataset_pred_aug = [data for data in test_dataset_pred_aug if data['target_knowledge'] != '' and data['goal'].lower() in goal_list]
     for idx, data in enumerate(test_dataset):
         data['predicted_goal'] = test_dataset_pred_aug[idx]['predicted_goal']
@@ -99,12 +73,14 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
     train_dataloader_retrieve = DataLoader(train_datamodel_know, batch_size=args.batch_size, shuffle=False)
     valid_dataloader = DataLoader(test_datamodel_know, batch_size=args.batch_size, shuffle=False)
     test_dataloader = DataLoader(test_datamodel_know, batch_size=args.batch_size, shuffle=False)
+    test_dataloader_write = DataLoader(test_datamodel_know, batch_size=1, shuffle=False)
 
     criterion = torch.nn.CrossEntropyLoss(reduction='none', ignore_index=0)
     optimizer = optim.AdamW(retriever.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_dc_step, gamma=args.lr_dc)
 
     eval_know(args, test_dataloader, retriever, all_knowledgeDB, tokenizer)  # HJ: Knowledge text top-k 뽑아서 output만들어 체크하던 코드 분리
+    # eval_know(args, test_dataloader_write, retriever, all_knowledgeDB, tokenizer, write=True)  # HJ: Knowledge text top-k 뽑아서 output만들어 체크하던 코드 분리
 
     best_hit = [[], [], [], [], []]
     best_hit_new = [[], [], [], [], []]
@@ -135,30 +111,21 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
 
             target_knowledge_idx = batch['target_knowledge']  # [B,5,256]
 
-            if args.know_ablation == 'target':
-                # logit = retriever.compute_know_score(dialog_token, dialog_mask, knowledge_index, goal_idx)
-                logit_pos, logit_neg = retriever.knowledge_retrieve(dialog_token, dialog_mask, candidate_indice, candidate_knowledge_token, candidate_knowledge_mask)  # [B, 2]
-                logit = torch.cat([logit_pos, logit_neg], dim=-1)
-                loss = (-torch.log_softmax(logit, dim=1).select(dim=1, index=0)).mean()
+            logit_pos, logit_neg = retriever.knowledge_retrieve(dialog_token, dialog_mask, candidate_indice, candidate_knowledge_token, candidate_knowledge_mask)  # [B, 2]
+            cumsum_logit = torch.cumsum(logit_pos, dim=1)  # [B, K]  # Grouping
 
-            else:
-                logit_pos, logit_neg = retriever.knowledge_retrieve(dialog_token, dialog_mask, candidate_indice, candidate_knowledge_token, candidate_knowledge_mask)  # [B, 2]
-                cumsum_logit = torch.cumsum(logit_pos, dim=1)  # [B, K]  # Grouping
+            loss = 0
+            # pseudo_confidences_mask = batch['pseudo_confidences']  # [B, K]
+            for idx in range(args.pseudo_pos_rank):
+                # confidence = torch.softmax(pseudo_confidences[:, :idx + 1], dim=-1)
+                # g_logit = torch.sum(logit_pos[:, :idx + 1] * pseudo_confidences_mask[:, :idx + 1], dim=-1) / (torch.sum(pseudo_confidences_mask[:, :idx + 1], dim=-1) + 1e-20)
+                if args.train_ablation == 'CL':
+                    g_logit = logit_pos[:, idx]  # For Sampling
+                if args.train_ablation == 'RG':
+                    g_logit = cumsum_logit[:, idx] / (idx + 1)  # For GCL!!!!!!! (our best)
 
-                loss = 0
-                # pseudo_confidences_mask = batch['pseudo_confidences']  # [B, K]
-                for idx in range(args.pseudo_pos_rank):
-                    # confidence = torch.softmax(pseudo_confidences[:, :idx + 1], dim=-1)
-                    # g_logit = torch.sum(logit_pos[:, :idx + 1] * pseudo_confidences_mask[:, :idx + 1], dim=-1) / (torch.sum(pseudo_confidences_mask[:, :idx + 1], dim=-1) + 1e-20)
-                    if args.train_ablation == 'S':
-                        g_logit = logit_pos[:, idx]  # For Sampling
-                    if args.train_ablation == 'RG':
-                        g_logit = cumsum_logit[:, idx] / (idx + 1)  # For GCL!!!!!!! (our best)
-                    # g_logit = cumsum_logit[:, idx] / batch_denominator[:, idx]
-
-                    # g_logit = cumsum_logit[:, idx] / num_samples[:, idx]
-                    g_logit = torch.cat([g_logit.unsqueeze(1), logit_neg], dim=1)
-                    loss += (-torch.log_softmax(g_logit, dim=1).select(dim=1, index=0)).mean()
+                g_logit = torch.cat([g_logit.unsqueeze(1), logit_neg], dim=1)
+                loss += (-torch.log_softmax(g_logit, dim=1).select(dim=1, index=0)).mean()
 
             train_epoch_loss += loss
             optimizer.zero_grad()
@@ -184,17 +151,6 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
         logger.info("POI recommendation\t" + "\t".join(hit_poi_result))
         logger.info("Food recommendation\t" + "\t".join(hit_food_result))
         logger.info("Chat about stars\t" + "\t".join(hit_chat_result))
-        # with open(os.path.join('results', result_path), 'a', encoding='utf-8') as f:
-        #     f.write("EPOCH:\t%d\n" % epoch)
-        #     f.write("Overall\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n" % (hit1, hit3, hit5, hit10, hit20))
-        #     f.write("Overall new knowledge\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n" % (hit1_new, hit3_new, hit5_new, hit10_new, hit20_new))
-
-        #     f.write("Movie recommendation\t" + "\t".join(hit_movie_result) + "\n")
-        #     f.write("Music recommendation\t" + "\t".join(hit_music_result) + "\n")
-        #     f.write("Q&A\t" + "\t".join(hit_qa_result) + "\n")
-        #     f.write("POI recommendation\t" + "\t".join(hit_poi_result) + "\n")
-        #     f.write("Food recommendation\t" + "\t".join(hit_food_result) + "\n")
-        #     f.write("Chat about stars\t" + "\t".join(hit_chat_result) + "\n\n")
 
         if hit1 > eval_metric[0]:
             eval_metric[0] = hit1
@@ -217,8 +173,6 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
 
             torch.save(retriever.state_dict(), os.path.join(args.saved_model_path, f"{args.model_name}_retriever.pt"))  # TIME_MODELNAME 형식
 
-            # best_hit_chat = hit_chat_result
-
     logger.info(f'BEST RESULT')
     logger.info(f"BEST Test Hit@1: {best_hit[0]}")
     logger.info(f"BEST Test Hit@3: {best_hit[1]}")
@@ -236,14 +190,5 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
     logger.info("POI recommendation\t" + "\t".join(best_hit_poi))
     logger.info("Food recommendation\t" + "\t".join(best_hit_food))
     logger.info("Chat about stars\t" + "\t".join(best_hit_chat))
-    # with open(os.path.join('results', result_path), 'a', encoding='utf-8') as f:
-    #     f.write("[BEST]\n")
-    #     f.write("Overall\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n" % (best_hit[0], best_hit[1], best_hit[2], best_hit[3], best_hit[4]))
-    #     f.write("New\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n" % (best_hit_new[0], best_hit_new[1], best_hit_new[2], best_hit_new[3], best_hit_new[4]))
 
-    #     f.write("Movie recommendation\t" + "\t".join(best_hit_movie) + "\n")
-    #     f.write("Music recommendation\t" + "\t".join(best_hit_music) + "\n")
-    #     f.write("QA\t" + "\t".join(best_hit_qa) + "\n")
-    #     f.write("POI recommendation\t" + "\t".join(best_hit_poi) + "\n")
-    #     f.write("Food recommendation\t" + "\t".join(best_hit_food) + "\n")
-    #     f.write("Chat about stars\t" + "\t".join(best_hit_chat) + "\n")
+    eval_know(args, test_dataloader, retriever, all_knowledgeDB, tokenizer, write=True)  # HJ: Knowledge text top-k 뽑아서 output만들어 체크하던 코드 분리

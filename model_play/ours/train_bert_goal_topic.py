@@ -4,36 +4,33 @@ from tqdm import tqdm
 import os
 import torch.nn.functional as F
 from collections import defaultdict
-# from data_util import batchify
 import torch.optim as optim
 from sklearn.metrics import precision_score, recall_score, f1_score
-# import logging; logger = logging.getLogger('__main__')
 from loguru import logger
 from torch.utils.data import DataLoader
 
-"""
-Goal은 pred정보가 없기에 train,test에 label이 모두 golden인 상황
-Topic은 Goal에 대한 pred 정보가 있기에, prompt에서 현재 goal로 무엇을 쓸지 결정해줘야하는 상황
-Topic-Train시 prompt의 goal은 
-"""
 
 
-def eval_goal_topic_model(args, train_auged_Dataset, test_auged_Dataset, retriever, tokenizer):
+def eval_goal_topic_model(args, train_auged_Dataset, test_auged_Dataset, retriever, tokenizer, valid_auged_Dataset=None):
     logger.info(f"Dataset Length [Train, Test]: {len(train_auged_Dataset)}, {len(test_auged_Dataset)}")
 
     retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"goal_best_model.pt"), map_location=args.device), strict=False)
     retriever.to(args.device)
     train_datamodel_topic = train_auged_Dataset  # GenerationDataset(args, train_dataset, train_knowledgeDB, tokenizer, mode='train', subtask=args.subtask)
     test_datamodel_topic = test_auged_Dataset  # GenerationDataset(args, test_dataset, all_knowledgeDB, tokenizer, mode='test', subtask=args.subtask)
+    valid_datamodel_topic = valid_auged_Dataset  # GenerationDataset(args, test_dataset, all_knowledgeDB, tokenizer, mode='test', subtask=args.subtask)
 
     # if args.debug: args.num_epochs = 1
     pred_goal_topic_aug(args, retriever, tokenizer, train_datamodel_topic, task='goal')
     pred_goal_topic_aug(args, retriever, tokenizer, test_datamodel_topic, task='goal')
+    pred_goal_topic_aug(args, retriever, tokenizer, valid_datamodel_topic, task='goal')
     retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"topic_best_model_GP.pt"), map_location=args.device), strict=False)
     retriever.to(args.device)
     pred_goal_topic_aug(args, retriever, tokenizer, train_datamodel_topic, task='topic')
     pred_goal_topic_aug(args, retriever, tokenizer, test_datamodel_topic, task='topic')
-    return train_auged_Dataset, test_auged_Dataset
+    pred_goal_topic_aug(args, retriever, tokenizer, valid_datamodel_topic, task='topic')
+    if valid_auged_Dataset: return train_auged_Dataset, test_auged_Dataset, valid_auged_Dataset
+    else: return train_auged_Dataset, test_auged_Dataset
 
 
 def pred_goal_topic_aug(args, retriever, tokenizer, Auged_Dataset, task):
@@ -189,10 +186,3 @@ def HitbyType(args, task_preds, task_labels, gold_goal):
         output_str.append(f"{k:^22}: {Hitdic_ratio[k]['hit1']:.3f}, {Hitdic_ratio[k]['hit3']:.3f}, {Hitdic_ratio[k]['hit5']:.3f}, {Hitdic_ratio[k]['total']}")
     return Hitdic, Hitdic_ratio, output_str
 
-# {'input':input_text[i], 'pred': pred_topic_text[i], 'target':target_topic_text[i], 'correct':correct[i], 'response': real_resp[i], 'goal_type': goal_type[i]}
-
-
-# if __name__ == "__main__":
-#     import main
-
-#     main.main()
