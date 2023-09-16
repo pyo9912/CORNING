@@ -1,18 +1,63 @@
 import json
 import os
-
 import torch
 from collections import defaultdict
 import random
 from datetime import datetime
-
 from torch.nn.utils.rnn import pad_sequence
 from tqdm import tqdm
 import numpy as np
-from nltk.corpus import stopwords
-# import logging; logger = logging.getLogger(__name__)
 from loguru import logger
-stop_words = set(stopwords.words('english'))
+
+try:
+    from nltk.corpus import stopwords
+
+    stop_words = set(stopwords.words('english'))
+except:
+    import nltk
+    import ssl
+
+    try:  _create_unverified_https_context = ssl._create_unverified_context
+    except AttributeError: pass
+    else: ssl._create_default_https_context = _create_unverified_https_context
+
+    from nltk.corpus import stopwords
+
+    stop_words = set(stopwords.words('english'))
+
+
+def makeDic(args, data, which):
+    dic = {'str': defaultdict(), 'int': defaultdict()}
+    whichset = set()
+    if which == 'topic':
+        for conv in data:
+            for type in conv['topic']:
+                if (type != '' or type != '0') and type:
+                    whichset.add(type)
+    elif which == 'goal':
+        for conv in data:
+            for type in conv['goal']:
+                if type:
+                    whichset.add(type)
+    elif which == 'knowledge':
+        for conv in data:
+            for type in conv['knowledge_seq']:
+                if (type != '' or type != '0') and type:
+                    whichset.add(type)
+    else:
+        return
+    sortedSet = sorted(list(whichset))
+    for i, v in enumerate(sortedSet):
+        dic['str'][v] = i
+        dic['int'][i] = v
+    return dic
+
+
+def saveDic(args, dic, which='goal'):
+    with open(os.path.join(args.data_dir, f'{which}2id_new.txt'), 'w', encoding='utf-8') as f:
+        for string, index in dic.items():
+            f.write(f"{string}\t{index}\n")
+    logger.info(f" Dic saved in {os.path.join(args.data_dir, f'{which}2id.txt')}")
 
 
 def readDic(filename, out=None, isNone=0):
@@ -29,57 +74,34 @@ def readDic(filename, out=None, isNone=0):
                 print(line)
                 k, idx = line.strip().split()
             output_idx_str[k] = int(idx) + isNone
-            output_idx_int[int(idx) + isNone ] = k
-        # output_idx_str[len(output_idx_str)] = '<PAD>'
-        # output_idx_int[len(output_idx_int)] = '<PAD>'
-    if out == 'str': return output_idx_str
-    elif out == 'idx': return output_idx_int
-    else: return {'str': output_idx_str, 'int': output_idx_int}
+            output_idx_int[int(idx) + isNone] = k
 
-
-# def v2conv(conv, istopic=True, isgoal=True, iskg=True):
-#     """
-#     Args:
-#         conv: v2lines[i]
-#         istopic: text Topic 출력여부
-#         isgoal: text type(goal)출력여부
-#         iskg: text kg 출력여부
-#     Returns: {'uttrs':uttrs, 'roles':roles, 'topics':topics, 'goals':goals, 'kgs':kgs, 'situation':situation, 'user_profile':usr_profile}
-#     """
-#     usr_profile = conv.get('user_profile')
-#     situation = conv.get('situation')
-#     topics = conv.get('goal_topic_list') if istopic else ["" for _ in range(len(conv.get('goal_type_list')))]
-#     goals = conv.get('goal_type_list') if isgoal else ["" for _ in range(len(conv.get('goal_type_list')))]
-#     kgs = conv.get('knowledge')  # if iskg else ["" for _ in range(len(conv.get('goal_type_list')))]
-#     uttrs = [i if i[0] != '[' else i[4:] for i in conv.get('conversation')]  # utterance 내 [1] 과 같은 형태 삭제
-#     roles = ["system", 'user'] if goals[0] == 'Greetings' else ['user', 'system']
-#     for i in range(len(kgs) - 2): roles.append(roles[i % 2])
-#     return {'uttrs': uttrs, 'roles': roles, 'topics': topics, 'goals': goals, 'kgs': kgs, 'situation': situation, 'user_profile': usr_profile}
+    if out == 'str':
+        return output_idx_str
+    elif out == 'idx':
+        return output_idx_int
+    else:
+        return {'str': output_idx_str, 'int': output_idx_int}
 
 
 def truncationPadding(input_ids, max_length, prefix=[], suffix=[]):
     truncate_size = max_length - len(prefix) - len(suffix)
-    if truncate_size <= len(input_ids): input_ids = prefix + input_ids[len(input_ids) - truncate_size:] + suffix
-    else: input_ids = prefix + input_ids + suffix
+    if truncate_size <= len(input_ids):
+        input_ids = prefix + input_ids[len(input_ids) - truncate_size:] + suffix
+    else:
+        input_ids = prefix + input_ids + suffix
     return input_ids + [0] * (max_length - len(input_ids))
 
 
 def user_profile_setting(ufDic: dict) -> str:
     uf = ''
-    for k,v in ufDic.items():
-        if isinstance(v,list): uf+=f" {k}: {', '.join(v)}|"
-        elif isinstance(v, str):uf+=f" {k}: {v.replace(' ','')}|"
+    for k, v in ufDic.items():
+        if isinstance(v, list):
+            uf += f" {k}: {', '.join(v)}|"
+        elif isinstance(v, str):
+            uf += f" {k}: {v.replace(' ', '')}|"
     return uf
 
-def user_profile_setting_th(ufDic: dict) -> str: # OLD
-    uf = ''
-    for i, key in enumerate(ufDic.keys()):
-        one = ufDic[key]
-        if i == 0 or key[0].lower() != "a": pass
-        else: uf += ' | '
-        if type(one) == list: uf += f"{key}: {', '.join(one[:-5])}"
-        else: uf += f"{key}: {one}"
-    return uf
 
 def softmax(x):
     """Compute softmax values for each sets of scores in x."""
@@ -89,27 +111,23 @@ def softmax(x):
 
 def convert_know(know):
     if len(know) == 0: return ''
-    if know[1] == 'Sings': know = ' '.join([know[0], 'singer', know[2]])
-    elif know[1] == 'Stars': know = ' '.join([know[0], 'star', know[2]])
-    elif know[1] == 'Intro': know = ' '.join([know[0], 'is', know[2]])
-    elif know[1] == 'Comments': know = ' '.join([know[0], 'is known', know[2]])
-    elif know[1] == 'Birthday': know = ' '.join([know[0], know[1], datetime.strptime(know[2].replace(' ', ''), '%Y-%m-%d').strftime('%Y %B %dth')])
-    else: know = ' '.join(know)
+    if know[1] == 'Sings':
+        know = ' '.join([know[0], 'singer', know[2]])
+    elif know[1] == 'Stars':
+        know = ' '.join([know[0], 'star', know[2]])
+    elif know[1] == 'Intro':
+        know = ' '.join([know[0], 'is', know[2]])
+    elif know[1] == 'Comments':
+        know = ' '.join([know[0], 'is known', know[2]])
+    elif know[1] == 'Birthday':
+        know = ' '.join([know[0], know[1], datetime.strptime(know[2].replace(' ', ''), '%Y-%m-%d').strftime('%Y %B %dth')])
+    else:
+        know = ' '.join(know)
     know = know.replace('℃', ' degrees Celsius')
     return know
 
 
 def bm_tokenizer(text, tokenizer):
-    # # 특정 구문을 임시 토큰으로 대체
-    # for phrase in phrase_list:
-    #     text = text.replace(phrase, phrase.replace(' ', '_'))
-    #
-    # # 기본 NLTK tokenizer를 사용하여 텍스트를 토큰화
-    # tokens = nltk.word_tokenize(text)
-    #
-    # # 임시 토큰을 원래 구문으로 되돌리기
-    # for i, token in enumerate(tokens):
-    #     tokens[i] = token.replace('_', ' ')
     text = " ".join([word for word in text.split() if word not in stop_words])
     tokens = tokenizer.encode(text)[1:-1]
 
@@ -118,8 +136,10 @@ def bm_tokenizer(text, tokenizer):
 
 def process_augment_all_sample(raw_data, tokenizer, knowledgeDB):
     train_sample = []
-    if tokenizer.eos_token is not None: eos_token = tokenizer.eos_token
-    else: eos_token = tokenizer.sep_token
+    if tokenizer.eos_token is not None:
+        eos_token = tokenizer.eos_token
+    else:
+        eos_token = tokenizer.sep_token
     for ij in range(len(raw_data)):
         conversation = raw_data[ij]
         augmented_dialog = []
@@ -140,7 +160,7 @@ def process_augment_all_sample(raw_data, tokenizer, knowledgeDB):
                                      'candidate_confidences': conversation['pseudo_confidence_seq'][i],  # prob
                                      })
             augmented_dialog.append(utterance)
-    logger.info(f'All sample 들어감, Sample count: {len(train_sample)}')
+    logger.info(f'All sample, Sample count: {len(train_sample)}')
     return train_sample
 
 
@@ -148,10 +168,13 @@ def process_augment_sample(raw_data, tokenizer=None, knowledgeDB=None, goal_list
     goal_list = [goal.lower() for goal in goal_list]
     train_sample = []
     if tokenizer:
-        if tokenizer.eos_token is not None: eos_token = tokenizer.eos_token
-        else: eos_token = tokenizer.sep_token
-        if tokenizer.name_or_path=='skt/kobert-base-v1': goal_list=['movie recommendation', 'qa'] # KoBERT일때 처리 
-    else: eos_token = '[SEP]'
+        if tokenizer.eos_token is not None:
+            eos_token = tokenizer.eos_token
+        else:
+            eos_token = tokenizer.sep_token
+        if tokenizer.name_or_path == 'skt/kobert-base-v1': goal_list = ['movie recommendation', 'qa']  # KoBERT일때 처리
+    else:
+        eos_token = '[SEP]'
     for ij in range(len(raw_data)):
         conversation = raw_data[ij]
         augmented_dialog = []
@@ -160,13 +183,13 @@ def process_augment_sample(raw_data, tokenizer=None, knowledgeDB=None, goal_list
             utterance = conversation['dialog'][i] + eos_token
             goal = conversation['goal'][i]
             if goal.lower() in goal_list:
-                if role.lower() == 'system' and len(augmented_dialog) > 0 and len(conversation['pseudo_knowledge_seq'][i]) != 0: # Test 3711 Setting
+                if role.lower() == 'system' and len(augmented_dialog) > 0 and len(conversation['pseudo_knowledge_seq'][i]) != 0:  # Test 3711 Setting
                     flatten_dialog = ''.join(augmented_dialog)
                     train_sample.append({'dialog': flatten_dialog,
                                          'user_profile': conversation['user_profile'],
                                          'response': utterance,
                                          'goal': conversation['goal'][i],
-                                         'last_goal': conversation['goal'][i-1],
+                                         'last_goal': conversation['goal'][i - 1],
                                          'topic': conversation['topic'][i],
                                          'situation': conversation['situation'],
                                          'target_knowledge': conversation['knowledge_seq'][i],
@@ -174,7 +197,7 @@ def process_augment_sample(raw_data, tokenizer=None, knowledgeDB=None, goal_list
                                          'candidate_confidences': conversation['pseudo_confidence_seq'][i]  # prob
                                          })
             augmented_dialog.append(utterance)
-    logger.info(f"Pseudo_knowledge_seq, goal_list있는 sample만 들어감, Sample count: {len(train_sample)}, Goal list: {goal_list}")
+    logger.info(f"Aug Sample count: {len(train_sample)}, Goal list: {goal_list}")
     return train_sample
 
 
@@ -183,12 +206,11 @@ def dataset_reader(args, data_name='train'):
     all_knowledge_topic = []
     conversation_sample = []
     data_path = os.path.join(args.data_dir, f"en_{data_name}_know_cand_score20_new.txt")
-    # data_path = os.path.join(args.data_dir, f"ko_all.txt")
     with open(data_path, 'r', encoding='UTF-8') as f:
-        line_idx=0
+        line_idx = 0
         for line in tqdm(f, desc="Dataset Read", bar_format='{l_bar} | {bar:23} {r_bar}'):
-            line_idx+=1
-            if args.debug and line_idx>30: break
+            line_idx += 1
+            # if args.debug and line_idx>30: break
             dialog = json.loads(line)
             conversation = dialog['conversation']
             role_seq = ["User", "System"] if dialog['goal_type_list'][0] != 'Greetings' else ["System", "User"]
@@ -202,22 +224,15 @@ def dataset_reader(args, data_name='train'):
             pseudo_confidence_seq = []
             for idx, know_conf_list in enumerate(know_candidates):
                 positive_candidates = [know[0] for know in know_conf_list]
-                knowledge_topic = [args.topicDic['str'][candidate[0]] if candidate[0] in args.topicDic else 0 for candidate in positive_candidates]
+                # knowledge_topic = [args.topicDic['str'][candidate[0]] if candidate[0] in args.topicDic else 0 for candidate in positive_candidates]
                 positive_candidates = [convert_know(candidate) for candidate in positive_candidates]
 
                 conf_list = [know[1] for know in know_conf_list]
                 pseudo_knowledge_seq.append(positive_candidates)
                 pseudo_confidence_seq.append(conf_list)
-                # if len(positive_candidates) > 0:
-                #     positive_candidates_list[idx] = [' '.join(candidate) for candidate in positive_candidates]
-                #     # positive_candidates_list[idx] = [args.knowledgeDB.index(candidate) for candidate in positive_candidates]
 
             knowledge_seq = [convert_know(know) for know in knowledge_seq]
             all_knowledge.update(knowledge_seq)
-            # pseudo_knowledge_seq = [' '.join(know) for know in pseudo_knowledge_seq]
-            # for topic, know in zip(dialog['goal_topic_list'], knowledge_seq):
-            #     if (topic, know) not in all_knowledge_topic and know != '':
-            #         all_knowledge_topic.append((topic, know))
 
             user_profile = user_profile_setting(dialog['user_profile'])
             situation = dialog['situation']
@@ -239,133 +254,3 @@ def dataset_reader(args, data_name='train'):
 
     return conversation_sample, list(all_knowledge), all_knowledge_topic
 
-
-def make_dsi_input(args=None, save_dir=None, dataset_raw=None, input_setting='dialog', knowledgeDB=[], mode='train'):
-    class TEMPTokenizer:
-        def __init__(self): 
-            self.eos_token = '</s>'
-            self.name_or_path = args.bert_name
-    knowledge_dic = {k.replace('\t',' '): i for i, k in enumerate(knowledgeDB)}
-    lines = []
-    text2text=[]
-    tokenizer = TEMPTokenizer()
-    auged_dataset = process_augment_sample(dataset_raw, tokenizer=tokenizer)
-    train_knowledge_idx_set=list()
-    for data in auged_dataset:
-        dialog = data['dialog']
-        response = data['response']
-        if mode=='train': target_knowledge = data['candidate_knowledges'][0].replace('\t',' ')
-        else:  target_knowledge = data['target_knowledge'].replace('\t',' ')
-        input = ""
-        if "dialog" in input_setting: input += dialog
-        if "goal" in input_setting: input += f"<goal> {data['goal']} "  ## Gold goal
-        if 'topic' in input_setting: input += f"<topic> {data['topic']} "  ## Gold topic
-        if mode=='train': train_knowledge_idx_set.append(knowledge_dic[target_knowledge])
-        if mode=='test': text2text.append(knowledge_dic[target_knowledge])
-
-        lines.append({input: knowledge_dic[target_knowledge]})
-    logger.info(f"input dialog count: {len(lines)}")
-    logger.info(f"Train knowledge index count: {len(train_knowledge_idx_set)}")
-    logger.info(f"All knowledge count: {len(knowledge_dic)}")
-
-    with open(os.path.join(save_dir, f"mgcrs_{mode}_dataset.json"), 'w', encoding='utf-8') as f:
-        f.write(json.dumps(lines, ensure_ascii=False))
-    with open(os.path.join(save_dir, f"mgcrs_allknowledges.json"), 'w', encoding='utf-8') as f:
-        f.write(json.dumps(knowledge_dic, ensure_ascii=False))
-    if mode=='train':
-        with open(os.path.join(save_dir, f"train_knowledge_idx_list.json"), 'w', encoding='utf-8') as f:
-            f.write(json.dumps(train_knowledge_idx_set, ensure_ascii=False))
-    if mode=='test':
-        with open(os.path.join(save_dir, f"test_dataset_gold_text_.json"), 'w', encoding='utf-8') as f:
-            f.write(json.dumps(text2text, ensure_ascii=False))
-    return
-
-def makeDic(args, data, which):
-    dic = {'str': defaultdict(), 'int': defaultdict()}
-    whichset=set()
-    if which=='topic':
-        for conv in data:
-            for type in conv['topic']:
-                if (type!='' or type!='0') and type:
-                    whichset.add(type)
-    elif which=='goal':
-        for conv in data:
-            for type in conv['goal']:
-                if type:
-                    whichset.add(type)
-    elif which=='knowledge':
-        for conv in data:
-            for type in conv['knowledge_seq']:
-                if (type!='' or type!='0') and type:
-                    whichset.add(type)
-    else: return
-    sortedSet = sorted(list(whichset))
-    for i,v in enumerate(sortedSet):
-        dic['str'][v] = i
-        dic['int'][i] = v
-    return dic
-
-def saveDic(args, dic, which='goal'):
-    with open(os.path.join(args.data_dir, f'{which}2id.txt'), 'w', encoding='utf-8') as f:
-        for string, index in dic.items():
-            f.write(f"{string}\t{index}\n")
-    logger.info(f" Dic saved in {os.path.join(args.data_dir, f'{which}2id.txt')}")
-
-def dataset_reader_ko(args, data_name='train'):
-    all_knowledge = set()
-    # all_knowledge_topic = []
-    conversation_sample = []
-    data_path = os.path.join(args.data_dir, f"ko_{data_name}_know_cand_score20_new.txt")
-    # data_path = os.path.join(args.data_dir, f"ko_{data_name}.txt")
-    with open(data_path, 'r', encoding='UTF-8') as f:
-        line_idx=0
-        for line in tqdm(f, desc="Dataset Read", bar_format='{l_bar} | {bar:23} {r_bar}'):
-            line_idx+=1
-            if args.debug and line_idx>30: break
-            dialog = json.loads(line)
-            role_seq = dialog['role']#[i.split(':')[0] for i in conversation]
-            conversation = [f"{role}: {utt}" for role, utt in zip(role_seq, dialog['conversation'])]
-            # conversation = [f"{'사용자' if role=='user' else '시스템'}: {utt}" for role, utt in zip(role_seq, dialog['conversation'])]
-
-            # knowledge_seq = [j.replace('\n', '') for j in dialog['knowledge']]
-            # knowledge_seq = dialog['knowledge']
-            knowledge_seq = [readData.replace("!", "").replace("<", "").replace(">", "").replace(".", "").replace('\t',' ') for readData in dialog['knowledge']]
-            all_knowledge.update(knowledge_seq)
-
-            pseudo_knowledge_seq = []
-            pseudo_confidence_seq = []
-            if 'know_candidates' in dialog:
-                know_candidates = dialog['know_candidates']
-                for idx, know_conf_list in enumerate(know_candidates):
-                    positive_candidates = [know[0].replace('\t', ' ') for know in know_conf_list]
-
-                    conf_list = [know[1] for know in know_conf_list]
-                    pseudo_knowledge_seq.append(positive_candidates)
-                    pseudo_confidence_seq.append(conf_list)
-            else:
-                for _ in role_seq:
-                    pseudo_confidence_seq.append('')
-                    pseudo_knowledge_seq.append('')
-
-            user_profile = "" # user_profile_setting(dialog['user_profile'])
-            situation = dialog['situation']
-
-            topics = [] # Topic clean
-            for topic in dialog['goal_topic_list']:
-                if topic=='' or topic==' ' or topic=='0':
-                    topics.append('None')
-                else: topics.append(topic.strip())
-
-            conversation_sample.append({
-                'dialog': conversation,
-                'role_seq': role_seq,
-                'goal': dialog['goal_type_list'],
-                'topic': topics,
-                'situation': situation,
-                'user_profile': user_profile,
-                'knowledge_seq': knowledge_seq,
-                'pseudo_knowledge_seq': pseudo_knowledge_seq,
-                'pseudo_confidence_seq': pseudo_confidence_seq
-            })
-
-    return conversation_sample, list(all_knowledge) #, all_knowledge_topic
