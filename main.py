@@ -23,8 +23,6 @@ import data_model
 
 
 def add_ours_specific_args(parser):
-    # parser.add_argument("--asdf", action='store_true', help="~할지 여부")
-    # parser.add_argument( "--method", type=str, default="ours", option=["ours","kers"], help=" Method " )
     parser.add_argument("--gt_max_length", type=int, default=256, help=" Goal-Topic input max_length ")
     parser.add_argument("--gt_batch_size", type=int, default=16, help=" Method ")
     parser.add_argument("--method", type=str, default="ours", help=" Method ")
@@ -36,22 +34,24 @@ def add_ours_specific_args(parser):
     parser.add_argument("--cotmae", action='store_true', help="Initialize the retriever from pretrained CoTMAE")
 
     ## For resp
-    # parser.add_argument("--rag_retrieve_input_length", type=int, default=768, help=" Method ")
-    # parser.add_argument("--rag_scratch", action='store_false', help="우리의 retriever모델을 쓸지 말지")  # --rag_scratch하면 scratch모델 사용하게됨
     parser.add_argument("--rag_batch_size", type=int, default=4, help=" Method ")
     parser.add_argument("--rag_input_dialog", type=str, default="dialog", help=" Method ")
-    parser.add_argument("--rag_max_input_length", type=int, default=128, help=" Method ")
+    parser.add_argument("--rag_max_input_length", type=int, default=128, help=" Method ")  # Finally -> rag 128 + retrieved passage 128
     parser.add_argument("--rag_max_target_length", type=int, default=128, help=" Method ")
     parser.add_argument("--rag_num_beams", type=int, default=5, help=" Method ")
     parser.add_argument("--rag_epochs", type=int, default=5, help=" Method ")
-    parser.add_argument('--rag_lr', type=float, default=1e-6, help='RAG Learning rate')
-    parser.add_argument("--rag_our_bert", action='store_true', help="우리의 retriever모델을 쓸지 말지")  # --rag_scratch하면 scratch모델 사용하게됨
-    parser.add_argument("--rag_train_alltype", action='store_true', help="우리의 retriever모델을 쓸지 말지")  
-    parser.add_argument("--rag_test_alltype", action='store_true', help="우리의 retriever모델을 쓸지 말지")  
+    parser.add_argument('--rag_lr', type=float, default=1e-5, help='RAG Learning rate')
+    parser.add_argument("--rag_train_alltype", action='store_true', help="우리의 retriever모델을 쓸지 말지")
+    parser.add_argument("--rag_test_alltype", action='store_true', help="우리의 retriever모델을 쓸지 말지")
     parser.add_argument("--rag_onlyDecoderTune", action='store_true', help="rag decoder를 쓸 때, retriever부분 freeze하도록 세팅")
     parser.add_argument("--rag_ctx_training", action='store_true', help="rag 의 ctx_encoder또한 학습시킬지 말지 (scratch에서 사용)")
-    parser.add_argument("--rag_our_model", default='c2dpr', type=str, help="rag_our_version_bert", choices=['', 'DPR', 'C2DPR', 'dpr','c2dpr'])
-    # parser.add_argument( "--method", type=str, default="ours", help=" Method " )
+
+    parser.add_argument("--rag_our_bert", action='store_true', help="우리의 retriever모델을 쓸지 말지")
+    parser.add_argument("--rag_our_model", default='c2dpr', type=str, help="rag_our_version_bert", choices=['', 'DPR', 'C2DPR', 'dpr', 'c2dpr'])
+
+    parser.add_argument("--rag_context_input_length", type=int, default=256, help=" Method ")
+    parser.add_argument("--rag_n_docs", type=int, default=5, help=" RAG context_ids 로 gen할 때 사용할 passage 개수 ")
+    parser.add_argument("--rag_model_name", type=str, default='token', help="Rag - sequence or token")
     return parser
 
 
@@ -59,13 +59,11 @@ def main(args=None):
     parser = argparse.ArgumentParser(description="ours_main.py")
     parser = utils.default_parser(parser)
     parser = add_ours_specific_args(parser)
-    # default_args.debug=True
 
     args = parser.parse_args()
 
     args = utils.dir_init(args)
     initLogging(args)
-    # log_args(args)
 
     if args.TopicTask_Train_Prompt_usePredGoal and not args.TopicTask_Test_Prompt_usePredGoal: logger.info("Default Topic_pred Task 는 Train에 p_goal, Test에 g_goal 써야해")
 
@@ -75,25 +73,35 @@ def main(args=None):
     bert_model = AutoModel.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
     bert_config = AutoConfig.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
     tokenizer = AutoTokenizer.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
-    tokenizer.add_special_tokens(bert_special_tokens_dict)  # [TH] add bert special token (<dialog>, <topic> , <type>)
+    tokenizer.add_special_tokens(bert_special_tokens_dict)
     bert_model.resize_token_embeddings(len(tokenizer))
     args.hidden_size = bert_model.config.hidden_size  # BERT large 쓸 때 대비
 
     logger.info("BERT_model config")
     logger.info(bert_model.config)
 
-    topicDic = readDic(os.path.join(args.data_dir, "topic2id.txt"))
-    goalDic = readDic(os.path.join(args.data_dir, "goal2id.txt"))
+    logger.info("Read raw file")
+    train_dataset_raw, train_knowledge_base, train_knowledge_topic = data_utils.dataset_reader(args, 'train')
+    test_dataset_raw, valid_knowledge_base, test_knowledge_topic = data_utils.dataset_reader(args, 'test')
+    valid_dataset_raw, test_knowledge_base, _ = data_utils.dataset_reader(args, 'dev')
+
+    if os.path.exists(os.path.join(args.data_dir, "topic2id.txt")) and os.path.exists(os.path.join(args.data_dir, "goal2id.txt")):
+        topicDic = readDic(os.path.join(args.data_dir, "topic2id.txt"))
+        goalDic = readDic(os.path.join(args.data_dir, "goal2id.txt"))
+        # topicDic = readDic(os.path.join(args.data_dir, "topic2id.txt"))
+        # goalDic = readDic(os.path.join(args.data_dir, "goal2id.txt"))
+    else:  ## TODO: 230911 - 적당한 실험들 이후부터는 new topic dic으로 재현시켜야함~!!!
+        temp_all_data = train_dataset_raw + valid_dataset_raw + test_dataset_raw
+        topicDic = data_utils.makeDic(args, temp_all_data, 'topic')
+        goalDic = data_utils.makeDic(args, temp_all_data, 'goal')
+        data_utils.saveDic(args, topicDic, 'topic')  # Left Right Love Destiny 이 0번 이었던 topicDic (0815_ESPRESSO 제출기준)
+        data_utils.saveDic(args, goalDic, 'goal')
+
     args.topicDic = topicDic
     args.goalDic = goalDic
     args.topic_num = len(topicDic['int'])
     args.goal_num = len(goalDic['int'])
     args.taskDic = {'goal': goalDic, 'topic': topicDic}
-
-    logger.info("Read raw file")
-    train_dataset_raw, train_knowledge_base, train_knowledge_topic = data_utils.dataset_reader(args, 'train')
-    test_dataset_raw, valid_knowledge_base, test_knowledge_topic = data_utils.dataset_reader(args, 'test')
-    valid_dataset_raw, test_knowledge_base, _ = data_utils.dataset_reader(args, 'dev')
 
     logger.info("Knowledge DB 구축")
     train_knowledgeDB, all_knowledgeDB = set(), set()
@@ -106,14 +114,12 @@ def main(args=None):
     train_knowledgeDB = list(train_knowledgeDB)
     all_knowledgeDB = list(all_knowledgeDB)
 
-    filtered_corpus = []
-    for sentence in all_knowledgeDB:
-        tokenized_sentence = bm_tokenizer(sentence, tokenizer)
-        filtered_corpus.append(tokenized_sentence)
-    args.bm25 = BM25Okapi(filtered_corpus)
+    # filtered_corpus = []
+    # for sentence in all_knowledgeDB:
+    #     tokenized_sentence = bm_tokenizer(sentence, tokenizer)
+    #     filtered_corpus.append(tokenized_sentence)
+    # args.bm25 = BM25Okapi(filtered_corpus)
 
-    # knowledgeDB = data.read_pkl(os.path.join(args.data_dir, 'knowledgeDB.txt'))  # TODO: verbalize (TH)
-    # knowledgeDB.insert(0, "")
     args.train_knowledge_num = len(train_knowledgeDB)
     args.train_knowledgeDB = train_knowledgeDB
 
@@ -126,15 +132,15 @@ def main(args=None):
         logger.info("Goal Prediction Task")
         retriever = Retriever(args, query_bert=bert_model)
         retriever = retriever.to(args.device)
-        
+
         train_dataset = process_augment_all_sample(train_dataset_raw, tokenizer, train_knowledgeDB)
-        # valid_dataset = process_augment_all_sample(valid_dataset_raw, tokenizer, all_knowledgeDB)
+        valid_dataset = process_augment_all_sample(valid_dataset_raw, tokenizer, all_knowledgeDB)
         test_dataset = process_augment_all_sample(test_dataset_raw, tokenizer, all_knowledgeDB)
         args.subtask = 'goal'
 
         train_datamodel_topic = GenerationDataset(args, train_dataset, train_knowledgeDB, tokenizer, mode='train', subtask=args.subtask)
-        test_datamodel_topic = GenerationDataset(args, test_dataset, all_knowledgeDB, tokenizer, mode='test', subtask=args.subtask)
         # valid_datamodel_topic = TopicDataset(args, valid_dataset, all_knowledgeDB, train_knowledgeDB, tokenizer, task='know')
+        test_datamodel_topic = GenerationDataset(args, test_dataset, all_knowledgeDB, tokenizer, mode='test', subtask=args.subtask)
 
         train_dataloader_topic = DataLoader(train_datamodel_topic, batch_size=args.gt_batch_size, shuffle=True)
         # valid_dataloader_topic = DataLoader(valid_datamodel_topic, batch_size=args.gt_batch_size, shuffle=False)
@@ -174,105 +180,63 @@ def main(args=None):
         write_pkl(train_dataset, os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset{args.device[-1]}.pkl'))
         write_pkl(test_dataset, os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset{args.device[-1]}.pkl'))
 
-    # pred_goal_topic_aug(args, retriever, tokenizer, train_dataset, 'goal')
-    # pred_goal_topic_aug(args, retriever, tokenizer, train_dataset, 'topic')
-
-    if 'gt' in args.task and 'eval' in args.task:  ## TEMP Dataset Stat
-        logger.info(f" Goal, Topic Task Evaluation with pseudo goal,topic labeling")
-        # args.gt_max_length = 256
-        # args.gt_batch_size = 32
+    if 'gt' in args.task or 'eval' in args.task:  ## TEMP Dataset Stat
+        logger.info(f" Goal, Topic Task Evaluation with predicted goal,topic augment")
         train_dataset, valid_dataset, test_dataset = None, None, None
         if args.alltype:
             train_dataset = process_augment_all_sample(train_dataset_raw, tokenizer, train_knowledgeDB)
             test_dataset = process_augment_all_sample(test_dataset_raw, tokenizer, all_knowledgeDB)
+            valid_dataset = process_augment_all_sample(valid_dataset_raw, tokenizer, all_knowledgeDB)
         else:
             train_dataset = process_augment_sample(train_dataset_raw, tokenizer, train_knowledgeDB)
             test_dataset = process_augment_sample(test_dataset_raw, tokenizer, all_knowledgeDB)
+            valid_dataset = process_augment_sample(valid_dataset_raw, tokenizer, all_knowledgeDB)
         logger.info(f"Dataset Length: {len(train_dataset)}, {len(test_dataset)}")
 
         retriever = Retriever(args, bert_model)  # eval_goal_topic_model 함수에서 goal, topic load해서 쓸것임
         retriever.to(args.device)
         train_datamodel_topic = GenerationDataset(args, train_dataset, train_knowledgeDB, tokenizer, mode='train', subtask=args.subtask)
+        valid_datamodel_topic = GenerationDataset(args, valid_dataset, all_knowledgeDB, tokenizer, mode='test', subtask=args.subtask)
         test_datamodel_topic = GenerationDataset(args, test_dataset, all_knowledgeDB, tokenizer, mode='test', subtask=args.subtask)
 
-        train_GT_pred_auged_Dataset, test_GT_pred_auged_Dataset = eval_goal_topic_model(args, train_datamodel_topic, test_datamodel_topic, retriever, tokenizer)
+        train_GT_pred_auged_Dataset, test_GT_pred_auged_Dataset, valid_GT_pred_auged_Dataset = eval_goal_topic_model(args, train_datamodel_topic, test_datamodel_topic, retriever, tokenizer, valid_auged_Dataset=valid_datamodel_topic)
         if not args.debug:
             write_pkl(train_GT_pred_auged_Dataset.augmented_raw_sample, os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
+            write_pkl(valid_GT_pred_auged_Dataset.augmented_raw_sample, os.path.join(args.data_dir, 'pred_aug', f'gt_valid_pred_aug_dataset.pkl'))
             write_pkl(test_GT_pred_auged_Dataset.augmented_raw_sample, os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
         logger.info("Finish Data Augment with Goal-Topic_pred_conf")
         pass
 
-    if "cotmae" in args.task:
-        make_cotmae_input(args.output_dir, train_dataset_raw)
-
-    if "dsi" in args.task:
-        make_dsi_input(args, args.output_dir, train_dataset_raw, input_setting='dialog', knowledgeDB=all_knowledgeDB, mode='train')
-        make_dsi_input(args, args.output_dir, test_dataset_raw, input_setting='dialog', knowledgeDB=all_knowledgeDB, mode='test')
-
     if 'know' in args.task:
         train_know_retrieve.train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB, bert_model, tokenizer)
-        # train_know_retrieve.train_know(args, train_dataloader, valid_dataloader, retriever, train_knowledge_data, train_knowledgeDB, all_knowledge_data, all_knowledgeDB, tokenizer)
-        # eval_know_retrieve.eval_know(args, test_dataloader, retriever, all_knowledge_data, all_knowledgeDB, tokenizer, write=False)  # HJ: Knowledge text top-k 뽑아서 output만들어 체크하던 코드 분리
+
+        # If you train retriever, predicted top-5 knowledges will augmented and save in pkl
+        train_dataset_aug_pred = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
+        valid_dataset_aug_pred = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_valid_pred_aug_dataset.pkl'))
+        test_dataset_aug_pred = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
+        eval_know_retrieve.aug_pred_know(args, train_dataset_aug_pred, valid_dataset_aug_pred, test_dataset_aug_pred, train_knowledgeDB, all_knowledgeDB, bert_model, tokenizer)
+        # item_know_rq(args, bert_model, tokenizer, train_dataset_raw, valid_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
+
+    if 'rq' in args.task:
+        from model_play.ours.item_know_ref import item_know_rq
+        item_know_rq(args, bert_model, tokenizer, train_dataset_raw, valid_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
 
     if 'resp' in args.task:
         from model_play.ours import train_our_rag_retrieve_gen
-        train_our_rag_retrieve_gen.train_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
-    
+        train_our_rag_retrieve_gen.train_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, valid_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
+
     logger.info("THE END")
     return
 
 
-def make_cotmae_input(save_dir, dataset_raw):
-    lines = []
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-
-    for data in dataset_raw:
-        dialog = data['dialog']
-        split_point = random.randint(1, len(dialog) - 1)
-        samples = []
-        for t in range(4):
-            anchor = tokenizer.encode(tokenizer.sep_token.join(dialog[:split_point]))[1:-1]
-            nearby = tokenizer.encode(tokenizer.sep_token.join(dialog[split_point:]))[1:-1]
-            samples.append({"anchor": anchor, "nearby": nearby, "random_sampled": nearby, "overlap": nearby})
-        lines.append({"spans": samples})
-    with open("../ir-main/ir-main/cotmae/DuRecDial2_COTMAE.json", 'w', encoding='utf-8') as wf:
-        for line in lines:
-            wf.write(json.dumps(line) + "\n")
-
-    # logger.info(f"input dialog count: {len(lines)}")
-    # logger.info(f"Train knowledge index count: {len(train_knowledge_idx_set)}")
-    # logger.info(f"All knowledge count: {len(knowledge_dic)}")
-    #
-    # with open(os.path.join(save_dir, f"mgcrs_{mode}_dataset.json"), 'w', encoding='utf-8') as f:
-    #     f.write(json.dumps(lines))
-    # with open(os.path.join(save_dir, f"mgcrs_allknowledges.json"), 'w', encoding='utf-8') as f:
-    #     f.write(json.dumps(knowledge_dic))
-    # if mode == 'train':
-    #     with open(os.path.join(save_dir, f"train_knowledge_idx_list.json"), 'w', encoding='utf-8') as f:
-    #         f.write(json.dumps(knowledge_dic))
-
-    return
-
-
-
-def split_validation(train_dataset_raw, train_ratio=1.0):
-    # train_set_x, train_set_y = train_set
-    n_samples = len(train_dataset_raw)
-    sidx = np.arange(n_samples, dtype='int32')
-    np.random.shuffle(sidx)
-    n_train = int(np.round(n_samples * train_ratio))
-    train_set = [train_dataset_raw[s] for s in sidx[:n_train]]
-    valid_set = [train_dataset_raw[s] for s in sidx[n_train:]]
-    return train_set, valid_set
-
-
 def initLogging(args):
-    import git ## pip install gitpython
-    filename = args.log_name #f'{args.time}_{"DEBUG" if args.debug else args.log_name}_{args.model_name.replace("/", "_")}_log.txt'
+    try: import git  ## pip install gitpython
+    except: pass
+    filename = args.log_name  # f'{args.time}_{"DEBUG" if args.debug else args.log_name}_{args.model_name.replace("/", "_")}_log.txt'
     filename = os.path.join(args.log_dir, filename)
     logger.remove()
     fmt = "<green>{time:YYMMDD_HH:mm:ss}</green> | {message}"
-    if not args.debug : logger.add(filename, format=fmt, encoding='utf-8')
+    if not args.debug: logger.add(filename, format=fmt, encoding='utf-8')
     logger.add(sys.stdout, format=fmt, level="INFO", colorize=True)
     logger.info(f"FILENAME: {filename}")
     try: logger.info(f"Git commit massages: {git.Repo(search_parent_directories=True).head.object.hexsha[:7]}")
@@ -291,7 +255,6 @@ def log_args(args):
 
 
 if __name__ == "__main__":
-    # args = parseargs()
     main()
 
 """
