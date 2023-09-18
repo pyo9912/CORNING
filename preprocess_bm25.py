@@ -207,7 +207,7 @@ def eval(dataset_psd):
 
 
 def save(dataset_psd, mode):
-    with open(f'{HOME}/data/2/en_{mode}_know_cand_score20_newhj.txt', 'a', encoding='utf8') as fw:
+    with open(f'{HOME}/data/2/en_{mode}_know_cand_score20_new.txt', 'a', encoding='utf8') as fw:
         for dialog in dataset_psd:
             fw.write(json.dumps(dialog) + "\n")
 
@@ -272,6 +272,7 @@ if __name__ == "__main__":
     n_cpu = os.cpu_count() // 2
     pool = multiprocessing.Pool(n_cpu)
     if 'train' in args.mode:
+        pool = multiprocessing.Pool(n_cpu)
         # dataset_psd=make(args,'train', train_dialogs, 0, len(train_dialogs))
         results = pool.starmap(make, [(args, 'train', train_dialogs, st, ed) for st, ed in [[i * len(train_dialogs) // n_cpu, (i + 1) * len(train_dialogs) // n_cpu] for i in range(n_cpu)]])
         pool.close()
@@ -283,8 +284,10 @@ if __name__ == "__main__":
         print('CLEAR')
         eval(dataset_psd)
         save(dataset_psd, 'train')
+        del pool
 
     if 'dev' in args.mode:
+        pool = multiprocessing.Pool(n_cpu)
         # dataset_psd=make(args,'dev', dev_dialogs, 0, len(dev_dialogs))
         results = pool.starmap(make, [(args, 'dev', dev_dialogs, st, ed) for st, ed in [[i * len(dev_dialogs) // n_cpu, (i + 1) * len(dev_dialogs) // n_cpu] for i in range(n_cpu)]])
         pool.close()
@@ -296,8 +299,10 @@ if __name__ == "__main__":
         print('CLEAR')
         eval(dataset_psd)
         save(dataset_psd, 'dev')
+        del pool
 
     if 'test' in args.mode:
+        pool = multiprocessing.Pool(n_cpu)
         # dataset_psd=make(args,'test', test_dialogs, 0, len(test_dialogs))
         results = pool.starmap(make, [(args, 'test', test_dialogs, st, ed) for st, ed in [[i * len(test_dialogs) // n_cpu, (i + 1) * len(test_dialogs) // n_cpu] for i in range(n_cpu)]])
         pool.close()
@@ -309,3 +314,4 @@ if __name__ == "__main__":
         print('CLEAR')
         eval(dataset_psd)
         save(dataset_psd, 'test')
+        del pool
