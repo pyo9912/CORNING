@@ -55,7 +55,7 @@ def makeDic(args, data, which):
 
 def saveDic(args, dic, which='goal'):
     with open(os.path.join(args.data_dir, f'{which}2id_new.txt'), 'w', encoding='utf-8') as f:
-        for string, index in dic.items():
+        for string, index in dic['str'].items():
             f.write(f"{string}\t{index}\n")
     logger.info(f" Dic saved in {os.path.join(args.data_dir, f'{which}2id.txt')}")
 
@@ -99,7 +99,7 @@ def user_profile_setting(ufDic: dict) -> str:
         if isinstance(v, list):
             uf += f" {k}: {', '.join(v)}|"
         elif isinstance(v, str):
-            uf += f" {k}: {v.replace(' ', '')}|"
+            uf += f" {k}: {v.replace(' ', ' ')}|"
     return uf
 
 

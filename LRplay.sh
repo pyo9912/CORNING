@@ -1,7 +1,12 @@
 #!/bin/bash
 # 아래에 실행시키려는 녀석들 다 입력해놓고, 마지막 echo "" 따옴표 안에 어떤걸 보기위한 실험이었는지 적어놓기
-python komain.py --gpu=3 --version='ko' --task=resp --log_name="HJ_C2DPR_UniInput_RAG_1e-5" --rag_epochs=20 --rag_lr=1e-4 --topic_conf=0.6 --topk_topic=3 --rag_our_bert --rag_our_model=c2dpr  --rag_onlyDecoderTune --hj
-python komain.py --gpu=2 --version='ko' --task=resp --log_name="HJ_DPR_UniInput_RAG_1e-5" --rag_epochs=20 --rag_lr=1e-4 --topic_conf=0.6 --topk_topic=3 --rag_our_bert --rag_our_model=dpr  --rag_onlyDecoderTune --hj
+
+python unimind_main.py --fast --version=2 --gpu=1 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_conf=0.7 --topk_topic=1 --log_name="Uni_RECGEN_Top1_conf07" #  BART-Large RQ
+python unimind_main.py --fast --version=2 --gpu=2 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_conf=0.7 --topk_topic=2 --log_name="Uni_RECGEN_Top2_conf07" #  BART-Large RQ
+python unimind_main.py --fast --version=2 --gpu=3 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_conf=0.7 --topk_topic=3 --log_name="Uni_RECGEN_Top3_conf07" #  BART-Large RQ
+
+# python komain.py --gpu=3 --version='ko' --task=resp --log_name="HJ_C2DPR_UniInput_RAG_1e-5" --rag_epochs=20 --rag_lr=1e-4 --topic_conf=0.6 --topk_topic=3 --rag_our_bert --rag_our_model=c2dpr  --rag_onlyDecoderTune --hj
+# python komain.py --gpu=2 --version='ko' --task=resp --log_name="HJ_DPR_UniInput_RAG_1e-5" --rag_epochs=20 --rag_lr=1e-4 --topic_conf=0.6 --topk_topic=3 --rag_our_bert --rag_our_model=dpr  --rag_onlyDecoderTune --hj
 
 # python komain.py --gpu=0 --version='ko' --task=resp --log_name="TH_Sch_128RAG_know_resp측정_1e-4" --rag_lr=1e-4 --rag_epochs=20 
 

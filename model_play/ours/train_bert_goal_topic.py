@@ -24,7 +24,7 @@ def eval_goal_topic_model(args, train_auged_Dataset, test_auged_Dataset, retriev
     pred_goal_topic_aug(args, retriever, tokenizer, train_datamodel_topic, task='goal')
     pred_goal_topic_aug(args, retriever, tokenizer, test_datamodel_topic, task='goal')
     pred_goal_topic_aug(args, retriever, tokenizer, valid_datamodel_topic, task='goal')
-    retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"topic_best_model_GP.pt"), map_location=args.device), strict=False)
+    retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"topic_best_model.pt"), map_location=args.device), strict=False)
     retriever.to(args.device)
     pred_goal_topic_aug(args, retriever, tokenizer, train_datamodel_topic, task='topic')
     pred_goal_topic_aug(args, retriever, tokenizer, test_datamodel_topic, task='topic')
@@ -60,6 +60,7 @@ def train_goal_topic_bert(args, retriever, tokenizer, train_data_loader, test_da
         with torch.no_grad():
             test_task_preds, _, test_hit1 = inEpoch_BatchPlay(args, retriever, tokenizer, test_data_loader, optimizer, scheduler, epoch, task=task, mode='test')
             if test_hit1 > max_hit_test:
+                max_hit_test = test_hit1
                 if task == 'goal' and args.version == 'ko': topk = 1
                 else: topk = 5
                 for i, idx in enumerate(train_data_loader.dataset.idxList):

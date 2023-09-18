@@ -24,7 +24,7 @@ import data_model
 
 def add_ours_specific_args(parser):
     parser.add_argument("--gt_max_length", type=int, default=256, help=" Goal-Topic input max_length ")
-    parser.add_argument("--gt_batch_size", type=int, default=16, help=" Method ")
+    parser.add_argument("--gt_batch_size", type=int, default=128, help=" Method ")
     parser.add_argument("--method", type=str, default="ours", help=" Method ")
     parser.add_argument("--TopicTask_Train_Prompt_usePredGoal", action='store_true', help="Topic Task 용 prompt로 pred goal 을 사용할지 여부")
     parser.add_argument("--TopicTask_Test_Prompt_usePredGoal", action='store_true', help="Topic Task 용 prompt로 pred goal 을 사용할지 여부")
@@ -85,9 +85,9 @@ def main(args=None):
     test_dataset_raw, valid_knowledge_base, test_knowledge_topic = data_utils.dataset_reader(args, 'test')
     valid_dataset_raw, test_knowledge_base, _ = data_utils.dataset_reader(args, 'dev')
 
-    if os.path.exists(os.path.join(args.data_dir, "topic2id.txt")) and os.path.exists(os.path.join(args.data_dir, "goal2id.txt")):
-        topicDic = readDic(os.path.join(args.data_dir, "topic2id.txt"))
-        goalDic = readDic(os.path.join(args.data_dir, "goal2id.txt"))
+    if os.path.exists(os.path.join(args.data_dir, "topic2id_new.txt")) and os.path.exists(os.path.join(args.data_dir, "goal2id_new.txt")):
+        topicDic = readDic(os.path.join(args.data_dir, "topic2id_new.txt"))
+        goalDic = readDic(os.path.join(args.data_dir, "goal2id_new.txt"))
         # topicDic = readDic(os.path.join(args.data_dir, "topic2id.txt"))
         # goalDic = readDic(os.path.join(args.data_dir, "goal2id.txt"))
     else:  ## TODO: 230911 - 적당한 실험들 이후부터는 new topic dic으로 재현시켜야함~!!!

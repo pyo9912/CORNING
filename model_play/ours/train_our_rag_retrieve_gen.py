@@ -612,14 +612,27 @@ class Rag_context_Dataset(Dataset):
         predicted_topic_list = deepcopy(data['predicted_topic'][:self.args.topk_topic])
         predicted_topic_confidence_list = deepcopy(data['predicted_topic_confidence'][:self.args.topk_topic])
 
-        cum_prob = 0
-        candidate_topic_entities = []
-        for pred_topic, conf in zip(predicted_topic_list, predicted_topic_confidence_list):
-            candidate_topic_entities.append(pred_topic)
-            cum_prob += conf
-            if cum_prob > self.args.topic_conf:
-                break
-        predicted_goal, predicted_topic = data['predicted_goal'][0], '|'.join(candidate_topic_entities)
+        if self.mode == 'train':
+            random.shuffle(predicted_topic_list)
+            predicted_goal, predicted_topic = data['predicted_goal'][0], '|'.join(predicted_topic_list)
+        else:  # test
+            cum_prob = 0
+            candidate_topic_entities = []
+            for topic, conf in zip(predicted_topic_list, predicted_topic_confidence_list):
+                candidate_topic_entities.append(topic)
+                cum_prob += conf
+                if cum_prob > self.args.topic_conf:
+                    break
+            predicted_goal, predicted_topic = data['predicted_goal'][0], '|'.join(candidate_topic_entities)
+        
+        # cum_prob = 0
+        # candidate_topic_entities = []
+        # for pred_topic, conf in zip(predicted_topic_list, predicted_topic_confidence_list):
+        #     candidate_topic_entities.append(pred_topic)
+        #     cum_prob += conf
+        #     if cum_prob > self.args.topic_conf:
+        #         break
+        # predicted_goal, predicted_topic = data['predicted_goal'][0], '|'.join(candidate_topic_entities)
 
         if self.args.rag_our_model == 'DPR' or self.args.rag_our_model == 'dpr':
             prefix = ''

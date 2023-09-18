@@ -140,7 +140,7 @@ def default_parser(parser):
     parser.add_argument("--know_ablation", default='pseudo', type=str, help="know_ablation", choices=['target', 'pseudo'])
     parser.add_argument("--train_ablation", default='RG', type=str, help="train ablation", choices=['CL', 'RG'])
     parser.add_argument('--topk_topic', default=2, type=int, help="num of topics for input prompt")
-    parser.add_argument('--topic_conf', type=float, default=0.6, help='Minimum threshold for topic confidence')
+    parser.add_argument('--topic_conf', type=float, default=0.7, help='Minimum threshold for topic confidence')
     parser.add_argument('--know_conf', type=float, default=0.2, help='Minimum threshold for topic confidence')
     parser.add_argument("--know_max_length", type=int, default=128, help=" Knowledge Max Length ")
 
@@ -155,6 +155,9 @@ def default_parser(parser):
     parser.add_argument('--stage', default='rerank', type=str, choices=['retrieve', 'rerank'])
     parser.add_argument("--stage2_test", action='store_true', help="Whether to Fine-tune on type.")
     parser.add_argument('--update_freq', default=-1, type=int, help="update_freq")
+    
+    parser.add_argument("--fast", action='store_true', help="Other models input fast (read pkl with confidence of ours)")
+    
     return parser
 
 
@@ -166,6 +169,7 @@ def dir_init(default_args):
     if sysChecker() == 'Linux':
         pass  # HJ KT-server
     elif sysChecker() == "Windows":
+        args.gt_batch_size = 16
         # args.batch_size, args.num_epochs = 4, 2
         # args.debug = True
         pass  # HJ local
@@ -187,7 +191,7 @@ def dir_init(default_args):
 
     checkPath(args.data_dir, args.saved_model_path, args.log_dir)
     checkPath(os.path.join(args.data_dir, 'pred_aug'))
-    # checkPath(os.path.join(args.output_dir))
+    checkPath(os.path.join(args.output_dir))
     # args.usebart = True
     # args.bert_cache_name = os.path.join(args.home, "cache", args.kencoder_name)
     return args
