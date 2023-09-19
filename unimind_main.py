@@ -157,7 +157,6 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
         source_ids, source_mask, lm_labels = batch["input_ids"].to(args.device), batch["attention_mask"].to(args.device), batch["labels"].to(args.device)
         outputs = model(input_ids=source_ids, attention_mask=source_mask,  labels=lm_labels)
         loss = outputs.loss
-
         if mode=='train': 
             optimizer.zero_grad()
             loss.backward()
@@ -179,6 +178,8 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
         contexts.extend(tokenizer.batch_decode(source_ids))
         real_resps.extend(tokenizer.batch_decode(lm_labels, skip_special_tokens=skip_tokens, clean_up_tokenization_spaces=skip_tokens)) # , skip_special_tokens=True, clean_up_tokenization_spaces=False
 
+        loss.detach()
+        epoch_loss+=loss
 
     if mode=='train': scheduler.step()
 
@@ -322,8 +323,8 @@ class BART_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
         dialog, user_profile, response, goal, topic, situation, target_knowledge, candidate_knowledges, candidate_confidences = [data[i] for i in cbdicKeys]
         predicted_goal, predicted_topic = data['predicted_goal'][0], data['predicted_topic'][0]
         pad_token_id = self.tokenizer.pad_token_id
-        dialog = dialog.replace('[SEP]', ' ')
-        response = response.replace('[SEP]', ' ')
+        dialog = dialog.replace('[SEP]', " ")
+        response = response.replace('[SEP]', " ")
         
         context_batch = defaultdict()
         self.tokenizer.truncation_side='left'
@@ -342,26 +343,25 @@ class BART_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
                 if cum_prob > self.args.topic_conf: break
             predicted_goal, predicted_topics = data['predicted_goal'][0], '|'.join(candidate_topic_entities)
 
-        if self.method=='unimind': 
-            input = f"topic: {predicted_topics} | {dialog}  Generate the response: "
-            labels = response
-        elif self.method=='bart':
-            input = f"{dialog}</s>"
-            labels = self.postfix + f"{response}</s>"
-        else: 
-            raise Exception("UniMIND Or Bart For This Dataset Model")
+        prefix, prompt = f"topic:{predicted_topics} ",' | Generate the response: </s>'
 
-
-
-
-
-        input_sentence = self.tokenizer(input).input_ids
-        input_sentence = input_sentence[ -self.input_max_length : ]
+        # input = f"topic: {predicted_topics} | {dialog}  Generate the response: "
+        # input_sentence = self.tokenizer(input).input_ids
+        # input_sentence = input_sentence[ -self.input_max_length : ]
+        # input_sentence = input_sentence + [pad_token_id] * (self.input_max_length - len(input_sentence))
+        
+        prefix_encoding = self.tokenizer.encode(prefix)[1:-1][:self.input_max_length // 4]  
+        input_sentence = self.tokenizer('<dialog>' + dialog + prompt, add_special_tokens=False).input_ids
+        input_sentence = [self.tokenizer.cls_token_id] + prefix_encoding + input_sentence[-(self.input_max_length - len(prefix_encoding) - 1):]
         input_sentence = input_sentence + [pad_token_id] * (self.input_max_length - len(input_sentence))
+
         
         context_batch['input_ids'] = torch.LongTensor(input_sentence).to(self.args.device)
         attention_mask = context_batch['input_ids'].ne(pad_token_id)
         context_batch['attention_mask'] = attention_mask
+        
+
+        labels = response
         labels = self.tokenizer(labels, max_length = self.target_max_length, padding='max_length', truncation=True)['input_ids']
         context_batch['labels'] = labels
         ## For Gen-Rec
@@ -403,10 +403,25 @@ def log_args(args):
 
 if __name__=='__main__':
     # train_dataset_aug_pred, test_dataset_aug_pred = utils.read_pkl('/home/work/CRSTEST/KEMGCRS/data/2/pred_aug/gt_train_pred_aug_dataset.pkl') , utils.read_pkl('/home/work/CRSTEST/KEMGCRS/data/2/pred_aug/gt_test_pred_aug_dataset.pkl')
-    pass
+
     main()
 
-
+    # parser = argparse.ArgumentParser(description="ours_main.py")
+    # parser = utils.default_parser(parser)
+    # parser = add_ours_specific_args(parser)
+    # args = parser.parse_args()
+    # args = utils.dir_init(args)
+    # data_dir='/home/work/CRSTEST/KEMGCRS/data/2'
+    # train_dataset_aug_pred, test_dataset_aug_pred = utils.read_pkl(os.path.join(data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl')) , utils.read_pkl(os.path.join(data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
+    # model_cache_dir = os.path.join(args.home, 'model_cache', args.uni_model_name)
+    # tokenizer = BartTokenizer.from_pretrained(args.uni_model_name, cache_dir=model_cache_dir)
+    # tokenizer.add_special_tokens({'additional_special_tokens':['goal: ','User: ','System: ','topic: ']})
+    # train_Dataset = BART_RQ_Dataset(args, train_dataset_aug_pred, tokenizer, mode='train', method=args.method)
+    # test_Dataset =BART_RQ_Dataset(args, test_dataset_aug_pred, tokenizer, mode='test', method=args.method)
+    # train_dataloader = DataLoader(train_Dataset, batch_size=args.uni_batch_size, shuffle=True)
+    # test_dataloader = DataLoader(test_Dataset, batch_size=args.uni_batch_size, shuffle=False)
+    # for batch in tqdm(train_dataloader, desc=f"Epoch TEST", bar_format=' {l_bar} | {bar:23} {r_bar}'):   
+    #     pass
 
 
 """
