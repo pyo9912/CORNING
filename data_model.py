@@ -48,8 +48,8 @@ class RagDataset(Dataset):
         else:  # test
             cum_prob = 0
             candidate_topic_entities = []
-            for topic, conf in zip(predicted_topic_list, predicted_topic_confidence_list):
-                candidate_topic_entities.append(topic)
+            for p_topic, conf in zip(predicted_topic_list, predicted_topic_confidence_list):
+                candidate_topic_entities.append(p_topic)
                 cum_prob += conf
                 if cum_prob > self.args.topic_conf:
                     break

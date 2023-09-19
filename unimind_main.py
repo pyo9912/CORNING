@@ -336,8 +336,8 @@ class BART_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
             predicted_goal, predicted_topics = data['predicted_goal'][0], '|'.join(predicted_topic_list)
         else:  # test
             cum_prob, candidate_topic_entities = 0, []
-            for topic, conf in zip(predicted_topic_list, predicted_topic_confidence_list):
-                candidate_topic_entities.append(topic)
+            for p_topic, conf in zip(predicted_topic_list, predicted_topic_confidence_list):
+                candidate_topic_entities.append(p_topic)
                 cum_prob += conf
                 if cum_prob > self.args.topic_conf: break
             predicted_goal, predicted_topics = data['predicted_goal'][0], '|'.join(candidate_topic_entities)
