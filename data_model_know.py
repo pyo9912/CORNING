@@ -58,6 +58,7 @@ class DialogDataset(Dataset):
         self.knowledgeDB = knowledgeDB
         self.train_knowledgeDB = train_knowledgeDB  # new knowledge 체크용
         self.augmented_raw_sample = data_sample
+        self.know_max_length = args.know_max_length
         self.mode = mode
 
     def negative_sampler(self, target_knowledge, candidate_knowledges):
@@ -130,18 +131,18 @@ class DialogDataset(Dataset):
         else:
             assert Exception
 
-        prefix_encoding = self.tokenizer.encode(prefix)[1:-1][:self.args.max_length // 4]
+        prefix_encoding = self.tokenizer.encode(prefix)[1:-1][:self.know_max_length // 4]
         input_sentence = self.tokenizer('<dialog>' + dialog, add_special_tokens=False).input_ids
 
-        input_sentence = [self.tokenizer.cls_token_id] + prefix_encoding + input_sentence[-(self.args.max_length - len(prefix_encoding) - 1):]
-        input_sentence = input_sentence + [pad_token_id] * (self.args.max_length - len(input_sentence))
+        input_sentence = [self.tokenizer.cls_token_id] + prefix_encoding + input_sentence[-(self.know_max_length - len(prefix_encoding) - 1):]
+        input_sentence = input_sentence + [pad_token_id] * (self.know_max_length - len(input_sentence))
 
         context_batch['input_ids'] = torch.LongTensor(input_sentence).to(self.args.device)
         attention_mask = context_batch['input_ids'].ne(pad_token_id)
         context_batch['attention_mask'] = attention_mask
         context_batch['response'] = self.tokenizer(response,
                                                    add_special_tokens=True,
-                                                   max_length=self.args.max_length,
+                                                   max_length=self.know_max_length,
                                                    padding='max_length',
                                                    truncation=True).input_ids
 
@@ -163,8 +164,8 @@ class DialogDataset(Dataset):
                 candidate_knowledges_pos = candidate_knowledges_pos[:self.args.pseudo_pos_num]
         candidate_indice = candidate_knowledges_pos + pseudo_negative  # [candidate_positives_idx[self.args.pseudo_pos_rank]]
 
-        candidate_knowledge_text = [self.knowledgeDB[idx] for idx in candidate_indice]
-        candidate_knowledge = self.tokenizer(candidate_knowledge_text, truncation=True, padding='max_length', max_length=self.args.max_length)
+        candidate_knowledge_text = [self.knowledgeDB[idxs] for idxs in candidate_indice]
+        candidate_knowledge = self.tokenizer(candidate_knowledge_text, truncation=True, padding='max_length', max_length=self.know_max_length)
         candidate_knowledge_token = candidate_knowledge.input_ids
         candidate_knowledge_mask = candidate_knowledge.attention_mask
         #
@@ -180,8 +181,8 @@ class DialogDataset(Dataset):
         context_batch['new_knowledge'] = self.knowledgeDB[target_knowledge_idx] not in self.train_knowledgeDB
         context_batch['isFood'] = (goal == 'Food recommendation')
         context_batch['topic_len'] = topic_len
-        context_batch['candidate_topic_entities'] = [self.args.topicDic['str'][i] for i in candidate_topic_entities]
-
+        context_batch['candidate_topic_entities'] = [self.args.topicDic['str'][i] for i in candidate_topic_entities] + [0] * (self.args.topk_topic-len(candidate_topic_entities))
+        # context_batch['candidate_topic_entities'] = context_batch['candidate_topic_entities'] + [0] * (self.args.topk_topic-len(candidate_topic_entities))
         context_batch['indices'] = idx
         for k, v in context_batch.items():
             if not isinstance(v, torch.Tensor):

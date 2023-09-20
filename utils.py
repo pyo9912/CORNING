@@ -80,7 +80,7 @@ def save_json(args, filename, saved_jsonlines):
             txtlines.append(txt)
         return txtlines
 
-    path = os.path.join(args.data_dir, 'print')
+    path = os.path.join(args.output_dir, 'eval_know')
     if not os.path.exists(path): os.makedirs(path)
     file = f'{path}/{filename}.txt'
     txts = json2txt(saved_jsonlines)
@@ -146,7 +146,7 @@ def default_parser(parser):
 
     parser.add_argument("--siamese", action='store_true', help="Whether to Fine-tune on type.")
     parser.add_argument("--pseudo", action='store_true', help="Whether to Fine-tune on type.")
-    parser.add_argument('--pseudo_pos_num', default=3, type=int, help="pseudo_pos_num")
+    parser.add_argument('--pseudo_pos_num', default=2, type=int, help="pseudo_pos_num") # pseudo label로 Top-k개를 사용 --> sample이 두배가 되는것
     parser.add_argument('--pseudo_pos_rank', default=2, type=int, help="pseudo_pos_rank")
     parser.add_argument("--pseudo_confidence", action='store_true', help="Whether to Fine-tune on type.")
     parser.add_argument('--tau', type=float, default=1.0, help='Learning rate')

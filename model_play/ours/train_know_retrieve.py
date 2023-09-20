@@ -65,13 +65,15 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
 
     # test_dataset = read_pkl(os.path.join(args.data_dir, 'pred_aug', "gt_test_pred_aug_dataset.pkl"))
 
+    if args.debug: train_dataset, test_dataset = train_dataset[:30], test_dataset[:30]
+
     train_datamodel_know = DialogDataset(args, train_dataset, train_knowledgeDB, train_knowledgeDB, tokenizer, mode='train', task='know')
-    valid_datamodel_know = DialogDataset(args, valid_dataset, all_knowledgeDB, train_knowledgeDB, tokenizer, mode='test', task='know')
+    # valid_datamodel_know = DialogDataset(args, valid_dataset, all_knowledgeDB, train_knowledgeDB, tokenizer, mode='test', task='know')
     test_datamodel_know = DialogDataset(args, test_dataset, all_knowledgeDB, train_knowledgeDB, tokenizer, mode='test', task='know')
 
     train_dataloader = DataLoader(train_datamodel_know, batch_size=args.batch_size, shuffle=True)
     train_dataloader_retrieve = DataLoader(train_datamodel_know, batch_size=args.batch_size, shuffle=False)
-    valid_dataloader = DataLoader(test_datamodel_know, batch_size=args.batch_size, shuffle=False)
+    # valid_dataloader = DataLoader(test_datamodel_know, batch_size=args.batch_size, shuffle=False)
     test_dataloader = DataLoader(test_datamodel_know, batch_size=args.batch_size, shuffle=False)
     test_dataloader_write = DataLoader(test_datamodel_know, batch_size=1, shuffle=False)
 
@@ -79,7 +81,7 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
     optimizer = optim.AdamW(retriever.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_dc_step, gamma=args.lr_dc)
 
-    eval_know(args, test_dataloader, retriever, all_knowledgeDB, tokenizer)  # HJ: Knowledge text top-k 뽑아서 output만들어 체크하던 코드 분리
+    # eval_know(args, test_dataloader, retriever, all_knowledgeDB, tokenizer)  # HJ: Knowledge text top-k 뽑아서 output만들어 체크하던 코드 분리
     # eval_know(args, test_dataloader_write, retriever, all_knowledgeDB, tokenizer, write=True)  # HJ: Knowledge text top-k 뽑아서 output만들어 체크하던 코드 분리
 
     best_hit = [[], [], [], [], []]
@@ -171,7 +173,7 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
             best_hit_chat = hit_chat_result
             best_hit_food = hit_food_result
 
-            torch.save(retriever.state_dict(), os.path.join(args.saved_model_path, f"{args.model_name}_retriever.pt"))  # TIME_MODELNAME 형식
+            torch.save(retriever.state_dict(), os.path.join(args.saved_model_path, f"{args.model_name}_know.pt"))  # TIME_MODELNAME 형식
 
     logger.info(f'BEST RESULT')
     logger.info(f"BEST Test Hit@1: {best_hit[0]}")
