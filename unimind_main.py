@@ -25,6 +25,9 @@ def add_ours_specific_args(parser):
     parser.add_argument("--gt_max_length", type=int, default=256, help=" Goal-Topic input max_length ")
     parser.add_argument("--gt_batch_size", type=int, default=16, help=" Method ")
 
+    
+    parser.add_argument("--topic_rq", type=str, default='conf', choices=["conf","top"] , help=" Method ")
+    
     ## For resp
     parser.add_argument("--uni_model_name", type=str, default='facebook/bart-base', help=" model name ")
     parser.add_argument("--uni_batch_size", type=int, default=16, help=" batchsize ")
@@ -97,9 +100,9 @@ def main(args=None):
         logger.info("Pred-Aug dataset 구축")
         args.rag_train_alltype, args.rag_test_alltype = args.uni_train_alltype, args.uni_test_alltype
         train_dataset_aug_pred, test_dataset_aug_pred = make_aug_gt_pred(args, deepcopy(bert_model), tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
-        logger.info(f"Length of Pred_Auged Train,Test: {len(train_dataset_aug_pred)}, {len(test_dataset_aug_pred)}")
-        logger.info(f"!!Dataset created!!\n")
 
+    logger.info(f"Length of Pred_Auged Train,Test: {len(train_dataset_aug_pred)}, {len(test_dataset_aug_pred)}")
+    logger.info(f"!!Dataset created!!\n")
 
     logger.info(f"Model call {args.uni_model_name}")
     model_cache_dir = os.path.join(args.home, 'model_cache', args.uni_model_name)
@@ -313,6 +316,7 @@ class BART_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
         self.target_max_length=args.uni_max_target_length
         self.tokenizer.truncation_side='left'
         self.postfix = "system: "
+        self.topic_rq=args.topic_rq # 'conf' or 'top'
         ## pipeline 고려하기 (predicted_goal, predicted_topic)
 
     def __len__(self): return len(self.pred_aug_dataset)
@@ -332,24 +336,23 @@ class BART_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
         predicted_topic_list = deepcopy(data['predicted_topic'][:self.args.topk_topic])
         predicted_topic_confidence_list = deepcopy(data['predicted_topic_confidence'][:self.args.topk_topic])
 
-        if self.mode == 'train':
-            random.shuffle(predicted_topic_list)
+        if self.topic_rq=='conf':
+            if self.mode == 'train':
+                random.shuffle(predicted_topic_list)
+                predicted_goal, predicted_topics = data['predicted_goal'][0], '|'.join(predicted_topic_list)
+            else:  # test
+                cum_prob, candidate_topic_entities = 0, []
+                for p_topic, conf in zip(predicted_topic_list, predicted_topic_confidence_list):
+                    candidate_topic_entities.append(p_topic)
+                    cum_prob += conf
+                    if cum_prob > self.args.topic_conf: break
+                predicted_goal, predicted_topics = data['predicted_goal'][0], '|'.join(candidate_topic_entities)
+        elif self.topic_rq=='top':
             predicted_goal, predicted_topics = data['predicted_goal'][0], '|'.join(predicted_topic_list)
-        else:  # test
-            cum_prob, candidate_topic_entities = 0, []
-            for p_topic, conf in zip(predicted_topic_list, predicted_topic_confidence_list):
-                candidate_topic_entities.append(p_topic)
-                cum_prob += conf
-                if cum_prob > self.args.topic_conf: break
-            predicted_goal, predicted_topics = data['predicted_goal'][0], '|'.join(candidate_topic_entities)
+        else: raise Exception("Topic RQ should 'conf' or 'top'")
 
         prefix, prompt = f"topic:{predicted_topics} ",' | Generate the response: </s>'
 
-        # input = f"topic: {predicted_topics} | {dialog}  Generate the response: "
-        # input_sentence = self.tokenizer(input).input_ids
-        # input_sentence = input_sentence[ -self.input_max_length : ]
-        # input_sentence = input_sentence + [pad_token_id] * (self.input_max_length - len(input_sentence))
-        
         prefix_encoding = self.tokenizer.encode(prefix)[1:-1][:self.input_max_length // 4]  
         input_sentence = self.tokenizer('<dialog>' + dialog + prompt, add_special_tokens=False).input_ids
         input_sentence = [self.tokenizer.cls_token_id] + prefix_encoding + input_sentence[-(self.input_max_length - len(prefix_encoding) - 1):]

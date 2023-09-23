@@ -50,7 +50,8 @@ def pred_goal_topic_aug(args, retriever, tokenizer, Auged_Dataset, task):
 
 def train_goal_topic_bert(args, retriever, tokenizer, train_data_loader, test_data_loader, task):
     optimizer = torch.optim.Adam(retriever.parameters(), lr=args.lr)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.num_epochs * len(train_data_loader), eta_min=args.lr * 0.1)
+    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.num_epochs * len(train_data_loader), eta_min=args.lr * 0.1)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_dc_step, gamma=args.lr_dc)
     epoch_loss, topk, max_hit_train, max_hit_test = 0, 1 if task == 'goal' else 5, 0, 0
     logger.info(f"{task:^6} train start, Train-Test samples: {len(train_data_loader.dataset)}, {len(test_data_loader.dataset)}")
     for epoch in range(args.num_epochs):

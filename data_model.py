@@ -124,7 +124,7 @@ class GenerationDataset(Dataset):
         ## Prompt
         prefix = ''
         if self.subtask == 'topic':
-            if self.TopicTask_Test_Prompt_usePredGoal: predicted_goal = data['predicted_goal'][0]
+            if self.TopicTask_Test_Prompt_usePredGoal and 'predicted_goal' in data: predicted_goal = data['predicted_goal'][0]
             else: predicted_goal = goal
 
             prefix = self.tokenizer.encode('<goal>%s. <profile>%s.' % (predicted_goal, user_profile))[:int(self.args.gt_max_length * 3 / 5)]
@@ -181,6 +181,88 @@ class GenerationDataset(Dataset):
     def __len__(self):
         return len(self.augmented_raw_sample)
 
+class TopicDataset(Dataset):
+    """
+    Topic용 dataset
+    230920 Topic 용으로만 개발해보기 -> 3711 topic 정확도 78% 회복시키자
+    """
+
+    def __init__(self, args, data_sample, knowledgeDB, tokenizer, mode='train', subtask='resp'):
+        super(Dataset, self).__init__()
+        self.args = args
+        self.tokenizer = tokenizer
+        self.knowledgeDB = knowledgeDB
+        self.augmented_raw_sample = data_sample
+        self.mode = mode  # train , test
+        self.subtask = subtask  # goal , topic, resp
+        self.generate_prompt_ids = self.tokenizer.convert_tokens_to_ids(self.tokenizer.tokenize('System:'))
+        self.idxList = deque(maxlen=len(self.augmented_raw_sample))
+        self.tokenizer.truncation_side = 'left'
+        logger.info(f"{self.subtask} task, TopicDataset")
+        self.TopicTask_Train_Prompt_usePredGoal, self.TopicTask_Test_Prompt_usePredGoal = False, True
+        self.dialog_s_token = self.tokenizer.encode('<dialog>')[1]
+
+    def __getitem__(self, idx):  # TODO 구현 전
+        data = self.augmented_raw_sample[idx]
+        self.idxList.append(idx)
+        cbdicKeys = ['dialog', 'user_profile', 'response', 'goal', 'topic', 'situation', 'target_knowledge', 'candidate_knowledges', 'candidate_confidences']
+        dialog, user_profile, response, goal, topic, situation, target_knowledge_idx, candidate_knowledges, candidate_confidences = [data[i] for i in cbdicKeys]
+        pad_token_id = self.tokenizer.pad_token_id
+
+        context_batch = defaultdict()
+        context_batch['goal_type'] = self.tokenizer(goal, max_length=self.args.max_gen_length, truncation=True, padding='max_length').input_ids
+        resp_batch = []
+        context_len_batch = []
+        ## Prompt
+        prefix = ''
+        # if self.subtask == 'topic':
+        usr_profile = '| '.join(list(filter(lambda x:x[:8]=='Accepted' or x[:8]=='Rejected', user_profile.split('| '))))
+        predicted_goal = goal
+        prefix = self.tokenizer.encode('<user_profile>%s.' % (usr_profile))[:int(self.args.gt_max_length * 3 / 5)]
+        prompt = self.tokenizer.encode('. predict the next topic: ')
+        # elif self.subtask == 'goal':
+        #     prefix = self.tokenizer.encode('<profile>%s.' % user_profile)[:int(self.args.gt_max_length * 2 / 5)]
+        #     prompt = self.tokenizer.encode('. predict the next goal: ')
+        prompt=prompt[1:-1]
+
+        ## Dialog input
+        dialog_tokens = self.tokenizer('<dialog>' + dialog).input_ids[-(self.args.gt_max_length - len(prefix) - len(prompt) - 1):]
+        dialog_tokens = prefix + [self.dialog_s_token] + dialog_tokens[:-1] + prompt # 30522==<dialog>
+
+        # if self.subtask == 'goal':
+        #     label = self.tokenizer(goal, max_length=self.args.max_gen_length, truncation=True, padding='max_length').input_ids
+        # elif self.subtask == 'topic':
+        
+        label = self.tokenizer(topic, max_length=self.args.max_gen_length, truncation=True, padding='max_length').input_ids
+        # elif self.subtask == 'resp':
+        #     label = self.tokenizer(response, max_length=self.args.max_gen_length, truncation=True, padding='max_length').input_ids
+
+        context_ids = dialog_tokens
+        context_ids = context_ids[-self.args.gt_max_length:]
+        context_ids = context_ids + [pad_token_id] * (self.args.gt_max_length - len(context_ids))
+        
+        label = label + [pad_token_id] * (self.args.max_gen_length - len(label))
+        resp_batch = [token_id if token_id != self.tokenizer.pad_token_id else -100 for token_id in label]
+
+        context_batch['input_ids'] = torch.LongTensor(context_ids)
+        context_batch['attention_mask'] = torch.ne(context_batch['input_ids'], pad_token_id)
+        context_batch['response'] = torch.LongTensor(resp_batch)
+
+        context_batch['goal_idx'] = self.args.goalDic['str'][goal]  # index로 바꿈
+        context_batch['topic_idx'] = self.args.topicDic['str'].get(topic, 0)  # index로 바꿈
+
+        if 'predicted_goal' in data:
+            context_batch['predicted_goal_idx'] = self.args.goalDic['str'][data['predicted_goal'][0]]
+        if 'predicted_topic' in data:
+            context_batch['predicted_topic_idx'] = self.args.topicDic['str'][data['predicted_topic'][0]]
+
+        for k, v in context_batch.items():
+            if not isinstance(v, torch.Tensor):
+                context_batch[k] = torch.as_tensor(v, device=self.args.device)
+        return context_batch
+
+    def __len__(self):
+        return len(self.augmented_raw_sample)
 
 # class ResponseDataset(Dataset):
 #     """

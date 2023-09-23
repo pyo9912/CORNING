@@ -73,7 +73,7 @@ def main(args=None):
     bert_model = AutoModel.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
     bert_config = AutoConfig.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
     tokenizer = AutoTokenizer.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
-    tokenizer.add_special_tokens(bert_special_tokens_dict)
+    tokenizer.add_special_tokens(bert_special_tokens_dict) # 'additional_special_tokens': ['<dialog>', '<topic>', '<type>', '<user_profile>', '<situation>'],
     bert_model.resize_token_embeddings(len(tokenizer))
     args.hidden_size = bert_model.config.hidden_size  # BERT large 쓸 때 대비
 
@@ -151,8 +151,8 @@ def main(args=None):
         train_goal_topic_bert(args, retriever, tokenizer, train_dataloader_topic, test_dataloader_topic, task='goal')
 
         # Dataset save
-        write_pkl(train_dataset, os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset{args.device[-1]}.pkl'))
-        write_pkl(test_dataset, os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset{args.device[-1]}.pkl'))
+        write_pkl(train_dataset, os.path.join(args.data_dir, 'pred_aug', f'gtall_train_pred_aug_dataset{args.device[-1]}.pkl'))
+        write_pkl(test_dataset, os.path.join(args.data_dir, 'pred_aug', f'gtall_test_pred_aug_dataset{args.device[-1]}.pkl'))
 
     if 'topic' in args.task:
         args.subtask = 'topic'
@@ -161,14 +161,18 @@ def main(args=None):
         if not os.path.exists(os.path.join(args.saved_model_path, f"goal_best_model.pt")): Exception(f'Goal Best Model 이 있어야함 {os.path.join(args.saved_model_path, f"goal_best_model.pt")}')
         retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"goal_best_model.pt")))
         retriever.to(args.device)
-        train_dataset = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
-        test_dataset = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
+        train_dataset = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gtall_train_pred_aug_dataset.pkl'))
+        test_dataset = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gtall_test_pred_aug_dataset.pkl'))
         logger.info(f"Train dataset {len(train_dataset)} predicted goal Hit@1 ratio: {sum([dataset['goal'] == dataset['predicted_goal'][0] for dataset in train_dataset]) / len(train_dataset):.3f}")
         logger.info(f"Test  dataset {len(test_dataset)}predicted goal Hit@1 ratio: {sum([dataset['goal'] == dataset['predicted_goal'][0] for dataset in test_dataset]) / len(test_dataset):.3f}")
 
-        train_datamodel_topic = GenerationDataset(args, train_dataset, train_knowledgeDB, tokenizer, mode='train', subtask=args.subtask)
+        # train_datamodel_topic = GenerationDataset(args, train_dataset, train_knowledgeDB, tokenizer, mode='train', subtask=args.subtask)
+        # # valid_datamodel_topic = TopicDataset(args, valid_dataset, all_knowledgeDB, train_knowledgeDB, tokenizer, task='know')
+        # test_datamodel_topic = GenerationDataset(args, test_dataset, all_knowledgeDB, tokenizer, mode='test', subtask=args.subtask)
+
+        train_datamodel_topic = data_model.TopicDataset(args, train_dataset, train_knowledgeDB, tokenizer, mode='train', subtask=args.subtask)
         # valid_datamodel_topic = TopicDataset(args, valid_dataset, all_knowledgeDB, train_knowledgeDB, tokenizer, task='know')
-        test_datamodel_topic = GenerationDataset(args, test_dataset, all_knowledgeDB, tokenizer, mode='test', subtask=args.subtask)
+        test_datamodel_topic = data_model.TopicDataset(args, test_dataset, all_knowledgeDB, tokenizer, mode='test', subtask=args.subtask)
 
         train_dataloader_topic = DataLoader(train_datamodel_topic, batch_size=args.gt_batch_size, shuffle=True)
         # valid_dataloader_topic = DataLoader(valid_datamodel_topic, batch_size=args.gt_batch_size, shuffle=False)
@@ -177,13 +181,15 @@ def main(args=None):
         train_goal_topic_bert(args, retriever, tokenizer, train_dataloader_topic, test_dataloader_topic, task='topic')
 
         ## 여기까지 돌고나면, train_dataset에는 goal과 topic이 모두 predicted가 들어가있게된다.
-        write_pkl(train_dataset, os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset{args.device[-1]}.pkl'))
-        write_pkl(test_dataset, os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset{args.device[-1]}.pkl'))
+        write_pkl(train_dataset, os.path.join(args.data_dir, 'pred_aug', f'gtall_train_pred_aug_dataset{args.device[-1]}.pkl'))
+        write_pkl(test_dataset, os.path.join(args.data_dir, 'pred_aug', f'gtall_test_pred_aug_dataset{args.device[-1]}.pkl'))
 
     if 'gt' in args.task or 'eval' in args.task:  ## TEMP Dataset Stat
         logger.info(f" Goal, Topic Task Evaluation with predicted goal,topic augment")
         train_dataset, valid_dataset, test_dataset = None, None, None
+        pkname='gt'
         if args.alltype:
+            pkname+='all'
             train_dataset = process_augment_all_sample(train_dataset_raw, tokenizer, train_knowledgeDB)
             test_dataset = process_augment_all_sample(test_dataset_raw, tokenizer, all_knowledgeDB)
             valid_dataset = process_augment_all_sample(valid_dataset_raw, tokenizer, all_knowledgeDB)
@@ -201,9 +207,9 @@ def main(args=None):
 
         train_GT_pred_auged_Dataset, test_GT_pred_auged_Dataset, valid_GT_pred_auged_Dataset = eval_goal_topic_model(args, train_datamodel_topic, test_datamodel_topic, retriever, tokenizer, valid_auged_Dataset=valid_datamodel_topic)
         if not args.debug:
-            write_pkl(train_GT_pred_auged_Dataset.augmented_raw_sample, os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
-            write_pkl(valid_GT_pred_auged_Dataset.augmented_raw_sample, os.path.join(args.data_dir, 'pred_aug', f'gt_valid_pred_aug_dataset.pkl'))
-            write_pkl(test_GT_pred_auged_Dataset.augmented_raw_sample, os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
+            write_pkl(train_GT_pred_auged_Dataset.augmented_raw_sample, os.path.join(args.data_dir, 'pred_aug', f'{pkname}_train_pred_aug_dataset.pkl'))
+            write_pkl(valid_GT_pred_auged_Dataset.augmented_raw_sample, os.path.join(args.data_dir, 'pred_aug', f'{pkname}_valid_pred_aug_dataset.pkl'))
+            write_pkl(test_GT_pred_auged_Dataset.augmented_raw_sample, os.path.join(args.data_dir, 'pred_aug', f'{pkname}_test_pred_aug_dataset.pkl'))
         logger.info("Finish Data Augment with Goal-Topic_pred_conf")
         pass
 
