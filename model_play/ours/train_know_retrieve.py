@@ -47,14 +47,19 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
     valid_dataset = process_augment_sample(valid_dataset_raw, tokenizer, all_knowledgeDB, goal_list=goal_list)
     test_dataset = process_augment_sample(test_dataset_raw, tokenizer, all_knowledgeDB, goal_list=goal_list)  # gold-topic
 
-    train_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'train_pred_aug_dataset.pkl'))
+    train_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', 'pkl_aaai', f'train_pred_aug_dataset.pkl')) # Topic 0.77
+    test_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', 'pkl_aaai', f'test_pred_aug_dataset.pkl'))
+    
+    # train_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'train_pred_aug_dataset.pkl')) # Topic 0.73
+    # test_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'test_pred_aug_dataset.pkl'))
+
+
     train_dataset_pred_aug = [data for data in train_dataset_pred_aug if data['target_knowledge'] != '' and data['goal'].lower() in goal_list]
     for idx, data in enumerate(train_dataset):
         data['predicted_goal'] = train_dataset_pred_aug[idx]['predicted_goal']
         data['predicted_topic'] = train_dataset_pred_aug[idx]['predicted_topic']
         data['predicted_topic_confidence'] = train_dataset_pred_aug[idx]['predicted_topic_confidence']
 
-    test_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'test_pred_aug_dataset.pkl'))
     # test_dataset_pred_aug2 = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'test_pred_aug_dataset_know.pkl'))
 
     test_dataset_pred_aug = [data for data in test_dataset_pred_aug if data['target_knowledge'] != '' and data['goal'].lower() in goal_list]
@@ -142,8 +147,8 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
         hit1, hit3, hit5, hit10, hit20, hit_movie_result, hit_music_result, hit_qa_result, hit_poi_result, hit_food_result, hit_chat_result, hit1_new, hit3_new, hit5_new, hit10_new, hit20_new = eval_know(args, test_dataloader, retriever, all_knowledgeDB,
                                                                                                                                                                                                             tokenizer)  # HJ: Knowledge text top-k 뽑아서 output만들어 체크하던 코드 분리
 
-        logger.info("Results")
-        logger.info("EPOCH:\t%d" % epoch)
+        logger.info()
+        logger.info(f"Results\tEPOCH: {epoch}")
         logger.info("Overall\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f" % (hit1, hit3, hit5, hit10, hit20))
         logger.info("Overall new knowledge\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f" % (hit1_new, hit3_new, hit5_new, hit10_new, hit20_new))
 
@@ -176,11 +181,7 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
             torch.save(retriever.state_dict(), os.path.join(args.saved_model_path, f"{args.model_name}_know.pt"))  # TIME_MODELNAME 형식
 
     logger.info(f'BEST RESULT')
-    logger.info(f"BEST Test Hit@1: {best_hit[0]}")
-    logger.info(f"BEST Test Hit@3: {best_hit[1]}")
-    logger.info(f"BEST Test Hit@5: {best_hit[2]}")
-    logger.info(f"BEST Test Hit@10: {best_hit[3]}")
-    logger.info(f"BEST Test Hit@20: {best_hit[4]}")
+    logger.info(f"BEST Test Hit@1/3/5/10/20: {best_hit[0]:.3f}\t{best_hit[1]:.3f}\t{best_hit[2]:.3f}\t{best_hit[3]:.3f}\t{best_hit[4]:.3f}")
 
     logger.info("[BEST]")
     logger.info("Overall\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f" % (best_hit[0], best_hit[1], best_hit[2], best_hit[3], best_hit[4]))

@@ -1,11 +1,21 @@
 #!/bin/bash
 # 아래에 실행시키려는 녀석들 다 입력해놓고, 마지막 echo "" 따옴표 안에 어떤걸 보기위한 실험이었는지 적어놓기
+python main.py --task=topic --num_epochs=25 --log_name=Topic512_Train  --device=0 --gt_batch_size=32 --gt_max_length=512
+python main.py --task=goal_topic --num_epochs=25 --log_name=Goal_usepred_Train  --device=1
+python main.py --task=goal_topic --num_epochs=25 --log_name=Goal_Train  --device=3
+python main.py --task=goal_topic --num_epochs=25 --log_name=Goal_Train_WithPooler  --device=2
 
-python unimind_main.py --fast --version=2 --gpu=1 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=3 --topic_conf=0.9 --log_name="Uni_RECGEN_Cum3_Conf90" #  BART-Large RQ
-python unimind_main.py --fast --version=2 --gpu=1 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=3 --topic_conf=0.8 --log_name="Uni_RECGEN_Cum3_Conf80" #  BART-Large RQ
-python unimind_main.py --fast --version=2 --gpu=1 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=3 --topic_conf=0.7 --log_name="Uni_RECGEN_Cum3_Conf70" #  BART-Large RQ
-python unimind_main.py --fast --version=2 --gpu=1 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=3 --topic_conf=0.6 --log_name="Uni_RECGEN_Cum3_Conf60" #  BART-Large RQ
-python unimind_main.py --fast --version=2 --gpu=1 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=3 --topic_conf=0.5 --log_name="Uni_RECGEN_Cum3_Conf50" #  BART-Large RQ
+python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RB_GCL2_topic2_conf90_hj --model_name=RB_GCL2_topic2_conf90_hj --topk_topic=2 --topic_conf=0.9 --train_ablation=RG --device=0
+python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RB_GCL2_topic2_conf80_hj --model_name=RB_GCL2_topic2_conf80_hj --topk_topic=2 --topic_conf=0.8 --train_ablation=RG --device=1
+python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RB_GCL2_topic2_conf70_hj --model_name=RB_GCL2_topic2_conf70_hj --topk_topic=2 --topic_conf=0.7 --train_ablation=RG --device=2
+python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RB_GCL2_topic2_conf60_hj --model_name=RB_GCL2_topic2_conf60_hj --topk_topic=2 --topic_conf=0.6 --train_ablation=RG --device=3
+python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RB_GCL2_topic2_conf50_hj --model_name=RB_GCL2_topic2_conf50_hj --topk_topic=2 --topic_conf=0.5 --train_ablation=RG --device=0
+#-------------- before 230923 --------------#
+# python unimind_main.py --fast --version=2 --gpu=1 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=3 --topic_conf=0.9 --log_name="Uni_RECGEN_Cum3_Conf90" #  BART-Large RQ
+# python unimind_main.py --fast --version=2 --gpu=1 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=3 --topic_conf=0.8 --log_name="Uni_RECGEN_Cum3_Conf80" #  BART-Large RQ
+# python unimind_main.py --fast --version=2 --gpu=1 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=3 --topic_conf=0.7 --log_name="Uni_RECGEN_Cum3_Conf70" #  BART-Large RQ
+# python unimind_main.py --fast --version=2 --gpu=1 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=3 --topic_conf=0.6 --log_name="Uni_RECGEN_Cum3_Conf60" #  BART-Large RQ
+# python unimind_main.py --fast --version=2 --gpu=1 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=3 --topic_conf=0.5 --log_name="Uni_RECGEN_Cum3_Conf50" #  BART-Large RQ
 
 
 # python main.py --task=topic --num_epochs=25 --log_name=Topic_onlyProfileDialog --device=1

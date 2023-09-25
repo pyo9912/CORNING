@@ -73,7 +73,7 @@ def main(args=None):
     bert_model = AutoModel.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
     bert_config = AutoConfig.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
     tokenizer = AutoTokenizer.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
-    tokenizer.add_special_tokens(bert_special_tokens_dict) # 'additional_special_tokens': ['<dialog>', '<topic>', '<type>', '<user_profile>', '<situation>'],
+    tokenizer.add_special_tokens(bert_special_tokens_dict) # 'additional_special_tokens': ['<dialog>', '<topic>', '<goal>', '<profile>', '<situation>'],
     bert_model.resize_token_embeddings(len(tokenizer))
     args.hidden_size = bert_model.config.hidden_size  # BERT large 쓸 때 대비
 
@@ -114,12 +114,6 @@ def main(args=None):
     train_knowledgeDB = list(train_knowledgeDB)
     all_knowledgeDB = list(all_knowledgeDB)
 
-    # filtered_corpus = []
-    # for sentence in all_knowledgeDB:
-    #     tokenized_sentence = bm_tokenizer(sentence, tokenizer)
-    #     filtered_corpus.append(tokenized_sentence)
-    # args.bm25 = BM25Okapi(filtered_corpus)
-
     args.train_knowledge_num = len(train_knowledgeDB)
     args.train_knowledgeDB = train_knowledgeDB
 
@@ -158,21 +152,23 @@ def main(args=None):
         args.subtask = 'topic'
         # KNOWLEDGE TASk
         retriever = Retriever(args, bert_model)
-        if not os.path.exists(os.path.join(args.saved_model_path, f"goal_best_model.pt")): Exception(f'Goal Best Model 이 있어야함 {os.path.join(args.saved_model_path, f"goal_best_model.pt")}')
-        retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"goal_best_model.pt")))
+        # goal_model_name = f"goal_best_model{args.device[-1]}.pt" if 'goal' in args.task and 'topic' in args.task else f"goal_best_model.pt" # goal이랑 topic동시에 넘어가면 학습된녀석으로 가져가도록, topic만 학습할땐 goal_best_model 불러와서 쓰도록
+        goal_model_name = f"goal_best_model{args.device[-1]}.pt"
+        if not os.path.exists(os.path.join(args.saved_model_path, goal_model_name)): Exception(f'Goal Best Model 이 있어야함 {os.path.join(args.saved_model_path, goal_model_name)}')
+        retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, goal_model_name)), strict=False)
         retriever.to(args.device)
         train_dataset = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gtall_train_pred_aug_dataset.pkl'))
-        test_dataset = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gtall_test_pred_aug_dataset.pkl'))
+        test_dataset = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl')) # Test 3711 
         logger.info(f"Train dataset {len(train_dataset)} predicted goal Hit@1 ratio: {sum([dataset['goal'] == dataset['predicted_goal'][0] for dataset in train_dataset]) / len(train_dataset):.3f}")
-        logger.info(f"Test  dataset {len(test_dataset)}predicted goal Hit@1 ratio: {sum([dataset['goal'] == dataset['predicted_goal'][0] for dataset in test_dataset]) / len(test_dataset):.3f}")
+        logger.info(f"Test  dataset {len(test_dataset)} predicted goal Hit@1 ratio: {sum([dataset['goal'] == dataset['predicted_goal'][0] for dataset in test_dataset]) / len(test_dataset):.3f}")
 
-        # train_datamodel_topic = GenerationDataset(args, train_dataset, train_knowledgeDB, tokenizer, mode='train', subtask=args.subtask)
-        # # valid_datamodel_topic = TopicDataset(args, valid_dataset, all_knowledgeDB, train_knowledgeDB, tokenizer, task='know')
-        # test_datamodel_topic = GenerationDataset(args, test_dataset, all_knowledgeDB, tokenizer, mode='test', subtask=args.subtask)
-
-        train_datamodel_topic = data_model.TopicDataset(args, train_dataset, train_knowledgeDB, tokenizer, mode='train', subtask=args.subtask)
+        train_datamodel_topic = GenerationDataset(args, train_dataset, train_knowledgeDB, tokenizer, mode='train', subtask=args.subtask)
         # valid_datamodel_topic = TopicDataset(args, valid_dataset, all_knowledgeDB, train_knowledgeDB, tokenizer, task='know')
-        test_datamodel_topic = data_model.TopicDataset(args, test_dataset, all_knowledgeDB, tokenizer, mode='test', subtask=args.subtask)
+        test_datamodel_topic = GenerationDataset(args, test_dataset, all_knowledgeDB, tokenizer, mode='test', subtask=args.subtask)
+
+        # train_datamodel_topic = data_model.TopicDataset(args, train_dataset, train_knowledgeDB, tokenizer, mode='train', subtask=args.subtask)
+        # # valid_datamodel_topic = TopicDataset(args, valid_dataset, all_knowledgeDB, train_knowledgeDB, tokenizer, task='know')
+        # test_datamodel_topic = data_model.TopicDataset(args, test_dataset, all_knowledgeDB, tokenizer, mode='test', subtask=args.subtask)
 
         train_dataloader_topic = DataLoader(train_datamodel_topic, batch_size=args.gt_batch_size, shuffle=True)
         # valid_dataloader_topic = DataLoader(valid_datamodel_topic, batch_size=args.gt_batch_size, shuffle=False)
@@ -182,7 +178,7 @@ def main(args=None):
 
         ## 여기까지 돌고나면, train_dataset에는 goal과 topic이 모두 predicted가 들어가있게된다.
         write_pkl(train_dataset, os.path.join(args.data_dir, 'pred_aug', f'gtall_train_pred_aug_dataset{args.device[-1]}.pkl'))
-        write_pkl(test_dataset, os.path.join(args.data_dir, 'pred_aug', f'gtall_test_pred_aug_dataset{args.device[-1]}.pkl'))
+        write_pkl(test_dataset, os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset{args.device[-1]}.pkl'))
 
     if 'gt' in args.task or 'eval' in args.task:  ## TEMP Dataset Stat
         logger.info(f" Goal, Topic Task Evaluation with predicted goal,topic augment")
@@ -210,7 +206,8 @@ def main(args=None):
             write_pkl(train_GT_pred_auged_Dataset.augmented_raw_sample, os.path.join(args.data_dir, 'pred_aug', f'{pkname}_train_pred_aug_dataset.pkl'))
             write_pkl(valid_GT_pred_auged_Dataset.augmented_raw_sample, os.path.join(args.data_dir, 'pred_aug', f'{pkname}_valid_pred_aug_dataset.pkl'))
             write_pkl(test_GT_pred_auged_Dataset.augmented_raw_sample, os.path.join(args.data_dir, 'pred_aug', f'{pkname}_test_pred_aug_dataset.pkl'))
-        logger.info("Finish Data Augment with Goal-Topic_pred_conf")
+            logger.info("Finish Data Augment with Goal-Topic_pred_conf And Save")
+        # logger.info("Finish Data Augment with Goal-Topic_pred_conf")
         pass
 
     if 'know' in args.task:

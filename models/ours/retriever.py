@@ -7,7 +7,7 @@ class Retriever(nn.Module):
         super(Retriever, self).__init__()
         self.args = args
         self.query_bert = query_bert
-        self.query_bert.pooler = None
+        # self.query_bert.pooler = None
         self.rerank_bert = copy.deepcopy(self.query_bert)
         self.which_rag_called='Sch'
 
