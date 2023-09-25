@@ -47,8 +47,8 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
     valid_dataset = process_augment_sample(valid_dataset_raw, tokenizer, all_knowledgeDB, goal_list=goal_list)
     test_dataset = process_augment_sample(test_dataset_raw, tokenizer, all_knowledgeDB, goal_list=goal_list)  # gold-topic
 
-    train_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', 'pkl_763', f'train_pred_aug_dataset.pkl')) # Topic 0.76
-    test_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', 'pkl_763', f'test_pred_aug_dataset.pkl'))
+    train_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', 'pkl_768', f'train_pred_aug_dataset.pkl')) # Topic 0.768
+    test_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', 'pkl_768', f'test_pred_aug_dataset.pkl'))
     
     # train_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'train_pred_aug_dataset.pkl')) # Topic 0.73
     # test_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'test_pred_aug_dataset.pkl'))
@@ -147,7 +147,7 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
         hit1, hit3, hit5, hit10, hit20, hit_movie_result, hit_music_result, hit_qa_result, hit_poi_result, hit_food_result, hit_chat_result, hit1_new, hit3_new, hit5_new, hit10_new, hit20_new = eval_know(args, test_dataloader, retriever, all_knowledgeDB,
                                                                                                                                                                                                             tokenizer)  # HJ: Knowledge text top-k 뽑아서 output만들어 체크하던 코드 분리
 
-        logger.info()
+        # logger.info()
         logger.info(f"Results\tEPOCH: {epoch}")
         logger.info("Overall\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f" % (hit1, hit3, hit5, hit10, hit20))
         logger.info("Overall new knowledge\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f" % (hit1_new, hit3_new, hit5_new, hit10_new, hit20_new))
