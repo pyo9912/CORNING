@@ -47,8 +47,8 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
     valid_dataset = process_augment_sample(valid_dataset_raw, tokenizer, all_knowledgeDB, goal_list=goal_list)
     test_dataset = process_augment_sample(test_dataset_raw, tokenizer, all_knowledgeDB, goal_list=goal_list)  # gold-topic
 
-    train_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', 'pkl_aaai', f'train_pred_aug_dataset.pkl')) # Topic 0.77
-    test_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', 'pkl_aaai', f'test_pred_aug_dataset.pkl'))
+    train_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', 'pkl_763', f'train_pred_aug_dataset.pkl')) # Topic 0.76
+    test_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', 'pkl_763', f'test_pred_aug_dataset.pkl'))
     
     # train_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'train_pred_aug_dataset.pkl')) # Topic 0.73
     # test_dataset_pred_aug = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'test_pred_aug_dataset.pkl'))

@@ -11,20 +11,23 @@ from torch.utils.data import DataLoader
 
 
 
-def eval_goal_topic_model(args, train_auged_Dataset, test_auged_Dataset, retriever, tokenizer, valid_auged_Dataset=None):
+def eval_goal_topic_model(args, train_auged_Dataset, test_auged_Dataset, retriever, tokenizer, valid_auged_Dataset=None, device=None):
     logger.info(f"Dataset Length [Train, Test]: {len(train_auged_Dataset)}, {len(test_auged_Dataset)}")
 
-    retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"goal_best_model3.pt"), map_location=args.device), strict=False)
+    retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"goal_best_model1.pt"), map_location=args.device), strict=False)
     retriever.to(args.device)
     train_datamodel_topic = train_auged_Dataset  # GenerationDataset(args, train_dataset, train_knowledgeDB, tokenizer, mode='train', subtask=args.subtask)
     test_datamodel_topic = test_auged_Dataset  # GenerationDataset(args, test_dataset, all_knowledgeDB, tokenizer, mode='test', subtask=args.subtask)
     valid_datamodel_topic = valid_auged_Dataset  # GenerationDataset(args, test_dataset, all_knowledgeDB, tokenizer, mode='test', subtask=args.subtask)
 
     # if args.debug: args.num_epochs = 1
+    train_datamodel_topic.input_length, test_datamodel_topic.input_length, valid_datamodel_topic.input_length = 256, 256, 256
     pred_goal_topic_aug(args, retriever, tokenizer, train_datamodel_topic, task='goal')
     pred_goal_topic_aug(args, retriever, tokenizer, valid_datamodel_topic, task='goal')
     pred_goal_topic_aug(args, retriever, tokenizer, test_datamodel_topic, task='goal')
-    retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"topic_best_model3.pt"), map_location=args.device), strict=False)
+
+    train_datamodel_topic.input_length, test_datamodel_topic.input_length, valid_datamodel_topic.input_length = args.gt_max_length, args.gt_max_length, args.gt_max_length
+    retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"topic_best_model0.pt"), map_location=args.device), strict=False)
     retriever.to(args.device)
     pred_goal_topic_aug(args, retriever, tokenizer, train_datamodel_topic, task='topic')
     pred_goal_topic_aug(args, retriever, tokenizer, valid_datamodel_topic, task='topic')
@@ -39,7 +42,7 @@ def pred_goal_topic_aug(args, retriever, tokenizer, Auged_Dataset, task):
     Auged_Dataset.subtask = task
     optimizer = torch.optim.Adam(retriever.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.num_epochs * len(Auged_Dataset), eta_min=args.lr * 0.1)
-    data_loader = DataLoader(Auged_Dataset, batch_size=args.gt_batch_size * 10, shuffle=False)
+    data_loader = DataLoader(Auged_Dataset, batch_size=args.gt_batch_size * 5, shuffle=False)
     with torch.no_grad():
         task_preds, task_confs, _ = inEpoch_BatchPlay(args, retriever, tokenizer, data_loader, optimizer, scheduler, epoch=0, task=task, mode='test')
     topk=5 if task=='topic' else 1

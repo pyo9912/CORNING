@@ -120,8 +120,9 @@ def main(args=None):
     args.all_knowledge_num = len(all_knowledgeDB)
     args.all_knowledgeDB = all_knowledgeDB
     log_args(args)
-
+    temp_epoch = args.num_epochs
     if 'goal' in args.task:
+        args.num_epochs = 15
         # Goal Prediction TASk
         logger.info("Goal Prediction Task")
         retriever = Retriever(args, query_bert=bert_model)
@@ -132,9 +133,9 @@ def main(args=None):
         test_dataset = process_augment_all_sample(test_dataset_raw, tokenizer, all_knowledgeDB)
         args.subtask = 'goal'
 
-        train_datamodel_topic = GenerationDataset(args, train_dataset, train_knowledgeDB, tokenizer, mode='train', subtask=args.subtask)
+        train_datamodel_topic = GenerationDataset(args, train_dataset, train_knowledgeDB, tokenizer, mode='train', subtask=args.subtask, max_length=256)
         # valid_datamodel_topic = TopicDataset(args, valid_dataset, all_knowledgeDB, train_knowledgeDB, tokenizer, task='know')
-        test_datamodel_topic = GenerationDataset(args, test_dataset, all_knowledgeDB, tokenizer, mode='test', subtask=args.subtask)
+        test_datamodel_topic = GenerationDataset(args, test_dataset, all_knowledgeDB, tokenizer, mode='test', subtask=args.subtask, max_length=256)
 
         train_dataloader_topic = DataLoader(train_datamodel_topic, batch_size=args.gt_batch_size, shuffle=True)
         # valid_dataloader_topic = DataLoader(valid_datamodel_topic, batch_size=args.gt_batch_size, shuffle=False)
@@ -146,9 +147,10 @@ def main(args=None):
 
         # Dataset save
         write_pkl(train_dataset, os.path.join(args.data_dir, 'pred_aug', f'gtall_train_pred_aug_dataset{args.device[-1]}.pkl'))
-        write_pkl(test_dataset, os.path.join(args.data_dir, 'pred_aug', f'gtall_test_pred_aug_dataset{args.device[-1]}.pkl'))
+        write_pkl(test_dataset, os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset{args.device[-1]}.pkl'))
 
     if 'topic' in args.task:
+        if args.num_epochs != temp_epoch: args.num_epochs = temp_epoch
         args.subtask = 'topic'
         # KNOWLEDGE TASk
         retriever = Retriever(args, bert_model)
@@ -157,8 +159,8 @@ def main(args=None):
         if not os.path.exists(os.path.join(args.saved_model_path, goal_model_name)): Exception(f'Goal Best Model 이 있어야함 {os.path.join(args.saved_model_path, goal_model_name)}')
         retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, goal_model_name)), strict=False)
         retriever.to(args.device)
-        train_dataset = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gtall_train_pred_aug_dataset.pkl'))
-        test_dataset = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl')) # Test 3711 
+        train_dataset = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gtall_train_pred_aug_dataset{args.device[-1]}.pkl'))
+        test_dataset = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset{args.device[-1]}.pkl')) # Test 3711 
         logger.info(f"Train dataset {len(train_dataset)} predicted goal Hit@1 ratio: {sum([dataset['goal'] == dataset['predicted_goal'][0] for dataset in train_dataset]) / len(train_dataset):.3f}")
         logger.info(f"Test  dataset {len(test_dataset)} predicted goal Hit@1 ratio: {sum([dataset['goal'] == dataset['predicted_goal'][0] for dataset in test_dataset]) / len(test_dataset):.3f}")
 
