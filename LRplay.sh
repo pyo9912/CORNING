@@ -1,6 +1,15 @@
 #!/bin/bash
 # 아래에 실행시키려는 녀석들 다 입력해놓고, 마지막 echo "" 따옴표 안에 어떤걸 보기위한 실험이었는지 적어놓기
 
+
+python main.py --task=topic --num_epochs=25 --log_name=Topic512_Train_1e-4 --gt_batch_size=32 --gt_max_length=512 --lr=1e-4 --device=0
+python main.py --task=topic --num_epochs=25 --log_name=Topic512_Train_1e-6 --gt_batch_size=32 --gt_max_length=512 --lr=1e-6 --device=1
+
+# python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RG_768topic_Top1 --model_name=RG_768topic_Top1 --topk_topic=1 --train_ablation=RG --know_item_select=top --device=1
+# python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RG_768topic_Top2 --model_name=RG_768topic_Top2 --topk_topic=2 --train_ablation=RG --know_item_select=top --device=2
+# python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RG_768topic_Top3 --model_name=RG_768topic_Top3 --topk_topic=3 --train_ablation=RG --know_item_select=top --device=3
+
+#-------------- before 230926 --------------#
 # python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RB_GCL2_768topic2_conf90_hj --model_name=RB_768GCL2_topic2_conf90_hj --topk_topic=2 --topic_conf=0.9 --train_ablation=RG --device=2
 # python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RB_GCL2_768topic2_conf80_hj --model_name=RB_768GCL2_topic2_conf80_hj --topk_topic=2 --topic_conf=0.8 --train_ablation=RG --device=2
 # python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RB_GCL2_768topic2_conf70_hj --model_name=RB_768GCL2_topic2_conf70_hj --topk_topic=2 --topic_conf=0.7 --train_ablation=RG --device=2

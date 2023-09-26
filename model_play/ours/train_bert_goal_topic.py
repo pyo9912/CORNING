@@ -27,7 +27,7 @@ def eval_goal_topic_model(args, train_auged_Dataset, test_auged_Dataset, retriev
     pred_goal_topic_aug(args, retriever, tokenizer, test_datamodel_topic, task='goal')
 
     train_datamodel_topic.input_length, test_datamodel_topic.input_length, valid_datamodel_topic.input_length = args.gt_max_length, args.gt_max_length, args.gt_max_length
-    retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"topic_best_model0.pt"), map_location=args.device), strict=False)
+    retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"topic_best_model0_512.pt"), map_location=args.device), strict=False)
     retriever.to(args.device)
     pred_goal_topic_aug(args, retriever, tokenizer, train_datamodel_topic, task='topic')
     pred_goal_topic_aug(args, retriever, tokenizer, valid_datamodel_topic, task='topic')

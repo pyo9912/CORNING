@@ -101,7 +101,7 @@ class DialogDataset(Dataset):
         if self.mode == 'train':
             random.shuffle(predicted_topic_list)
             candidate_topic_entities = predicted_topic_list
-            predicted_topic = '|'.join(predicted_topic_list)
+            predicted_topic = '|'.join(candidate_topic_entities)
         else:
             if self.args.know_item_select=='conf':
                 cum_prob = 0
