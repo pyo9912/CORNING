@@ -97,19 +97,22 @@ class DialogDataset(Dataset):
         predicted_topic_confidence_list = deepcopy(data['predicted_topic_confidence'][:self.args.topk_topic])
 
         predicted_goal = data['predicted_goal'][0]
-
+        
         if self.mode == 'train':
             random.shuffle(predicted_topic_list)
             candidate_topic_entities = predicted_topic_list
             predicted_topic = '|'.join(predicted_topic_list)
         else:
-            cum_prob = 0
-            candidate_topic_entities = []
-            for p_topic, conf in zip(predicted_topic_list, predicted_topic_confidence_list):
-                if cum_prob < self.args.topic_conf: # or cum_prob == 0:
-                    candidate_topic_entities.append(p_topic)
-                    cum_prob += conf
-                    # break
+            if self.args.know_item_select=='conf':
+                cum_prob = 0
+                candidate_topic_entities = []
+                for p_topic, conf in zip(predicted_topic_list, predicted_topic_confidence_list):
+                    if cum_prob < self.args.topic_conf: # or cum_prob == 0:
+                        candidate_topic_entities.append(p_topic)
+                        cum_prob += conf
+                        # break
+            elif self.args.know_item_select=='top':
+                candidate_topic_entities = predicted_topic_list
             predicted_topic = '|'.join(candidate_topic_entities)
         topic_len = len(candidate_topic_entities)
 

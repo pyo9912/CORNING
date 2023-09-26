@@ -31,6 +31,7 @@ def add_ours_specific_args(parser):
     parser.add_argument("--alltype", "--allType", action='store_true', help="AllType Check 여부, AllType아닐시 knowledge용으로 3711세팅들어감")
 
     ## For know
+    parser.add_argument("--know_item_select", default='conf', type=str, help="item selector use conf or topk", choices=['conf', 'top'])
     parser.add_argument("--cotmae", action='store_true', help="Initialize the retriever from pretrained CoTMAE")
 
     ## For resp
