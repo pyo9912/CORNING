@@ -1,9 +1,19 @@
 #!/bin/bash
 # 아래에 실행시키려는 녀석들 다 입력해놓고, 마지막 echo "" 따옴표 안에 어떤걸 보기위한 실험이었는지 적어놓기
 
+python unimind_main.py --fast --version=2 --gpu=3 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=1 --topic_rq=top --log_name="768Uni_RECGEN_Top1_기존_onlyresp" 
 
-python main.py --task=topic --num_epochs=25 --log_name=Topic512_Train_1e-4 --gt_batch_size=32 --gt_max_length=512 --lr=1e-4 --device=0
-python main.py --task=topic --num_epochs=25 --log_name=Topic512_Train_1e-6 --gt_batch_size=32 --gt_max_length=512 --lr=1e-6 --device=1
+# python unimind_main.py --fast --version=2 --gpu=0 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=1 --topic_rq=top --log_name="768Uni_RECGEN_Top1" 
+# python unimind_main.py --fast --version=2 --gpu=0 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=2 --topic_rq=top --log_name="768Uni_RECGEN_Top2" 
+# python unimind_main.py --fast --version=2 --gpu=1 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=2 --topic_rq=conf --topic_conf=0.9 --log_name="768Uni_RECGEN_Cum2_Conf90" 
+# python unimind_main.py --fast --version=2 --gpu=1 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=2 --topic_rq=conf --topic_conf=0.8 --log_name="768Uni_RECGEN_Cum2_Conf80" 
+# python unimind_main.py --fast --version=2 --gpu=2 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=2 --topic_rq=conf --topic_conf=0.7 --log_name="768Uni_RECGEN_Cum2_Conf70" 
+# python unimind_main.py --fast --version=2 --gpu=2 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=2 --topic_rq=conf --topic_conf=0.6 --log_name="768Uni_RECGEN_Cum2_Conf60" 
+# python unimind_main.py --fast --version=2 --gpu=3 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=2 --topic_rq=conf --topic_conf=0.5 --log_name="768Uni_RECGEN_Cum2_Conf50" 
+
+
+# python main.py --task=topic --num_epochs=25 --log_name=Topic512_Train_1e-4 --gt_batch_size=32 --gt_max_length=512 --lr=1e-4 --device=0
+# python main.py --task=topic --num_epochs=25 --log_name=Topic512_Train_1e-6 --gt_batch_size=32 --gt_max_length=512 --lr=1e-6 --device=1
 
 # python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RG_768topic_Top1 --model_name=RG_768topic_Top1 --topk_topic=1 --train_ablation=RG --know_item_select=top --device=1
 # python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RG_768topic_Top2 --model_name=RG_768topic_Top2 --topk_topic=2 --train_ablation=RG --know_item_select=top --device=2

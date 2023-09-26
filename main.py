@@ -155,13 +155,13 @@ def main(args=None):
         args.subtask = 'topic'
         # KNOWLEDGE TASk
         retriever = Retriever(args, bert_model)
-        # goal_model_name = f"goal_best_model{args.device[-1]}.pt" if 'goal' in args.task and 'topic' in args.task else f"goal_best_model.pt" # goal이랑 topic동시에 넘어가면 학습된녀석으로 가져가도록, topic만 학습할땐 goal_best_model 불러와서 쓰도록
-        goal_model_name = f"goal_best_model{args.device[-1]}.pt"
+        goal_model_name = f"goal_best_model{args.device[-1]}.pt" if 'goal' in args.task and 'topic' in args.task else f"goal_best_model.pt" # goal이랑 topic동시에 넘어가면 학습된녀석으로 가져가도록, topic만 학습할땐 goal_best_model 불러와서 쓰도록
+        # goal_model_name = f"goal_best_model{args.device[-1]}.pt"
         if not os.path.exists(os.path.join(args.saved_model_path, goal_model_name)): Exception(f'Goal Best Model 이 있어야함 {os.path.join(args.saved_model_path, goal_model_name)}')
         retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, goal_model_name)), strict=False)
         retriever.to(args.device)
-        train_dataset = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gtall_train_pred_aug_dataset{args.device[-1]}.pkl'))
-        test_dataset = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset{args.device[-1]}.pkl')) # Test 3711 
+        train_dataset = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gtall_train_pred_aug_dataset.pkl')) # Train 42086
+        test_dataset = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl')) # Test 3711 
         logger.info(f"Train dataset {len(train_dataset)} predicted goal Hit@1 ratio: {sum([dataset['goal'] == dataset['predicted_goal'][0] for dataset in train_dataset]) / len(train_dataset):.3f}")
         logger.info(f"Test  dataset {len(test_dataset)} predicted goal Hit@1 ratio: {sum([dataset['goal'] == dataset['predicted_goal'][0] for dataset in test_dataset]) / len(test_dataset):.3f}")
 

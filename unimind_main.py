@@ -29,11 +29,11 @@ def add_ours_specific_args(parser):
     parser.add_argument("--topic_rq", type=str, default='conf', choices=["conf","top"] , help=" Method ")
     
     ## For resp
-    parser.add_argument("--uni_model_name", type=str, default='facebook/bart-base', help=" model name ")
-    parser.add_argument("--uni_batch_size", type=int, default=16, help=" batchsize ")
+    parser.add_argument("--uni_model_name", type=str, default='facebook/bart-base', help=" model name ") # facebook/bart-large
+    parser.add_argument("--uni_batch_size", type=int, default=32, help=" batchsize ")
     # parser.add_argument("--uni_input_dialog", type=str, default="dialog", help=" input dialog  ")
-    parser.add_argument("--uni_max_input_length", type=int, default=256, help=" input len: 512 ")
-    parser.add_argument("--uni_max_target_length", type=int, default=100, help=" output len: 100 ")
+    parser.add_argument("--uni_max_input_length", type=int, default=256, help=" input len: 256 ")
+    parser.add_argument("--uni_max_target_length", type=int, default=128, help=" output len: 128 ")
     parser.add_argument("--uni_num_beams", type=int, default=1, help=" num beam ") # Only one
     parser.add_argument("--uni_pretrain_epochs", type=int, default=15, help=" pretrain_epoch default: 15 ")
     parser.add_argument("--uni_ft_epochs", type=int, default=5, help=" fine-tune epoch default: 5 ")
@@ -94,7 +94,8 @@ def main(args=None):
     all_knowledgeDB = list(all_knowledgeDB)
     
     if args.fast:
-        train_dataset_aug_pred, test_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl')) , utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
+        train_dataset_aug_pred, test_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', 'pkl_768', f'train_pred_aug_dataset.pkl')) , utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', 'pkl_768', f'test_pred_aug_dataset.pkl'))
+        # train_dataset_aug_pred, test_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl')) , utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
         # read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
     else:
         logger.info("Pred-Aug dataset 구축")
@@ -212,7 +213,7 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
         for i in output_strings:
             logger.info(f"{mode}_{epoch} {i}")
         
-        _, _, resp_topic_str = gen_resp_topic(args, real_resps=real_resps, types=types, topics=topics, gen_resps=gen_resps, topic_in_resps=topic_in_resps, p_topics=p_topics)
+        _, _, resp_topic_str = gen_resp_topic(args, real_resps=real_resps, types=types, topics=topics, gen_resps=gen_resps, topic_in_resps=topic_in_resps, p_topics=p_topics, isrq=False)
         for i in resp_topic_str:
             logger.info(f"{mode}_{epoch} {i}")
 
@@ -364,6 +365,7 @@ class BART_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
         context_batch['attention_mask'] = attention_mask
         
 
+        # labels = "<topic>" + topic + "|" + response
         labels = response
         labels = self.tokenizer(labels, max_length = self.target_max_length, padding='max_length', truncation=True)['input_ids']
         context_batch['labels'] = labels

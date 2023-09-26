@@ -167,7 +167,7 @@ def conv_gen_eval():
                    f"{report['bleu@1']:.3f},  {report['bleu@2']:.3f},  {report['bleu@3']:.3f},  {report['bleu@4']:.3f},  {report['dist@1']:.3f},  {report['dist@2']:.3f},  {report['dist@3']:.3f},  {report['dist@4']:.3f}"]
     print(report_text[0], '\n', report_text[1])
 
-def gen_resp_topic(args, real_resps=None, types=None, topics=None, gen_resps=None, topic_in_resps=None, p_topics=None):
+def gen_resp_topic(args, real_resps=None, types=None, topics=None, gen_resps=None, topic_in_resps=None, p_topics=None, isrq=False):
     typelist = ['Q&A', 'Movie recommendation', 'Music recommendation', 'POI recommendation', 'Food recommendation'] if args.version != 'ko' else ['QA', 'Movie Recommendation']
     hitdic = {type: {'hit1_Rec': 0, 'hit1_Gen': 0, 'total': 0} for type in typelist + ['Others', 'total']}
     for idx in range(len(real_resps)):
@@ -178,6 +178,11 @@ def gen_resp_topic(args, real_resps=None, types=None, topics=None, gen_resps=Non
             tmp_goal = 'Others'
 
         pred, gold, topic, topic_in_resp, p_topic = gen_resps[idx].lower(), real_resps[idx].lower(), topics[idx].lower(), topic_in_resps[idx], p_topics[idx].lower()
+        try:
+            if isrq: 
+                pred, gold = pred.split('|')[-1] , gold.split('|')[-1]
+        except: pass
+
         if topic_in_resp:
             hitdic['total']['total'] += 1
             hitdic[tmp_goal]['total'] += 1
