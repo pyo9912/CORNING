@@ -116,7 +116,8 @@ def main(args=None):
 
 
     # 3711-3711 Fast 
-    if args.debug: train_dataset_aug_pred, test_dataset_aug_pred, args.uni_epochs = train_dataset_aug_pred[:50] , test_dataset_aug_pred[:50] , 1
+    if args.debug: 
+        train_dataset_aug_pred, test_dataset_aug_pred, args.uni_epochs = train_dataset_aug_pred[:50] , test_dataset_aug_pred[:50] , 1
 
     train_Dataset = BART_RQ_Dataset(args, train_dataset_aug_pred, tokenizer, mode='train', method=args.method)
     test_Dataset =BART_RQ_Dataset(args, test_dataset_aug_pred, tokenizer, mode='test', method=args.method)
@@ -213,15 +214,16 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
         # for i in output_strings:
         #     logger.info(f"{mode}_{epoch} {i}")
         
-        _, hitdic_ratio, resp_topic_str = gen_resp_topic(args, real_resps=real_resps, types=types, topics=topics, gen_resps=gen_resps, topic_in_resps=topic_in_resps, p_topics=p_topics, isrq=False)
+        _, hitdic_ratio, resp_topic_str = gen_resp_topic(args, real_resps=real_resps, types=types, topics=topics, gen_resps=gen_resps, topic_in_resps=topic_in_resps, p_topics=p_topics, isrq=True)
         for i in resp_topic_str:
             logger.info(f"{mode}_{epoch} {i}")
         ppl=hitdic_ratio['total']['hit1_Gen']
+        output_strings = resp_topic_str
 
     save_preds_hitgen(args, contexts, real_resp=real_resps, gen_resps=gen_resps, epoch=epoch, mode=mode, topic_in_resp=topic_in_resps, topics=topics, p_topics = p_topics)
     # save_preds(args, contexts, real_resp=real_resps, gen_resps=gen_resps, epoch=epoch, mode=mode) # Default for Generation save
-    return ppl, resp_topic_str
-    # return ppl, output_strings
+    # return ppl, resp_topic_str
+    return ppl, output_strings
 
 
 def save_preds_hitgen(args, context, real_resp, gen_resps=[], epoch=None, mode='train', topic_in_resp=None, topics = None, p_topics=None):
@@ -237,7 +239,7 @@ def save_preds_hitgen(args, context, real_resp, gen_resps=[], epoch=None, mode='
                     isTrue = True if topics[i] in gen_resps[i] else False
                     p_topic_isTrue = True if topics[i] == p_topics[i] else False
                     f.write(f"Source    : {ctx}\n")
-                    f.write(f"Hit-Rec@1: {p_topic_isTrue}\tHit-Gen@1 : {isTrue}\n")
+                    f.write(f"Hit-Rec@1: {p_topic_isTrue}\nHit-Gen@1 : {isTrue}\n")
                     f.write(f"Real Resp : {real_resp[i]}\n")
                     if gen_resps: f.write(f"Gen  Resp : {gen_resps[i]}\n")
                     f.write(f"\n")
@@ -382,7 +384,7 @@ class BART_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
             predicted_goal, predicted_topics = data['predicted_goal'][0], '|'.join(predicted_topic_list)
         else: raise Exception("Topic RQ should 'conf' or 'top'")
 
-        prefix, prompt = f"<topic>:{predicted_topics} ",' | Generate the response: </s>'
+        prefix, prompt = f"<topic>{predicted_topics} ",' | Generate the response: </s>'
 
         prefix_encoding = self.tokenizer.encode(prefix)[1:-1][:self.input_max_length // 4]  
         input_sentence = self.tokenizer('<dialog>' + dialog + prompt, add_special_tokens=False).input_ids

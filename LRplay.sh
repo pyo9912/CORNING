@@ -1,6 +1,7 @@
 #!/bin/bash
 # 아래에 실행시키려는 녀석들 다 입력해놓고, 마지막 echo "" 따옴표 안에 어떤걸 보기위한 실험이었는지 적어놓기
 
+python unimind_main.py --fast --version=2 --gpu=2 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=2 --topic_rq=conf --topic_conf=1 --log_name="768Uni_RECGEN_Cum2_Conf100" 
 python unimind_main.py --fast --version=2 --gpu=3 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=1 --topic_rq=top --log_name="768Uni_RECGEN_Top1_기존_onlyresp" 
 
 # python unimind_main.py --fast --version=2 --gpu=0 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=1 --topic_rq=top --log_name="768Uni_RECGEN_Top1" 
