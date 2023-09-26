@@ -192,7 +192,7 @@ def gen_resp_topic(args, real_resps=None, types=None, topics=None, gen_resps=Non
             if topic == p_topic:
                 hitdic[tmp_goal]['hit1_Rec'] += 1
                 hitdic['total']['hit1_Rec'] += 1
-
+            
     hitdic_ratio = {goal_type: {'hit1_Rec': 0, 'hit1_Gen': 0, 'total': 0} for goal_type in typelist + ["Others", 'total']}
     output_str = [f"                         hit1_Rec,  hit1_Gen,  total_cnt"]
     for key in hitdic.keys():

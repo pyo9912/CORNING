@@ -210,15 +210,38 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
             reports_text = f"NEW_{epoch}_{mode:^5}_{each_type:^21}:  {report['bleu@1']:.3f},  {report['bleu@2']:.3f},  {report['bleu@3']:.3f},  {report['bleu@4']:.3f},  {report['dist@1']:.3f},  {report['dist@2']:.3f},  {report['dist@3']:.3f},  {report['dist@4']:.3f}, Count: {report['sent_cnt']}"
             output_strings.append(reports_text)
 
-        for i in output_strings:
-            logger.info(f"{mode}_{epoch} {i}")
+        # for i in output_strings:
+        #     logger.info(f"{mode}_{epoch} {i}")
         
-        _, _, resp_topic_str = gen_resp_topic(args, real_resps=real_resps, types=types, topics=topics, gen_resps=gen_resps, topic_in_resps=topic_in_resps, p_topics=p_topics, isrq=False)
+        _, hitdic_ratio, resp_topic_str = gen_resp_topic(args, real_resps=real_resps, types=types, topics=topics, gen_resps=gen_resps, topic_in_resps=topic_in_resps, p_topics=p_topics, isrq=False)
         for i in resp_topic_str:
             logger.info(f"{mode}_{epoch} {i}")
 
-    save_preds(args, contexts, real_resp=real_resps, gen_resps=gen_resps, epoch=epoch, mode=mode)
-    return ppl, output_strings
+    save_preds_hitgen(args, contexts, real_resp=real_resps, gen_resps=gen_resps, epoch=epoch, mode=mode, topic_in_resp=topic_in_resps, topics=topics, p_topics = p_topics)
+    # save_preds(args, contexts, real_resp=real_resps, gen_resps=gen_resps, epoch=epoch, mode=mode) # Default for Generation save
+    return hitdic_ratio['total']['hit1_Gen'], resp_topic_str
+    # return ppl, output_strings
+
+
+def save_preds_hitgen(args, context, real_resp, gen_resps=[], epoch=None, mode='train', topic_in_resp=None, topics = None, p_topics=None):
+    log_file_name = mode + f'{str(epoch)}_' + args.log_name
+    path = os.path.join(args.output_dir, log_file_name)
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(f"{mode}, Epoch: {str(epoch)} Input and Output results {args.time}\n")
+        f.write(f"Log File Name: {args.log_name} \n\n\n")
+        for i, ctx in enumerate(context):
+            if i == 2000: break
+            isTrue = True if topics[i] in gen_resps[i] else False
+            p_topic_isTrue = True if topics[i] == p_topics[i] else False
+            if topic_in_resp[i]:
+                f.write(f"Source    : {ctx}\n")
+                f.write(f"Hit-Rec@1: {p_topic_isTrue}\tHit-Gen@1 : {isTrue}\n")
+                f.write(f"Real Resp : {real_resp[i]}\n")
+                if gen_resps: f.write(f"Gen  Resp : {gen_resps[i]}\n")
+                f.write(f"\n")
+            else: pass
+    logger.info(f"Save {mode}, Epoch: {str(epoch)}, generated results in {path}")
+    return
 
 def save_preds(args, context, real_resp, gen_resps=[], epoch=None, mode='train'):
     log_file_name = mode + f'{str(epoch)}_' + args.log_name
@@ -365,8 +388,8 @@ class BART_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
         context_batch['attention_mask'] = attention_mask
         
 
-        # labels = "<topic>" + topic + "|" + response
-        labels = response
+        labels = "<topic>" + topic + "|" + response
+        # labels = response
         labels = self.tokenizer(labels, max_length = self.target_max_length, padding='max_length', truncation=True)['input_ids']
         context_batch['labels'] = labels
         ## For Gen-Rec
