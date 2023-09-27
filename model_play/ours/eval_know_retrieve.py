@@ -9,7 +9,7 @@ from utils import write_pkl, save_json
 import numpy as np
 import pickle
 from loguru import logger
-
+import evaluator_conv
 
 def knowledge_reindexing(args, knowledge_data, retriever, stage):
     # 모든 know_index를 버트에 태움
@@ -66,6 +66,8 @@ def eval_know(args, test_dataloader, retriever, knowledgeDB, tokenizer, write=No
     targets = []
     current = 0
     topic_lens = []
+    contexts, responses, g_goals, g_topics, is_new_knows = [],[],[],[],[]
+    top10_cand_knows, target_knows=[],[]
     for batch in tqdm(test_dataloader, desc="Knowledge_Test", bar_format=' {percentage:3.0f} % | {bar:23} {r_bar}'):  # TODO: Knowledge task 분리중
         batch_size = batch['attention_mask'].size(0)
         dialog_token = batch['input_ids']
@@ -79,8 +81,8 @@ def eval_know(args, test_dataloader, retriever, knowledgeDB, tokenizer, write=No
         # candidate_knowledge_token = batch['candidate_knowledge_token']  # [B,5,256]
         # candidate_knowledge_mask = batch['candidate_knowledge_mask']  # [B,5,256]
 
-        goal_idx = [args.goalDic['int'][int(idx)] for idx in batch['goal_idx']]
-        topic_idx = [args.topicDic['int'][int(idx)] for idx in batch['topic_idx']]
+        batch_goals = [args.goalDic['int'][int(idx)] for idx in batch['goal_idx']]
+        batch_topics = [args.topicDic['int'][int(idx)] for idx in batch['topic_idx']]
 
         # candidate_knowledge_mask = batch['candidate_knowledge_mask']  # [B,5,256]
         target_knowledge_idx = batch['target_knowledge']
@@ -100,8 +102,14 @@ def eval_know(args, test_dataloader, retriever, knowledgeDB, tokenizer, write=No
         #         {'goal_type': goal_idx[0], 'topic': topic_idx[0], 'tf': correct, 'dialog': input_text, 'target': target_knowledge_text, 'response': response, "predict5": retrieved_knowledge_text, 'topic_len': batch['topic_len'].tolist()[0],
         #          'candidate_topic_entities': [args.topicDic['int'][i.item()] for i in candidate_topic_entities[0]]})
         #     # save_json(args, f"{args.time}_{args.model_name}_inout", jsonlineSave)
-
-        for idx, (score, target, pseudo_targets, goal, new, topic) in enumerate(zip(dot_score, target_knowledge_idx, batch['pseudo_targets'], goal_idx, new_knowledge, topic_idx)):
+        top10_cand_knows.extend([[knowledgeDB[int(idx)] for idx in top10] for top10 in torch.topk(dot_score, k=10).indices])
+        contexts.extend(tokenizer.batch_decode(dialog_token, skip_special_tokens=False))
+        responses.extend(tokenizer.batch_decode(response, skip_special_tokens=False))
+        is_new_knows.extend([idx.item() for idx in new_knowledge])
+        g_goals.extend(batch_goals)
+        g_topics.extend(batch_topics)
+        target_knows.extend([knowledgeDB[int(top10)] for top10 in target_knowledge_idx])
+        for idx, (score, target, pseudo_targets, goal, new, topic) in enumerate(zip(dot_score, target_knowledge_idx, batch['pseudo_targets'], batch_goals, new_knowledge, batch_topics)):
             if new:
                 new_cnt += 1
             for k in [1, 3, 5, 10]:
@@ -133,13 +141,15 @@ def eval_know(args, test_dataloader, retriever, knowledgeDB, tokenizer, write=No
                     hit10_goal[goal].append(correct_k)
                     if new:
                         hit10_new.append(correct_k)
-                elif k == 20:
-                    hit20.append(correct_k)
-                    hit20_goal[goal].append(correct_k)
-                    if new:
-                        hit20_new.append(correct_k)
+                # elif k == 20:
+                #     hit20.append(correct_k)
+                #     hit20_goal[goal].append(correct_k)
+                #     if new:
+                #         hit20_new.append(correct_k)
 
+    hitdic, hitdic_ratio, output_str = evaluator_conv.know_hit_ratio(args, pred_pt=top10_cand_knows, gold_pt=target_knows, new_knows=is_new_knows, types=g_goals)
     topic_len_avg = np.average(topic_lens)
+
     hit1 = np.average(hit1)
     hit3 = np.average(hit3)
     hit5 = np.average(hit5)
@@ -202,5 +212,5 @@ def eval_know(args, test_dataloader, retriever, knowledgeDB, tokenizer, write=No
     logger.info("Food recommendation\t" + "\t".join(hit_food_result))
     logger.info("Chat about stars\t" + "\t".join(hit_chat_result))
 
-    logger.info("new knowledge %d" % new_cnt)
+    logger.info("new knowledge %d\n\n" % new_cnt)
     return [hit1, hit3, hit5, hit10, hit20, hit_movie_result, hit_music_result, hit_qa_result, hit_poi_result, hit_food_result, hit_chat_result, hit1_new, hit3_new, hit5_new, hit10_new, hit20_new]

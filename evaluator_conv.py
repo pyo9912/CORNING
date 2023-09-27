@@ -247,6 +247,62 @@ def gen_resp_topic(args, real_resps=None, types=None, topics=None, gen_resps=Non
 #     return hitdic, hitdic_ratio, output_str
 
 
+def know_hit_ratio(args, pred_pt, gold_pt, new_knows=None, types=None, typelist=['Q&A', 'Movie recommendation', 'Music recommendation', 'POI recommendation', 'Food recommendation'], new_check=False):
+    if args.version == 'ko': typelist = ['QA', 'Movie Recommendation']
+    hitdic = {type: {'hit1': 0, 'hit3': 0, 'hit5': 0, 'hit10': 0, 'hit1_new': 0, 'hit3_new': 0, 'hit5_new': 0, 'hit10_new': 0, 'total': 0} for type in typelist + ['Others', 'total']}
+    for idx in range(len(gold_pt)):
+        goal_type = types[idx]
+        if goal_type in typelist: tmp_goal = goal_type
+        else: tmp_goal = 'Others'
+
+        pred, gold = pred_pt[idx], gold_pt[idx]
+
+        hitdic[tmp_goal]['total'] += 1
+        hitdic['total']['total'] += 1
+
+        if gold in pred:
+            hitdic[tmp_goal]['hit10'] += 1
+            hitdic['total']['hit10'] += 1
+            if gold in pred[:5]:
+                hitdic[tmp_goal]['hit5'] += 1
+                hitdic['total']['hit5'] += 1
+                if gold in pred[:3]:
+                    hitdic[tmp_goal]['hit3'] += 1
+                    hitdic['total']['hit3'] += 1
+                    if gold == pred[0]:
+                        hitdic[tmp_goal]['hit1'] += 1
+                        hitdic['total']['hit1'] += 1
+
+        if new_knows and new_check:
+            if new_knows[idx]:
+                if gold in pred:
+                    hitdic[tmp_goal]['hit10'] += 1
+                    hitdic['total']['hit10'] += 1
+                    if gold in pred[:5]:
+                        hitdic[tmp_goal]['hit5'] += 1
+                        hitdic['total']['hit5'] += 1
+                        if gold in pred[:3]:
+                            hitdic[tmp_goal]['hit3'] += 1
+                            hitdic['total']['hit3'] += 1
+                            if gold == pred[0]:
+                                hitdic[tmp_goal]['hit1'] += 1
+                                hitdic['total']['hit1'] += 1
+
+
+    hitdic_ratio = {goal_type: {'hit1': 0, 'hit3': 0, 'hit5': 0, 'hit10': 0, 'total': 0} for goal_type in typelist + ["Others", 'total']}
+    # hitdic_ratio = {goal_type: {'hit1': 0, 'hit3': 0, 'hit5': 0, 'hit10': 0, 'hit1_new': 0, 'hit3_new': 0, 'hit5_new': 0, 'hit10_new': 0, 'total': 0} for goal_type in typelist + ["Others", 'total']}
+    # output_str = [f"                         hit1,  hit3,  hit5, hit10, hit1_new, hit3_new, hit5_new, hit10_new, total_cnt"]
+    output_str = [f"                         hit1,  hit3,  hit5, hit10, total_cnt"]
+    for key in hitdic.keys():
+        hit_lists= ['hit1', 'hit3', 'hit5', 'hit10']
+        for hit in hit_lists:
+            if hitdic[key]['total']:
+                hitdic_ratio[key][hit] = hitdic[key][hit] / hitdic[key]['total']
+        hitdic_ratio[key]['total'] = hitdic[key]['total']
+        output_str.append(f"{key:^22}: {hitdic_ratio[key]['hit1']:.3f}\t{hitdic_ratio[key]['hit3']:.3f}\t{hitdic_ratio[key]['hit5']:.3f}\t{hitdic_ratio[key]['hit10']:.3f}\t{hitdic_ratio[key]['total']}")
+        # output_str.append(f"{key:^22}: {hitdic_ratio[key]['hit1']:.3f}\t{hitdic_ratio[key]['hit3']:.3f}\t{hitdic_ratio[key]['hit5']:.3f}\t{hitdic_ratio[key]['hit10']:.3f}\t{hitdic_ratio[key]['hit1_new']:.3f}\t{hitdic_ratio[key]['hit3_new']:.3f}\t{hitdic_ratio[key]['hit5_new']:.3f}\t{hitdic_ratio[key]['hit10_new']:.3f}\t{hitdic_ratio[key]['total']}")
+    return hitdic, hitdic_ratio, output_str
+
 if __name__ == '__main__':
     import json
 
