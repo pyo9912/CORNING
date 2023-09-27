@@ -299,7 +299,7 @@ def know_hit_ratio(args, pred_pt, gold_pt, new_knows=None, types=None, typelist=
             if hitdic[key]['total']:
                 hitdic_ratio[key][hit] = hitdic[key][hit] / hitdic[key]['total']
         hitdic_ratio[key]['total'] = hitdic[key]['total']
-        output_str.append(f"{key:^22}: {hitdic_ratio[key]['hit1']:.3f}\t{hitdic_ratio[key]['hit3']:.3f}\t{hitdic_ratio[key]['hit5']:.3f}\t{hitdic_ratio[key]['hit10']:.3f}\t{hitdic_ratio[key]['total']}")
+        output_str.append(f"{key:^25}: {hitdic_ratio[key]['hit1']:.3f}\t{hitdic_ratio[key]['hit3']:.3f}\t{hitdic_ratio[key]['hit5']:.3f}\t{hitdic_ratio[key]['hit10']:.3f}\t{hitdic_ratio[key]['total']}")
         # output_str.append(f"{key:^22}: {hitdic_ratio[key]['hit1']:.3f}\t{hitdic_ratio[key]['hit3']:.3f}\t{hitdic_ratio[key]['hit5']:.3f}\t{hitdic_ratio[key]['hit10']:.3f}\t{hitdic_ratio[key]['hit1_new']:.3f}\t{hitdic_ratio[key]['hit3_new']:.3f}\t{hitdic_ratio[key]['hit5_new']:.3f}\t{hitdic_ratio[key]['hit10_new']:.3f}\t{hitdic_ratio[key]['total']}")
     return hitdic, hitdic_ratio, output_str
 

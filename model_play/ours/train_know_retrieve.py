@@ -99,7 +99,7 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
     best_hit_chat = [[], [], [], [], []]
     best_hit_food = [[], [], [], [], []]
 
-    eval_metric = [-1]
+    eval_metric, best_output, best_epoch = [-1], None, 0
     result_path = f"{args.time}_{args.model_name}_result"
 
     for epoch in range(args.num_epochs):
@@ -144,54 +144,60 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
 
         logger.info(f"Epoch: {epoch}\nTrain Loss: {train_epoch_loss}")
 
-        hit1, hit3, hit5, hit10, hit20, hit_movie_result, hit_music_result, hit_qa_result, hit_poi_result, hit_food_result, hit_chat_result, hit1_new, hit3_new, hit5_new, hit10_new, hit20_new = eval_know(args, test_dataloader, retriever, all_knowledgeDB,
-                                                                                                                                                                                                            tokenizer)  # HJ: Knowledge text top-k 뽑아서 output만들어 체크하던 코드 분리
+        hitdic_ratio, output_str = eval_know(args, test_dataloader, retriever, all_knowledgeDB, tokenizer)  # HJ: Knowledge text top-k 뽑아서 output만들어 체크하던 코드 분리
+        # hit1, hit3, hit5, hit10, hit20, hit_movie_result, hit_music_result, hit_qa_result, hit_poi_result, hit_food_result, hit_chat_result, hit1_new, hit3_new, hit5_new, hit10_new, hit20_new = eval_know(args, test_dataloader, retriever, all_knowledgeDB, tokenizer)  # HJ: Knowledge text top-k 뽑아서 output만들어 체크하던 코드 분리
+        for i in output_str:
+            logger.info(f"EPOCH_{epoch}: {i}")
+        # logger.info(f"Results\tEPOCH: {epoch}")
+        # logger.info("Overall\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f" % (hit1, hit3, hit5, hit10, hit20))
+        # logger.info("Overall new knowledge\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f" % (hit1_new, hit3_new, hit5_new, hit10_new, hit20_new))
 
-        # logger.info()
-        logger.info(f"Results\tEPOCH: {epoch}")
-        logger.info("Overall\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f" % (hit1, hit3, hit5, hit10, hit20))
-        logger.info("Overall new knowledge\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f" % (hit1_new, hit3_new, hit5_new, hit10_new, hit20_new))
+        # logger.info("Movie recommendation\t" + "\t".join(hit_movie_result))
+        # logger.info("Music recommendation\t" + "\t".join(hit_music_result))
+        # logger.info("Q&A\t" + "\t".join(hit_qa_result))
+        # logger.info("POI recommendation\t" + "\t".join(hit_poi_result))
+        # logger.info("Food recommendation\t" + "\t".join(hit_food_result))
+        # logger.info("Chat about stars\t" + "\t".join(hit_chat_result))
 
-        logger.info("Movie recommendation\t" + "\t".join(hit_movie_result))
-        logger.info("Music recommendation\t" + "\t".join(hit_music_result))
-        logger.info("Q&A\t" + "\t".join(hit_qa_result))
-        logger.info("POI recommendation\t" + "\t".join(hit_poi_result))
-        logger.info("Food recommendation\t" + "\t".join(hit_food_result))
-        logger.info("Chat about stars\t" + "\t".join(hit_chat_result))
-
-        if hit1 > eval_metric[0]:
-            eval_metric[0] = hit1
-            best_hit[0] = hit1
-            best_hit[1] = hit3
-            best_hit[2] = hit5
-            best_hit[3] = hit10
-            best_hit[4] = hit20
-            best_hit_new[0] = hit1_new
-            best_hit_new[1] = hit3_new
-            best_hit_new[2] = hit5_new
-            best_hit_new[3] = hit10_new
-            best_hit_new[4] = hit20_new
-            best_hit_movie = hit_movie_result
-            best_hit_poi = hit_poi_result
-            best_hit_music = hit_music_result
-            best_hit_qa = hit_qa_result
-            best_hit_chat = hit_chat_result
-            best_hit_food = hit_food_result
-
+        # if hit1 > eval_metric[0]:
+        #     eval_metric[0] = hit1
+        #     best_hit[0] = hit1
+        #     best_hit[1] = hit3
+        #     best_hit[2] = hit5
+        #     best_hit[3] = hit10
+        #     best_hit[4] = hit20
+        #     best_hit_new[0] = hit1_new
+        #     best_hit_new[1] = hit3_new
+        #     best_hit_new[2] = hit5_new
+        #     best_hit_new[3] = hit10_new
+        #     best_hit_new[4] = hit20_new
+        #     best_hit_movie = hit_movie_result
+        #     best_hit_poi = hit_poi_result
+        #     best_hit_music = hit_music_result
+        #     best_hit_qa = hit_qa_result
+        #     best_hit_chat = hit_chat_result
+        #     best_hit_food = hit_food_result
+        if hitdic_ratio['total']['hit1'] >= eval_metric[0]:
+            best_output = output_str
+            best_epoch = epoch
+            eval_metric[0] = hitdic_ratio['total']['hit1']
             torch.save(retriever.state_dict(), os.path.join(args.saved_model_path, f"{args.model_name}_know.pt"))  # TIME_MODELNAME 형식
+    
+    # logger.info(f'BEST RESULT')
+    # logger.info(f"BEST Test Hit@1/3/5/10/20: {best_hit[0]:.3f}\t{best_hit[1]:.3f}\t{best_hit[2]:.3f}\t{best_hit[3]:.3f}\t{best_hit[4]:.3f}")
 
-    logger.info(f'BEST RESULT')
-    logger.info(f"BEST Test Hit@1/3/5/10/20: {best_hit[0]:.3f}\t{best_hit[1]:.3f}\t{best_hit[2]:.3f}\t{best_hit[3]:.3f}\t{best_hit[4]:.3f}")
+    # logger.info("[BEST]")
+    # logger.info("Overall\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f" % (best_hit[0], best_hit[1], best_hit[2], best_hit[3], best_hit[4]))
+    # logger.info("New\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f" % (best_hit_new[0], best_hit_new[1], best_hit_new[2], best_hit_new[3], best_hit_new[4]))
 
-    logger.info("[BEST]")
-    logger.info("Overall\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f" % (best_hit[0], best_hit[1], best_hit[2], best_hit[3], best_hit[4]))
-    logger.info("New\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f" % (best_hit_new[0], best_hit_new[1], best_hit_new[2], best_hit_new[3], best_hit_new[4]))
+    # logger.info("Movie recommendation\t" + "\t".join(best_hit_movie))
+    # logger.info("Music recommendation\t" + "\t".join(best_hit_music))
+    # logger.info("QA\t" + "\t".join(best_hit_qa))
+    # logger.info("POI recommendation\t" + "\t".join(best_hit_poi))
+    # logger.info("Food recommendation\t" + "\t".join(best_hit_food))
+    # logger.info("Chat about stars\t" + "\t".join(best_hit_chat))
 
-    logger.info("Movie recommendation\t" + "\t".join(best_hit_movie))
-    logger.info("Music recommendation\t" + "\t".join(best_hit_music))
-    logger.info("QA\t" + "\t".join(best_hit_qa))
-    logger.info("POI recommendation\t" + "\t".join(best_hit_poi))
-    logger.info("Food recommendation\t" + "\t".join(best_hit_food))
-    logger.info("Chat about stars\t" + "\t".join(best_hit_chat))
-
+    logger.info("BEST")
+    for i in best_output:
+        logger.info(f"BEST: {i}")
     eval_know(args, test_dataloader, retriever, all_knowledgeDB, tokenizer, write=True)  # HJ: Knowledge text top-k 뽑아서 output만들어 체크하던 코드 분리
