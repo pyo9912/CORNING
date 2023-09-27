@@ -109,7 +109,7 @@ def main(args=None):
     model_cache_dir = os.path.join(args.home, 'model_cache', args.uni_model_name)
     # config = BartConfig.from_pretrained(args.uni_model_name, cache_dir=model_cache_dir)
     tokenizer = BartTokenizer.from_pretrained(args.uni_model_name, cache_dir=model_cache_dir)
-    tokenizer.add_special_tokens({'additional_special_tokens':['goal: ','User: ','System: ','topic: ']})
+    tokenizer.add_special_tokens({'additional_special_tokens':['<goal>','<topic>', '<dialog>']})
     bart = BartForConditionalGeneration.from_pretrained(args.uni_model_name, cache_dir=model_cache_dir)
     bart.resize_token_embeddings(len(tokenizer))
     bart.to(args.device)
@@ -133,7 +133,7 @@ def main(args=None):
         logger.info(f"Train {epoch} Start")
 
         bart.train()
-        ppl, output_str = epoch_play(args, tokenizer, bart, train_dataloader, optimizer, scheduler, epoch, mode='train')
+        _, _ = epoch_play(args, tokenizer, bart, train_dataloader, optimizer, scheduler, epoch, mode='train')
         
         with torch.no_grad():
             bart.eval()
@@ -156,7 +156,7 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
     contexts, real_resps, gen_resps = [],[],[]
     topics, p_topics, types, topic_in_resps = [],[],[],[]
     evaluator = ConvEvaluator(tokenizer=tokenizer)
-    evaluator_type = ConvEvaluator_ByType(tokenizer=tokenizer, log_file_path=os.path.join(args.output_dir, f"{epoch}_{mode}_GEN_REPORT.txt"))
+    evaluator_type = ConvEvaluator_ByType(tokenizer=tokenizer, log_file_path=os.path.join(args.output_dir, f"{epoch}_{mode}_GEN_REPORT.txt") if mode=='test' else None)
     for batch in tqdm(data_loader, desc=f"Epoch {epoch:^2}__{mode:^5}", bar_format=' {l_bar} | {bar:23} {r_bar}'):   
         total_steps += 1
         source_ids, source_mask, lm_labels = batch["input_ids"].to(args.device), batch["attention_mask"].to(args.device), batch["labels"].to(args.device)
@@ -222,7 +222,6 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
 
     save_preds_hitgen(args, contexts, real_resp=real_resps, gen_resps=gen_resps, epoch=epoch, mode=mode, topic_in_resp=topic_in_resps, topics=topics, p_topics = p_topics)
     # save_preds(args, contexts, real_resp=real_resps, gen_resps=gen_resps, epoch=epoch, mode=mode) # Default for Generation save
-    # return ppl, resp_topic_str
     return ppl, output_strings
 
 
@@ -384,10 +383,10 @@ class BART_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
             predicted_goal, predicted_topics = data['predicted_goal'][0], '|'.join(predicted_topic_list)
         else: raise Exception("Topic RQ should 'conf' or 'top'")
 
-        prefix, prompt = f"<topic>{predicted_topics} ",' | Generate the response: </s>'
+        prefix, prompt = f"<topic>{predicted_topics} <dialog>",' | Generate the response: </s>'
 
-        prefix_encoding = self.tokenizer.encode(prefix)[1:-1][:self.input_max_length // 4]  
-        input_sentence = self.tokenizer('<dialog>' + dialog + prompt, add_special_tokens=False).input_ids
+        prefix_encoding = self.tokenizer.encode(prefix)[1:-1][:self.input_max_length // 4]
+        input_sentence = self.tokenizer(dialog + prompt, add_special_tokens=False).input_ids
         input_sentence = [self.tokenizer.cls_token_id] + prefix_encoding + input_sentence[-(self.input_max_length - len(prefix_encoding) - 1):]
         input_sentence = input_sentence + [pad_token_id] * (self.input_max_length - len(input_sentence))
 
@@ -410,8 +409,7 @@ class BART_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
         context_batch['topic_idx'] = self.args.topicDic['str'][topic]  # index로 바꿈
         
         for k, v in context_batch.items():
-            if not isinstance(v, torch.Tensor):
-                context_batch[k] = torch.as_tensor(v, device=self.args.device)
+            if not isinstance(v, torch.Tensor): context_batch[k] = torch.as_tensor(v, device=self.args.device)
         return context_batch
 
 def initLogging(args):
