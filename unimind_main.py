@@ -109,7 +109,7 @@ def main(args=None):
     model_cache_dir = os.path.join(args.home, 'model_cache', args.uni_model_name)
     # config = BartConfig.from_pretrained(args.uni_model_name, cache_dir=model_cache_dir)
     tokenizer = BartTokenizer.from_pretrained(args.uni_model_name, cache_dir=model_cache_dir)
-    tokenizer.add_special_tokens({'additional_special_tokens':['<goal>','<topic>', '<dialog>']})
+    tokenizer.add_special_tokens({'additional_special_tokens':['<goal>','<topic>', '<dialog>']}) 
     bart = BartForConditionalGeneration.from_pretrained(args.uni_model_name, cache_dir=model_cache_dir)
     bart.resize_token_embeddings(len(tokenizer))
     bart.to(args.device)
@@ -152,7 +152,7 @@ def main(args=None):
 def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch, mode='train'):
     epoch_loss, total_steps, gradient_accm_steps = 0,0,500
     torch.cuda.empty_cache()
-    skip_tokens= True if epoch>1 else False
+    skip_tokens= False #True if epoch>1 else False
     contexts, real_resps, gen_resps = [],[],[]
     topics, p_topics, types, topic_in_resps = [],[],[],[]
     evaluator = ConvEvaluator(tokenizer=tokenizer)
@@ -238,7 +238,8 @@ def save_preds_hitgen(args, context, real_resp, gen_resps=[], epoch=None, mode='
                     isTrue = True if topics[i] in gen_resps[i] else False
                     p_topic_isTrue = True if topics[i] == p_topics[i] else False
                     f.write(f"Source    : {ctx}\n")
-                    f.write(f"Hit-Rec@1: {p_topic_isTrue}\nHit-Gen@1 : {isTrue}\n")
+                    f.write(f"[Gold_Topic] : {topics[i]}\n")
+                    f.write(f"Hit-Rec@1: {p_topic_isTrue:^5}\t || \tHit-Gen@1 : {isTrue:^5}\n")
                     f.write(f"Real Resp : {real_resp[i]}\n")
                     if gen_resps: f.write(f"Gen  Resp : {gen_resps[i]}\n")
                     f.write(f"\n")
@@ -383,7 +384,7 @@ class BART_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
             predicted_goal, predicted_topics = data['predicted_goal'][0], '|'.join(predicted_topic_list)
         else: raise Exception("Topic RQ should 'conf' or 'top'")
 
-        prefix, prompt = f"<topic>{predicted_topics} <dialog>",' | Generate the response: </s>'
+        prefix, prompt = f"<topic>{predicted_topics} <dialog>",' | Generate the response:'
 
         prefix_encoding = self.tokenizer.encode(prefix)[1:-1][:self.input_max_length // 4]
         input_sentence = self.tokenizer(dialog + prompt, add_special_tokens=False).input_ids
