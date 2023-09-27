@@ -1,6 +1,9 @@
 #!/bin/bash
 # 아래에 실행시키려는 녀석들 다 입력해놓고, 마지막 echo "" 따옴표 안에 어떤걸 보기위한 실험이었는지 적어놓기
 
+python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RB_794RG_Top1topic_hj --model_name=RB_794RG_Top1topic_hj --topk_topic=1 --know_item_select=top --train_ablation=RG --device=0
+python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RB_794RG_Top2topic_hj --model_name=RB_794RG_Top2topic_hj --topk_topic=2 --know_item_select=top --train_ablation=RG --device=0
+
 # python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RB_RG_794topic2_conf100_hj --model_name=RB_794RG_topic2_conf100_hj --topk_topic=2 --topic_conf=1 --train_ablation=RG --device=1
 # python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RB_RG_794topic2_conf90_hj --model_name=RB_794RG_topic2_conf90_hj --topk_topic=2 --topic_conf=0.9 --train_ablation=RG --device=1
 # python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RB_RG_794topic2_conf80_hj --model_name=RB_794RG_topic2_conf80_hj --topk_topic=2 --topic_conf=0.8 --train_ablation=RG --device=1

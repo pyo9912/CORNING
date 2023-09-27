@@ -138,7 +138,7 @@ def main(args=None):
         with torch.no_grad():
             bart.eval()
             ppl, output_str = epoch_play(args, tokenizer, bart, test_dataloader, optimizer, scheduler, epoch, mode='test')
-            if best_ppl>ppl:
+            if best_ppl > ppl:
                 best_ppl = ppl 
                 best_outputstr = output_str
     logger.info("END")
@@ -217,7 +217,7 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
         _, hitdic_ratio, resp_topic_str = gen_resp_topic(args, real_resps=real_resps, types=types, topics=topics, gen_resps=gen_resps, topic_in_resps=topic_in_resps, p_topics=p_topics, isrq=True)
         for i in resp_topic_str:
             logger.info(f"{mode}_{epoch} {i}")
-        ppl=hitdic_ratio['total']['hit1_Gen']
+        ppl= 1 - hitdic_ratio['total']['hit1_Gen']
         output_strings = resp_topic_str
 
     save_preds_hitgen(args, contexts, real_resp=real_resps, gen_resps=gen_resps, epoch=epoch, mode=mode, topic_in_resp=topic_in_resps, topics=topics, p_topics = p_topics)

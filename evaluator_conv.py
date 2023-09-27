@@ -292,7 +292,7 @@ def know_hit_ratio(args, pred_pt, gold_pt, new_knows=None, types=None, typelist=
     hitdic_ratio = {goal_type: {'hit1': 0, 'hit3': 0, 'hit5': 0, 'hit10': 0, 'total': 0} for goal_type in typelist + ["Others", 'total']}
     # hitdic_ratio = {goal_type: {'hit1': 0, 'hit3': 0, 'hit5': 0, 'hit10': 0, 'hit1_new': 0, 'hit3_new': 0, 'hit5_new': 0, 'hit10_new': 0, 'total': 0} for goal_type in typelist + ["Others", 'total']}
     # output_str = [f"                         hit1,  hit3,  hit5, hit10, hit1_new, hit3_new, hit5_new, hit10_new, total_cnt"]
-    output_str = [f"                         hit1,  hit3,  hit5, hit10, total_cnt"]
+    output_str = [f"                             hit1,  hit3,  hit5,  hit10,  total_cnt"]
     for key in hitdic.keys():
         hit_lists= ['hit1', 'hit3', 'hit5', 'hit10']
         for hit in hit_lists:
