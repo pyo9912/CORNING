@@ -1,8 +1,8 @@
 #!/bin/bash
 # 아래에 실행시키려는 녀석들 다 입력해놓고, 마지막 echo "" 따옴표 안에 어떤걸 보기위한 실험이었는지 적어놓기
 
-python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RB_794RG_Top1topic_hj --model_name=RB_794RG_Top1topic_hj --topk_topic=1 --know_item_select=top --train_ablation=RG --device=0
-python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RB_794RG_Top2topic_hj --model_name=RB_794RG_Top2topic_hj --topk_topic=2 --know_item_select=top --train_ablation=RG --device=0
+# python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RB_794RG_Top1topic_hj --model_name=RB_794RG_Top1topic_hj --topk_topic=1 --know_item_select=top --train_ablation=RG --device=0
+# python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RB_794RG_Top2topic_hj --model_name=RB_794RG_Top2topic_hj --topk_topic=2 --know_item_select=top --train_ablation=RG --device=0
 
 # python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RB_RG_794topic2_conf100_hj --model_name=RB_794RG_topic2_conf100_hj --topk_topic=2 --topic_conf=1 --train_ablation=RG --device=1
 # python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RB_RG_794topic2_conf90_hj --model_name=RB_794RG_topic2_conf90_hj --topk_topic=2 --topic_conf=0.9 --train_ablation=RG --device=1
@@ -20,14 +20,14 @@ python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20
 
 
 
-# python unimind_main.py --fast --version=2 --gpu=1 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=2 --topic_rq=conf --topic_conf=1 --log_name="1e-5_768Uni_RECGEN_Cum2_Conf100" 
-# python unimind_main.py --fast --version=2 --gpu=1 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=2 --topic_rq=conf --topic_conf=0.7 --log_name="1e-5_768Uni_RECGEN_Cum2_Conf70" 
-# python unimind_main.py --fast --version=2 --gpu=1 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=1 --topic_rq=top --log_name="1e-5_768Uni_RECGEN_Top1" 
-# python unimind_main.py --fast --version=2 --gpu=2 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=2 --topic_rq=conf --topic_conf=0.9 --log_name="1e-5_768Uni_RECGEN_Cum2_Conf90" 
-# python unimind_main.py --fast --version=2 --gpu=2 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=2 --topic_rq=conf --topic_conf=0.6 --log_name="1e-5_768Uni_RECGEN_Cum2_Conf60" 
-# python unimind_main.py --fast --version=2 --gpu=2 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=2 --topic_rq=top --log_name="1e-5_768Uni_RECGEN_Top2" 
-# python unimind_main.py --fast --version=2 --gpu=3 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=2 --topic_rq=conf --topic_conf=0.8 --log_name="1e-5_768Uni_RECGEN_Cum2_Conf80" 
-# python unimind_main.py --fast --version=2 --gpu=3 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=2 --topic_rq=conf --topic_conf=0.5 --log_name="1e-5_768Uni_RECGEN_Cum2_Conf50" 
+python unimind_main.py --fast --version=2 --gpu=3 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=2 --topic_rq=conf --topic_conf=1 --log_name="1e-5_794Uni_RECGEN_Cum2_Conf100" 
+python unimind_main.py --fast --version=2 --gpu=3 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=2 --topic_rq=conf --topic_conf=0.7 --log_name="1e-5_794Uni_RECGEN_Cum2_Conf70" 
+python unimind_main.py --fast --version=2 --gpu=3 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=1 --topic_rq=top --log_name="1e-5_794Uni_RECGEN_Top1" 
+python unimind_main.py --fast --version=2 --gpu=3 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=2 --topic_rq=conf --topic_conf=0.9 --log_name="1e-5_794Uni_RECGEN_Cum2_Conf90" 
+python unimind_main.py --fast --version=2 --gpu=3 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=2 --topic_rq=conf --topic_conf=0.6 --log_name="1e-5_794Uni_RECGEN_Cum2_Conf60" 
+python unimind_main.py --fast --version=2 --gpu=3 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=2 --topic_rq=top --log_name="1e-5_794Uni_RECGEN_Top2" 
+python unimind_main.py --fast --version=2 --gpu=3 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=2 --topic_rq=conf --topic_conf=0.8 --log_name="1e-5_794Uni_RECGEN_Cum2_Conf80" 
+python unimind_main.py --fast --version=2 --gpu=3 --method=unimind --uni_lr=1e-5 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topk_topic=2 --topic_rq=conf --topic_conf=0.5 --log_name="1e-5_794Uni_RECGEN_Cum2_Conf50" 
 
 
 
