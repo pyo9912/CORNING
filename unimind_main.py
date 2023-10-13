@@ -27,6 +27,7 @@ def add_ours_specific_args(parser):
 
     
     parser.add_argument("--topic_rq", type=str, default='conf', choices=["conf","top"] , help=" Method ")
+    parser.add_argument("--topic_score", type=str, default='794', help=" pkl folder name (pkl_TOPICSCORE)")
     
     ## For resp
     parser.add_argument("--uni_model_name", type=str, default='facebook/bart-base', help=" model name ") # facebook/bart-large
@@ -94,7 +95,7 @@ def main(args=None):
     all_knowledgeDB = list(all_knowledgeDB)
     
     if args.fast:
-        train_dataset_aug_pred, test_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', 'pkl_794', f'train_pred_aug_dataset.pkl')) , utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', 'pkl_794', f'test_pred_aug_dataset.pkl'))
+        train_dataset_aug_pred, test_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'pkl_{args.topic_score}', f'train_pred_aug_dataset.pkl')) , utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'pkl_{args.topic_score}', f'test_pred_aug_dataset.pkl'))
         # train_dataset_aug_pred, test_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', 'pkl_768', f'train_pred_aug_dataset.pkl')) , utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', 'pkl_768', f'test_pred_aug_dataset.pkl'))
         # train_dataset_aug_pred, test_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl')) , utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
         # read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
@@ -110,7 +111,7 @@ def main(args=None):
     model_cache_dir = os.path.join(args.home, 'model_cache', args.uni_model_name)
     # config = BartConfig.from_pretrained(args.uni_model_name, cache_dir=model_cache_dir)
     tokenizer = BartTokenizer.from_pretrained(args.uni_model_name, cache_dir=model_cache_dir)
-    tokenizer.add_special_tokens({'additional_special_tokens':['<goal>','<topic>', '<dialog>']}) 
+    # tokenizer.add_special_tokens({'additional_special_tokens':['<goal>','<topic>', '<dialog>']}) 
     bart = BartForConditionalGeneration.from_pretrained(args.uni_model_name, cache_dir=model_cache_dir)
     bart.resize_token_embeddings(len(tokenizer))
     bart.to(args.device)
