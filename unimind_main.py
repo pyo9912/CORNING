@@ -27,6 +27,7 @@ def add_ours_specific_args(parser):
 
     
     parser.add_argument("--topic_rq", type=str, default='conf', choices=["conf","top"] , help=" Method ")
+    parser.add_argument("--topic_rq_label", type=str, default='item_resp', choices=["resp","item_resp"] , help=" Method ")
     parser.add_argument("--topic_score", type=str, default='794', help=" pkl folder name (pkl_TOPICSCORE)")
     
     ## For resp
@@ -131,6 +132,7 @@ def main(args=None):
     optimizer = torch.optim.AdamW(bart.parameters(), lr=args.uni_lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_dc_step, gamma=args.lr_dc)
     best_ppl, best_outputstr=10000, None
+    log_args(args)
     for epoch in range(args.uni_epochs):
         logger.info(f"Train {epoch} Start")
 
@@ -352,6 +354,7 @@ class BART_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
         self.tokenizer.truncation_side='left'
         self.postfix = "system: "
         self.topic_rq=args.topic_rq # 'conf' or 'top'
+        self.topic_rq_label = args.topic_rq_label
         ## pipeline 고려하기 (predicted_goal, predicted_topic)
 
     def __len__(self): return len(self.pred_aug_dataset)
@@ -398,8 +401,10 @@ class BART_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
         attention_mask = context_batch['input_ids'].ne(pad_token_id)
         context_batch['attention_mask'] = attention_mask
         
+        labels=""
+        if 'item' in self.topic_rq_label: labels += "<topic>" + topic
+        if 'resp' in self.topic_rq_label: labels += "|" + response
 
-        labels = "<topic>" + topic + "|" + response
         # labels = response
         labels = self.tokenizer(labels, max_length = self.target_max_length, padding='max_length', truncation=True)['input_ids']
         context_batch['labels'] = labels
