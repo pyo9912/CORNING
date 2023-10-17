@@ -386,6 +386,8 @@ class BART_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
                     if cum_prob > self.args.topic_conf: break
                 predicted_goal, predicted_topics = data['predicted_goal'][0], '|'.join(candidate_topic_entities)
         elif self.topic_rq=='top':
+            if self.mode == 'train':
+                random.shuffle(predicted_topic_list)
             predicted_goal, predicted_topics = data['predicted_goal'][0], '|'.join(predicted_topic_list)
         else: raise Exception("Topic RQ should 'conf' or 'top'")
 
