@@ -402,8 +402,10 @@ class BART_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
         context_batch['attention_mask'] = attention_mask
         
         labels=""
-        if 'item' in self.topic_rq_label: labels += "<topic>" + topic
-        if 'resp' in self.topic_rq_label: labels += "|" + response
+        if 'item' in self.topic_rq_label: 
+            labels += "<topic>" + topic 
+            if 'resp' in self.topic_rq_label: labels += "|"
+        if 'resp' in self.topic_rq_label: labels +=  response
 
         # labels = response
         labels = self.tokenizer(labels, max_length = self.target_max_length, padding='max_length', truncation=True)['input_ids']
@@ -442,11 +444,16 @@ def log_args(args):
         logger.info("args list: {}".format(' | '.join(arg5)))
     logger.info(f"@@@@@@@@@@@@@@@@")
 
-
+def pred_aug_topic_hi1(data):
+    temp_data=list(filter(lambda i : i['topic'].lower() in i['response'].lower(), data))
+    return sum([i['topic']==i['predicted_topic'][0] for i in temp_data ]) / len(temp_data)
 
 if __name__=='__main__':
-    # train_dataset_aug_pred, test_dataset_aug_pred = utils.read_pkl('/home/work/CRSTEST/KEMGCRS/data/2/pred_aug/gt_train_pred_aug_dataset.pkl') , utils.read_pkl('/home/work/CRSTEST/KEMGCRS/data/2/pred_aug/gt_test_pred_aug_dataset.pkl')
-
+    # home = os.path.dirname(os.path.realpath(__file__))
+    # train_dataset_aug_pred = utils.read_pkl(os.path.join(home, 'data/2/pred_aug/gt_train_pred_aug_dataset.pkl'))
+    # test_dataset_aug_pred = utils.read_pkl(os.path.join(home, 'data/2/pred_aug/gt_test_pred_aug_dataset.pkl'))
+    # sum([i['topic']==i['predicted_topic'][0] for i in temp_data ]) / len(temp_data)
+    # len(test_dataset_aug_pred)
     main()
 
     # parser = argparse.ArgumentParser(description="ours_main.py")

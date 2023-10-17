@@ -1,15 +1,36 @@
 #!/bin/bash
 # 아래에 실행시키려는 녀석들 다 입력해놓고, 마지막 echo "" 따옴표 안에 어떤걸 보기위한 실험이었는지 적어놓기
 
-python unimind_main.py --fast --version=2 --gpu=0 --method=unimind --uni_lr=1e-5 --uni_epochs=7 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_score=794 --topk_topic=2 --topic_rq=conf --topic_conf=0.5 --log_name="1e-5_794Uni_RECGEN_Cum2_Conf50" 
-python unimind_main.py --fast --version=2 --gpu=0 --method=unimind --uni_lr=1e-5 --uni_epochs=7 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_score=794 --topk_topic=2 --topic_rq=conf --topic_conf=0.6 --log_name="1e-5_794Uni_RECGEN_Cum2_Conf60" 
-python unimind_main.py --fast --version=2 --gpu=0 --method=unimind --uni_lr=1e-5 --uni_epochs=7 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_score=794 --topk_topic=2 --topic_rq=conf --topic_conf=0.8 --log_name="1e-5_794Uni_RECGEN_Cum2_Conf80" 
-python unimind_main.py --fast --version=2 --gpu=0 --method=unimind --uni_lr=1e-5 --uni_epochs=7 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_score=794 --topk_topic=2 --topic_rq=conf --topic_conf=0.9 --log_name="1e-5_794Uni_RECGEN_Cum2_Conf90" 
-python unimind_main.py --fast --version=2 --gpu=0 --method=unimind --uni_lr=1e-5 --uni_epochs=7 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_score=794 --topk_topic=2 --topic_rq=conf --topic_conf=0.7 --log_name="1e-5_794Uni_RECGEN_Cum2_Conf70" 
-python unimind_main.py --fast --version=2 --gpu=0 --method=unimind --uni_lr=1e-5 --uni_epochs=7 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_score=794 --topk_topic=2 --topic_rq=conf --topic_conf=1 --log_name="1e-5_794Uni_RECGEN_Cum2_Conf100" 
-python unimind_main.py --fast --version=2 --gpu=0 --method=unimind --uni_lr=1e-5 --uni_epochs=7 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_score=794 --topk_topic=1 --topic_rq=top --log_name="1e-5_794Uni_RECGEN_Top1" 
-python unimind_main.py --fast --version=2 --gpu=0 --method=unimind --uni_lr=1e-5 --uni_epochs=7 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_score=794 --topk_topic=2 --topic_rq=top --log_name="1e-5_794Uni_RECGEN_Top2" 
+# python unimind_main.py --fast --version=2 --gpu=1 --method=unimind --uni_lr=1e-5 --uni_epochs=7 --topic_rq_label=resp --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_score=794 --topk_topic=2 --topic_rq=conf --topic_conf=0.5 --log_name="RESP_794Uni_RECG_Cum2_Conf50" 
+# python unimind_main.py --fast --version=2 --gpu=3 --method=unimind --uni_lr=1e-5 --uni_epochs=7 --topic_rq_label=resp --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_score=794 --topk_topic=2 --topic_rq=conf --topic_conf=0.6 --log_name="RESP_794Uni_RECG_Cum2_Conf60" 
+# python unimind_main.py --fast --version=2 --gpu=1 --method=unimind --uni_lr=1e-5 --uni_epochs=7 --topic_rq_label=resp --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_score=794 --topk_topic=2 --topic_rq=conf --topic_conf=0.7 --log_name="RESP_794Uni_RECG_Cum2_Conf70" 
+# python unimind_main.py --fast --version=2 --gpu=3 --method=unimind --uni_lr=1e-5 --uni_epochs=7 --topic_rq_label=resp --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_score=794 --topk_topic=2 --topic_rq=conf --topic_conf=0.8 --log_name="RESP_794Uni_RECG_Cum2_Conf80" 
+python unimind_main.py --fast --version=2 --gpu=0 --method=unimind --uni_lr=1e-5 --uni_epochs=7 --topic_rq_label=resp --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_score=794 --topk_topic=2 --topic_rq=conf --topic_conf=0.9 --log_name="RESP_794Uni_RECG_Cum2_Conf90" 
+python unimind_main.py --fast --version=2 --gpu=1 --method=unimind --uni_lr=1e-5 --uni_epochs=7 --topic_rq_label=resp --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_score=794 --topk_topic=2 --topic_rq=conf --topic_conf=1 --log_name="RESP_794Uni_RECG_Cum2_Conf100" 
+python unimind_main.py --fast --version=2 --gpu=0 --method=unimind --uni_lr=1e-5 --uni_epochs=7 --topic_rq_label=resp --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_score=794 --topk_topic=1 --topic_rq=top --log_name="RESP_794Uni_RECG_Top1" 
+# python unimind_main.py --fast --version=2 --gpu=3 --method=unimind --uni_lr=1e-5 --uni_epochs=7 --topic_rq_label=resp --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_score=794 --topk_topic=2 --topic_rq=top --log_name="RESP_794Uni_RECG_Top2" 
 
+# python unimind_main.py --fast --version=2 --gpu=0 --method=unimind --uni_lr=1e-5 --uni_epochs=7 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_score=794 --topk_topic=2 --topic_rq=conf --topic_conf=0.5 --log_name="1e-5_794Uni_RECGEN_Cum2_Conf50" 
+# python unimind_main.py --fast --version=2 --gpu=0 --method=unimind --uni_lr=1e-5 --uni_epochs=7 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_score=794 --topk_topic=2 --topic_rq=conf --topic_conf=0.6 --log_name="1e-5_794Uni_RECGEN_Cum2_Conf60" 
+# python unimind_main.py --fast --version=2 --gpu=0 --method=unimind --uni_lr=1e-5 --uni_epochs=7 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_score=794 --topk_topic=2 --topic_rq=conf --topic_conf=0.8 --log_name="1e-5_794Uni_RECGEN_Cum2_Conf80" 
+# python unimind_main.py --fast --version=2 --gpu=0 --method=unimind --uni_lr=1e-5 --uni_epochs=7 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_score=794 --topk_topic=2 --topic_rq=conf --topic_conf=0.9 --log_name="1e-5_794Uni_RECGEN_Cum2_Conf90" 
+# python unimind_main.py --fast --version=2 --gpu=0 --method=unimind --uni_lr=1e-5 --uni_epochs=7 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_score=794 --topk_topic=2 --topic_rq=conf --topic_conf=0.7 --log_name="1e-5_794Uni_RECGEN_Cum2_Conf70" 
+# python unimind_main.py --fast --version=2 --gpu=0 --method=unimind --uni_lr=1e-5 --uni_epochs=7 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_score=794 --topk_topic=2 --topic_rq=conf --topic_conf=1 --log_name="1e-5_794Uni_RECGEN_Cum2_Conf100" 
+# python unimind_main.py --fast --version=2 --gpu=0 --method=unimind --uni_lr=1e-5 --uni_epochs=7 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_score=794 --topk_topic=1 --topic_rq=top --log_name="1e-5_794Uni_RECGEN_Top1" 
+# python unimind_main.py --fast --version=2 --gpu=0 --method=unimind --uni_lr=1e-5 --uni_epochs=7 --uni_model_name='facebook/bart-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=16 --topic_score=794 --topk_topic=2 --topic_rq=top --log_name="1e-5_794Uni_RECGEN_Top2" 
+
+# pred_aug_topic_hi1(utils.read_pkl(os.path.join(home, 'data/2/pred_aug/pkl_aaai/test_pred_aug_dataset.pkl')))
+# 0.6848329048843188
+# pred_aug_topic_hi1(utils.read_pkl(os.path.join(home, 'data/2/pred_aug/pkl_768/test_pred_aug_dataset.pkl')))
+# 0.6699228791773779
+# pred_aug_topic_hi1(utils.read_pkl(os.path.join(home, 'data/2/pred_aug/pkl_794/test_pred_aug_dataset.pkl')))
+# 0.6930591259640103
+# pred_aug_topic_hi1(utils.read_pkl(os.path.join(home, 'data/2/pred_aug/gt_test_pred_aug_dataset.pkl')))
+# 0.6699228791773779
+# pred_aug_topic_hi1(utils.read_pkl(os.path.join(home, 'data/2/pred_aug/gt_test_pred_aug_dataset0.pkl')))
+# 0.6822622107969152
+# pred_aug_topic_hi1(utils.read_pkl(os.path.join(home, 'data/2/pred_aug/gt_test_pred_aug_dataset1.pkl')))
+# 0.6910025706940874
 
 #----------------- 20231013 ------------------#
 # python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=RB_RG_794topic2_conf80_th --model_name=RB_794RG_topic2_conf80_th --topk_topic=2 --topic_conf=0.8 --train_ablation=RG --device=1
