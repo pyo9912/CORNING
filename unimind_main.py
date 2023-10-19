@@ -395,13 +395,14 @@ class BART_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
             predicted_goal, predicted_topics = data['predicted_goal'][0], '|'.join(predicted_topic_list)
         else: raise Exception("Topic RQ should 'conf' or 'top'")
 
-        prefix, prompt = f"<topic>{predicted_topics} <dialog>",' | Generate the response:'
+        prefix, prompt = f"<topic>{predicted_topics} <dialog>", ' | Generate the response:'
 
-        input_sentence = self.tokenizer(dialog + prompt, add_special_tokens=False).input_ids
         if 't5' in self.args.uni_model_name: 
+            input_sentence = self.tokenizer(dialog + prompt).input_ids
             prefix_encoding = self.tokenizer.encode(prefix)[:-1][:self.input_max_length // 4]
             input_sentence = prefix_encoding + input_sentence[-(self.input_max_length - len(prefix_encoding) - 1):]
         else: 
+            input_sentence = self.tokenizer(dialog + prompt, add_special_tokens=False).input_ids
             prefix_encoding = self.tokenizer.encode(prefix)[1:-1][:self.input_max_length // 4]
             input_sentence = [self.tokenizer.cls_token_id] + prefix_encoding + input_sentence[-(self.input_max_length - len(prefix_encoding) - 1):]
         input_sentence = input_sentence + [pad_token_id] * (self.input_max_length - len(input_sentence))
