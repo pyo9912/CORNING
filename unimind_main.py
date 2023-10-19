@@ -27,7 +27,7 @@ def add_ours_specific_args(parser):
 
     
     parser.add_argument("--topic_rq", type=str, default='conf', choices=["conf","top"] , help=" Method ")
-    parser.add_argument("--topic_rq_label", type=str, default='item_resp', choices=["resp","item_resp"] , help=" Method ")
+    parser.add_argument("--topic_rq_label", type=str, default='resp', choices=["resp","item_resp"] , help=" Method ")
     parser.add_argument("--topic_score", type=str, default='794', help=" pkl folder name (pkl_TOPICSCORE)")
     
     ## For resp
@@ -117,7 +117,7 @@ def main(args=None):
     elif 't5' in args.uni_model_name:
         tokenizer = AutoTokenizer.from_pretrained(args.uni_model_name)
         generator = T5ForConditionalGeneration.from_pretrained(args.uni_model_name)
-    # tokenizer.add_special_tokens({'additional_special_tokens':['<goal>','<topic>', '<dialog>']}) 
+        tokenizer.add_special_tokens({'additional_special_tokens':['<goal>','<topic>', '<dialog>']})
     generator.resize_token_embeddings(len(tokenizer))
     generator.to(args.device)
 
@@ -397,9 +397,13 @@ class BART_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
 
         prefix, prompt = f"<topic>{predicted_topics} <dialog>",' | Generate the response:'
 
-        prefix_encoding = self.tokenizer.encode(prefix)[1:-1][:self.input_max_length // 4]
         input_sentence = self.tokenizer(dialog + prompt, add_special_tokens=False).input_ids
-        input_sentence = [self.tokenizer.cls_token_id] + prefix_encoding + input_sentence[-(self.input_max_length - len(prefix_encoding) - 1):]
+        if 't5' in self.args.uni_model_name: 
+            prefix_encoding = self.tokenizer.encode(prefix)[:-1][:self.input_max_length // 4]
+            input_sentence = prefix_encoding + input_sentence[-(self.input_max_length - len(prefix_encoding) - 1):]
+        else: 
+            prefix_encoding = self.tokenizer.encode(prefix)[1:-1][:self.input_max_length // 4]
+            input_sentence = [self.tokenizer.cls_token_id] + prefix_encoding + input_sentence[-(self.input_max_length - len(prefix_encoding) - 1):]
         input_sentence = input_sentence + [pad_token_id] * (self.input_max_length - len(input_sentence))
 
         
@@ -419,8 +423,10 @@ class BART_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
         ## For Gen-Rec
         context_batch['pred_topic'] = self.args.taskDic['topic']['str'][predicted_topic]  # 받은 Predicted Topic
         context_batch['topic_in_resp'] = topic in response  # Topic이 response에 들어있는지 True, False 로 체크
-
-        context_batch['response'] = [self.tokenizer.bos_token_id] + labels  # kobart <s> issue
+        if 't5' in self.args.uni_model_name: 
+            context_batch['response'] = labels  # kobart <s> issue
+        else: 
+            context_batch['response'] = [self.tokenizer.bos_token_id] + labels  # kobart <s> issue
         context_batch['goal_idx'] = self.args.goalDic['str'][goal]  # index로 바꿈
         context_batch['topic_idx'] = self.args.topicDic['str'][topic]  # index로 바꿈
         
