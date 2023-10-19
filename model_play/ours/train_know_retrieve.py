@@ -126,9 +126,9 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
             for idx in range(args.pseudo_pos_rank):
                 # confidence = torch.softmax(pseudo_confidences[:, :idx + 1], dim=-1)
                 # g_logit = torch.sum(logit_pos[:, :idx + 1] * pseudo_confidences_mask[:, :idx + 1], dim=-1) / (torch.sum(pseudo_confidences_mask[:, :idx + 1], dim=-1) + 1e-20)
-                if args.train_ablation == 'CL':
+                if args.train_ablation == 'CL':# Contrastive loss --> 이게 그냥인것
                     g_logit = logit_pos[:, idx]  # For Sampling
-                if args.train_ablation == 'RG':
+                if args.train_ablation == 'RG':# GCL
                     g_logit = cumsum_logit[:, idx] / (idx + 1)  # For GCL!!!!!!! (our best)
 
                 g_logit = torch.cat([g_logit.unsqueeze(1), logit_neg], dim=1)

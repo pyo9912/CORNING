@@ -1,6 +1,6 @@
 import sys
 import os
-from transformers import BartForConditionalGeneration, BartTokenizer, BartConfig, AutoConfig, AutoModel,AutoTokenizer
+from transformers import BartForConditionalGeneration, BartTokenizer, BartConfig, AutoConfig, AutoModel,AutoTokenizer, T5ForConditionalGeneration
 import torch
 import numpy as np
 from torch.utils.data import DataLoader, Dataset
@@ -21,7 +21,7 @@ import random
 
 def add_ours_specific_args(parser):
     # parser.add_argument("--asdf", action='store_true', help="~할지 여부")
-    parser.add_argument( "--method", type=str, default="unimind", choices=["bart","unimind"], help=" Method " )
+    parser.add_argument( "--method", type=str, default="unimind", choices=["bart","unimind","t5"], help=" Method " )
     parser.add_argument("--gt_max_length", type=int, default=256, help=" Goal-Topic input max_length ")
     parser.add_argument("--gt_batch_size", type=int, default=16, help=" Method ")
 
@@ -31,7 +31,7 @@ def add_ours_specific_args(parser):
     parser.add_argument("--topic_score", type=str, default='794', help=" pkl folder name (pkl_TOPICSCORE)")
     
     ## For resp
-    parser.add_argument("--uni_model_name", type=str, default='facebook/bart-base', help=" model name ") # facebook/bart-large
+    parser.add_argument("--uni_model_name", type=str, default='facebook/bart-base', help=" model name ") # facebook/bart-large, google/flan-t5-large
     parser.add_argument("--uni_batch_size", type=int, default=32, help=" batchsize ")
     # parser.add_argument("--uni_input_dialog", type=str, default="dialog", help=" input dialog  ")
     parser.add_argument("--uni_max_input_length", type=int, default=256, help=" input len: 256 ")
@@ -111,11 +111,15 @@ def main(args=None):
     logger.info(f"Model call {args.uni_model_name}")
     model_cache_dir = os.path.join(args.home, 'model_cache', args.uni_model_name)
     # config = BartConfig.from_pretrained(args.uni_model_name, cache_dir=model_cache_dir)
-    tokenizer = BartTokenizer.from_pretrained(args.uni_model_name, cache_dir=model_cache_dir)
+    if 'bart' in args.uni_model_name:
+        tokenizer = BartTokenizer.from_pretrained(args.uni_model_name, cache_dir=model_cache_dir)
+        generator = BartForConditionalGeneration.from_pretrained(args.uni_model_name, cache_dir=model_cache_dir)
+    elif 't5' in args.uni_model_name:
+        tokenizer = AutoTokenizer.from_pretrained(args.uni_model_name)
+        generator = T5ForConditionalGeneration.from_pretrained(args.uni_model_name)
     # tokenizer.add_special_tokens({'additional_special_tokens':['<goal>','<topic>', '<dialog>']}) 
-    bart = BartForConditionalGeneration.from_pretrained(args.uni_model_name, cache_dir=model_cache_dir)
-    bart.resize_token_embeddings(len(tokenizer))
-    bart.to(args.device)
+    generator.resize_token_embeddings(len(tokenizer))
+    generator.to(args.device)
 
 
     # 3711-3711 Fast 
@@ -129,19 +133,19 @@ def main(args=None):
     train_dataloader = DataLoader(train_Dataset, batch_size=args.uni_batch_size, shuffle=True)
     test_dataloader = DataLoader(test_Dataset, batch_size=args.uni_batch_size, shuffle=False)
 
-    optimizer = torch.optim.AdamW(bart.parameters(), lr=args.uni_lr)
+    optimizer = torch.optim.AdamW(generator.parameters(), lr=args.uni_lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_dc_step, gamma=args.lr_dc)
     best_ppl, best_outputstr=10000, None
     log_args(args)
     for epoch in range(args.uni_epochs):
         logger.info(f"Train {epoch} Start")
 
-        bart.train()
-        _, _ = epoch_play(args, tokenizer, bart, train_dataloader, optimizer, scheduler, epoch, mode='train')
+        generator.train()
+        _, _ = epoch_play(args, tokenizer, generator, train_dataloader, optimizer, scheduler, epoch, mode='train')
         
         with torch.no_grad():
-            bart.eval()
-            ppl, output_str = epoch_play(args, tokenizer, bart, test_dataloader, optimizer, scheduler, epoch, mode='test')
+            generator.eval()
+            ppl, output_str = epoch_play(args, tokenizer, generator, test_dataloader, optimizer, scheduler, epoch, mode='test')
             if best_ppl > ppl:
                 best_ppl = ppl 
                 best_outputstr = output_str
