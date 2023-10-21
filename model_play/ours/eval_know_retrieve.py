@@ -106,9 +106,9 @@ def eval_know(args, test_dataloader, retriever, knowledgeDB, tokenizer, write=No
                         break
                 rec_hit = ground_topic in retrieved_knowledge_text[0]
 
-                response = tokenizer.decode(response[batch_id], skip_special_tokens=True)
+                gen_response = tokenizer.decode(response[batch_id], skip_special_tokens=True)
                 jsonlineSave.append(
-                    {'goal_type': args.goalDic['int'][batch['goal_idx'][batch_id].item()], 'topic': ground_topic, 'passage_hit': correct, 'dialog': input_text, 'target': target_knowledge_text, 'response': response, "predict5": retrieved_knowledge_text, 'topic_len': batch['topic_len'].tolist()[0],
+                    {'goal_type': args.goalDic['int'][batch['goal_idx'][batch_id].item()], 'topic': ground_topic, 'passage_hit': correct, 'dialog': input_text, 'target': target_knowledge_text, 'response': gen_response, "predict5": retrieved_knowledge_text, 'topic_len': batch['topic_len'].tolist()[0],
                      'candidate_topic_entities': candidate_topic, 'selected_topic':selected_topic,'rec_hit': rec_hit})
             # save_json(args, f"{args.time}_{args.model_name}_inout", jsonlineSave)
         top10_cand_knows.extend([[knowledgeDB[int(idx)] for idx in top10] for top10 in torch.topk(dot_score, k=10).indices])
