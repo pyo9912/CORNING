@@ -28,7 +28,7 @@ def update_key_bert(key_bert, query_bert):
 def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB, bert_model, tokenizer):
     from models.ours.retriever import Retriever
     retriever = Retriever(args, bert_model)
-    retriever.load_state_dict(torch.load("model_save/2/794CL_topic2_conf80_th_know.pt", map_location='cuda:0')); logger.info('LOAD BEST MODEL TH#####################################################')
+    retriever.load_state_dict(torch.load("model_save/2/RB_794RG_topic2_conf80_hj_know.pt", map_location='cuda:0')); logger.info('LOAD BEST MODEL TH#####################################################')
     args.know_topk = 5
 
     retriever = retriever.to(args.device)
