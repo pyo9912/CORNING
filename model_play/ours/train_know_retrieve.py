@@ -197,7 +197,7 @@ def train_know(args, train_dataset_raw, valid_dataset_raw, test_dataset_raw, tra
     # logger.info("Food recommendation\t" + "\t".join(best_hit_food))
     # logger.info("Chat about stars\t" + "\t".join(best_hit_chat))
 
-    logger.info("BEST")
-    for i in best_output:
-        logger.info(f"BEST: {i}")
+    # logger.info("BEST") # Todo: epoch 0으로 하면 오류나서 일단 주석처리
+    # for i in best_output:
+    #     logger.info(f"BEST: {i}")
     eval_know(args, test_dataloader, retriever, all_knowledgeDB, tokenizer, write=True)  # HJ: Knowledge text top-k 뽑아서 output만들어 체크하던 코드 분리

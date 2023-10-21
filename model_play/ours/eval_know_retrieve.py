@@ -90,18 +90,27 @@ def eval_know(args, test_dataloader, retriever, knowledgeDB, tokenizer, write=No
         # if args.stage == 'retrieve':
         dot_score = retriever.compute_know_score_candidate(dialog_token, dialog_mask, knowledge_index_rerank)  # todo: DPR용 (1/2)
 
-        # if write:
-        #     top_candidate = torch.topk(dot_score, k=5, dim=1).indices  # [B, K]
-        #     input_text = '||'.join(tokenizer.batch_decode(dialog_token, skip_special_tokens=True))
-        #     target_knowledge_text = [knowledgeDB[int(i)] for i in target_knowledge_idx] # knowledgeDB[target_knowledge_idx]
-        #     retrieved_knowledge_text = [knowledgeDB[idx].lower() for idx in top_candidate[0]]  # list
-        #     correct = [i in j for i,j in zip(target_knowledge_idx, top_candidate)] # target_knowledge_idx in top_candidate
+        if write:
+            for batch_id in range(batch_size):
+                top_candidate = torch.topk(dot_score[batch_id], k=5, dim=0).indices  # [B, K]
+                input_text = tokenizer.decode(dialog_token[batch_id], skip_special_tokens=True)
+                target_knowledge_text = knowledgeDB[int(target_knowledge_idx[batch_id])] #for i in target_knowledge_idx[batch_id] # knowledgeDB[target_knowledge_idx]
+                retrieved_knowledge_text = [knowledgeDB[idx].lower() for idx in top_candidate]  # list
+                correct = target_knowledge_idx[batch_id] in top_candidate
+                ground_topic = args.topicDic['int'][batch['topic_idx'][batch_id].item()]
+                candidate_topic = [args.topicDic['int'][i.item()] for i in candidate_topic_entities[batch_id][:topic_lens[batch_id]]]
+                selected_topic = -1
+                for i, topic in enumerate(candidate_topic):
+                    if topic in retrieved_knowledge_text[0]:
+                        selected_topic = i
+                        break
+                rec_hit = ground_topic in retrieved_knowledge_text[0]
 
-        #     response = '||'.join(tokenizer.batch_decode(response, skip_special_tokens=True))
-        #     jsonlineSave.append(
-        #         {'goal_type': goal_idx[0], 'topic': topic_idx[0], 'tf': correct, 'dialog': input_text, 'target': target_knowledge_text, 'response': response, "predict5": retrieved_knowledge_text, 'topic_len': batch['topic_len'].tolist()[0],
-        #          'candidate_topic_entities': [args.topicDic['int'][i.item()] for i in candidate_topic_entities[0]]})
-        #     # save_json(args, f"{args.time}_{args.model_name}_inout", jsonlineSave)
+                response = tokenizer.decode(response[batch_id], skip_special_tokens=True)
+                jsonlineSave.append(
+                    {'goal_type': args.goalDic['int'][batch['goal_idx'][batch_id].item()], 'topic': ground_topic, 'passage_hit': correct, 'dialog': input_text, 'target': target_knowledge_text, 'response': response, "predict5": retrieved_knowledge_text, 'topic_len': batch['topic_len'].tolist()[0],
+                     'candidate_topic_entities': candidate_topic, 'selected_topic':selected_topic,'rec_hit': rec_hit})
+            # save_json(args, f"{args.time}_{args.model_name}_inout", jsonlineSave)
         top10_cand_knows.extend([[knowledgeDB[int(idx)] for idx in top10] for top10 in torch.topk(dot_score, k=10).indices])
         contexts.extend(tokenizer.batch_decode(dialog_token, skip_special_tokens=False))
         responses.extend(tokenizer.batch_decode(response, skip_special_tokens=False))
@@ -181,11 +190,11 @@ def eval_know(args, test_dataloader, retriever, knowledgeDB, tokenizer, write=No
         with open(f'augmented_dataset_{data_type}.txt', 'wb') as f:
             pickle.dump(test_dataloader.dataset.augmented_raw_sample, f)
 
-    # if write:
-    #     # TODO HJ: 입출력 저장 args처리 필요시 args.save_know_output 에 store_true 옵션으로 만들 필요
-    #     filename = f"{args.output_dir}/eval_know_json.pkl"
-    #     write_pkl(obj=jsonlineSave, filename='jsonline.pkl')  # 입출력 저장
-    #     save_json(args, f"{args.time}_{args.model_name}_inout", jsonlineSave)
+    if write:
+        # TODO HJ: 입출력 저장 args처리 필요시 args.save_know_output 에 store_true 옵션으로 만들 필요
+        # filename = f"{args.output_dir}/eval_know_json.pkl"
+        write_pkl(obj=jsonlineSave, filename='jsonline.pkl')  # 입출력 저장
+        save_json(args, f"{args.time}_{args.model_name}_inout", jsonlineSave)
 
     logger.info(f"avg topic: %.2f" % topic_len_avg)
 
