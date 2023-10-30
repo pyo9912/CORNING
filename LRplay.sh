@@ -1,6 +1,10 @@
 #!/bin/bash
 # 아래에 실행시키려는 녀석들 다 입력해놓고, 마지막 echo "" 따옴표 안에 어떤걸 보기위한 실험이었는지 적어놓기
-python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=794RG_topic_Top0_th --model_name=794RG_topic_Top0_th --topk_topic=0 --know_item_select=conf --train_ablation=RG --device=1
+python lm_main.py --fast --version=2 --gpu=0 --uni_epochs=2 --uni_model_name='google/flan-t5-large' --uni_batch_size=1 --log_name="T5-large" 
+python lm_main.py --fast --version=2 --gpu=1 --uni_epochs=2 --uni_model_name='google/flan-t5-xl' --uni_batch_size=1 --log_name="T5-xl" 
+python lm_main.py --fast --version=2 --gpu=0 --uni_epochs=2 --uni_model_name='google/flan-t5-xxl' --uni_batch_size=1 --log_name="T5-xxl_13b" 
+# ["--gpu=1","--fast", "--topic_rq=none", "--log_name=DEBUG", "--uni_model_name=google/flan-t5-xxl", "--uni_batch_size=1
+# python main.py --task=know --batch_size=32 --know_max_length=128 --num_epochs=20 --input_prompt=dialog_topic --log_name=794RG_topic_Top0_th --model_name=794RG_topic_Top0_th --topk_topic=0 --know_item_select=conf --train_ablation=RG --device=1
 # python unimind_main.py --fast --version=2 --gpu=1 --method=t5 --uni_lr=1e-5 --uni_epochs=7 --topic_rq_label=resp --uni_model_name='google/flan-t5-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=8 --topic_score=794 --topk_topic=2 --topic_rq=conf --topic_conf=0.8 --log_name="T5_794_T5_RecGen_Cum2_Conf80_1e5" 
 # python unimind_main.py --fast --version=2 --gpu=0 --method=t5 --uni_lr=1e-6 --uni_epochs=7 --topic_rq_label=resp --uni_model_name='google/flan-t5-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=8 --topic_score=794 --topk_topic=2 --topic_rq=conf --topic_conf=0.8 --log_name="T5_794_T5_RecGen_Cum2_Conf80_1e6" 
 # python unimind_main.py --fast --version=2 --gpu=0 --method=t5 --uni_lr=5e-4 --uni_epochs=7 --topic_rq_label=resp --uni_model_name='google/flan-t5-large' --uni_max_input_length=256 --uni_max_target_length=128 --uni_batch_size=8 --topic_score=794 --topk_topic=2 --topic_rq=conf --topic_conf=0.8 --log_name="T5_794_T5_RecGen_Cum2_Conf80_5e4" 

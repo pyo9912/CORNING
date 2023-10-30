@@ -21,18 +21,18 @@ import random
 
 def add_ours_specific_args(parser):
     # parser.add_argument("--asdf", action='store_true', help="~할지 여부")
-    parser.add_argument( "--method", type=str, default="unimind", choices=["bart","unimind","t5"], help=" Method " )
+    parser.add_argument( "--method", type=str, default="llm", choices=["bart","unimind","t5","llm"], help=" Method " )
     parser.add_argument("--gt_max_length", type=int, default=256, help=" Goal-Topic input max_length ")
     parser.add_argument("--gt_batch_size", type=int, default=16, help=" Method ")
 
+
     
-    parser.add_argument("--topic_rq", type=str, default='conf', choices=["conf","top"] , help=" Method ")
-    parser.add_argument("--topic_rq_label", type=str, default='resp', choices=["resp","item_resp"] , help=" Method ")
+    parser.add_argument("--topic_rq", type=str, default='conf', choices=["conf","top","none"] , help=" Method ")
     parser.add_argument("--topic_score", type=str, default='794', help=" pkl folder name (pkl_TOPICSCORE)")
     
     ## For resp
-    parser.add_argument("--uni_model_name", type=str, default='facebook/bart-base', help=" model name ") # facebook/bart-large, google/flan-t5-large
-    parser.add_argument("--uni_batch_size", type=int, default=32, help=" batchsize ")
+    parser.add_argument("--uni_model_name", type=str, default='google/flan-t5-large', help=" model name ") # facebook/bart-large, google/flan-t5-large
+    parser.add_argument("--uni_batch_size", type=int, default=1, help=" batchsize ")
     # parser.add_argument("--uni_input_dialog", type=str, default="dialog", help=" input dialog  ")
     parser.add_argument("--uni_max_input_length", type=int, default=256, help=" input len: 256 ")
     parser.add_argument("--uni_max_target_length", type=int, default=128, help=" output len: 128 ")
@@ -44,14 +44,13 @@ def add_ours_specific_args(parser):
     parser.add_argument("--uni_train_alltype", action='store_true', help="train all type 여부")
     parser.add_argument("--uni_test_alltype", action='store_true', help="test all type 여부")
     
+    # parser.add_argument("--finetune", action='store_true', help="Training (fine-tune) 여부")
     # parser.add_argument("--rag_our_model", default='c2dpr', type=str, help="rag_our_version_bert", choices=['', 'DPR', 'C2DPR', 'dpr','c2dpr'])
     return parser
 
 
 def main(args=None):
-    """
-    Only use BART (MLP Layer No Use)
-    """
+    
     parser = argparse.ArgumentParser(description="ours_main.py")
     parser = utils.default_parser(parser)
     parser = add_ours_specific_args(parser)
@@ -61,49 +60,45 @@ def main(args=None):
     initLogging(args)
     # global tb_writer
     # tb_writer = SummaryWriter(log_dir= os.path.join(args.home, 'temp_code'))
-    logger.info("Model Call")
-    bert_model = AutoModel.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name)).to(args.device)
-    bert_config = AutoConfig.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
-    tokenizer = AutoTokenizer.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
-    tokenizer.add_special_tokens(bert_special_tokens_dict)  # [TH] add bert special token (<dialog>, <topic> , <type>)
-    bert_model.resize_token_embeddings(len(tokenizer))
-    args.hidden_size = bert_model.config.hidden_size  # BERT large 쓸 때 대비
+    # logger.info("Model Call")
+    # bert_model = AutoModel.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name)).to(args.device)
+    # bert_config = AutoConfig.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
+    # tokenizer = AutoTokenizer.from_pretrained(args.bert_name, cache_dir=os.path.join(args.home, "model_cache", args.bert_name))
+    # tokenizer.add_special_tokens(bert_special_tokens_dict)  # [TH] add bert special token (<dialog>, <topic> , <type>)
+    # bert_model.resize_token_embeddings(len(tokenizer))
+    # args.hidden_size = bert_model.config.hidden_size  # BERT large 쓸 때 대비
 
     logger.info("Read raw file")
-    topicDic = readDic(os.path.join(args.data_dir, "topic2id.txt"))
-    goalDic = readDic(os.path.join(args.data_dir, "goal2id.txt"))
-    args.topicDic = topicDic
-    args.goalDic = goalDic
-    args.topic_num = len(topicDic['int'])
-    args.goal_num = len(goalDic['int'])
+    topicDic , goalDic = readDic(os.path.join(args.data_dir, "topic2id.txt")), readDic(os.path.join(args.data_dir, "goal2id.txt"))
+    args.topicDic, args.goalDic = topicDic, goalDic
+    args.topic_num, args.goal_num = len(topicDic['int']), len(goalDic['int'])
     args.taskDic = {'goal': goalDic, 'topic': topicDic}
     
 
-    logger.info("Read raw file")
-    train_dataset_raw, train_knowledge_base, train_knowledge_topic = data_utils.dataset_reader(args, 'train')
-    test_dataset_raw, valid_knowledge_base, test_knowledge_topic = data_utils.dataset_reader(args, 'test')
-    valid_dataset_raw, test_knowledge_base, _ = data_utils.dataset_reader(args, 'dev')
+    # logger.info("Read raw file")
+    # train_dataset_raw, train_knowledge_base, train_knowledge_topic = data_utils.dataset_reader(args, 'train')
+    # test_dataset_raw, valid_knowledge_base, test_knowledge_topic = data_utils.dataset_reader(args, 'test')
+    # valid_dataset_raw, test_knowledge_base, _ = data_utils.dataset_reader(args, 'dev')
 
-    logger.info("Knowledge DB 구축")
-    train_knowledgeDB, all_knowledgeDB = set(), set()
-    train_knowledgeDB.update(train_knowledge_base)
+    # logger.info("Knowledge DB 구축")
+    # train_knowledgeDB, all_knowledgeDB = set(), set()
 
-    all_knowledgeDB.update(train_knowledge_base)
-    all_knowledgeDB.update(valid_knowledge_base)
-    all_knowledgeDB.update(test_knowledge_base)
+    # train_knowledgeDB.update(train_knowledge_base)
+    # all_knowledgeDB.update(train_knowledge_base)
+    # all_knowledgeDB.update(valid_knowledge_base)
+    # all_knowledgeDB.update(test_knowledge_base)
 
-    train_knowledgeDB = list(train_knowledgeDB)
-    all_knowledgeDB = list(all_knowledgeDB)
+    # train_knowledgeDB, all_knowledgeDB = list(train_knowledgeDB), list(all_knowledgeDB)
     
     if args.fast:
         train_dataset_aug_pred, test_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'pkl_{args.topic_score}', f'train_pred_aug_dataset.pkl')) , utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'pkl_{args.topic_score}', f'test_pred_aug_dataset.pkl'))
         # train_dataset_aug_pred, test_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', 'pkl_768', f'train_pred_aug_dataset.pkl')) , utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', 'pkl_768', f'test_pred_aug_dataset.pkl'))
         # train_dataset_aug_pred, test_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl')) , utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
         # read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
-    else:
-        logger.info("Pred-Aug dataset 구축")
-        args.rag_train_alltype, args.rag_test_alltype = args.uni_train_alltype, args.uni_test_alltype
-        train_dataset_aug_pred, test_dataset_aug_pred = make_aug_gt_pred(args, deepcopy(bert_model), tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
+    # else:
+    #     logger.info("Pred-Aug dataset 구축")
+    #     args.rag_train_alltype, args.rag_test_alltype = args.uni_train_alltype, args.uni_test_alltype
+    #     train_dataset_aug_pred, test_dataset_aug_pred = make_aug_gt_pred(args, deepcopy(bert_model), tokenizer, train_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
 
     logger.info(f"Length of Pred_Auged Train,Test: {len(train_dataset_aug_pred)}, {len(test_dataset_aug_pred)}")
     logger.info(f"!!Dataset created!!\n")
@@ -115,8 +110,8 @@ def main(args=None):
         tokenizer = BartTokenizer.from_pretrained(args.uni_model_name, cache_dir=model_cache_dir)
         generator = BartForConditionalGeneration.from_pretrained(args.uni_model_name, cache_dir=model_cache_dir)
     elif 't5' in args.uni_model_name:
-        tokenizer = AutoTokenizer.from_pretrained(args.uni_model_name)
-        generator = T5ForConditionalGeneration.from_pretrained(args.uni_model_name)
+        tokenizer = AutoTokenizer.from_pretrained(args.uni_model_name, cache_dir=model_cache_dir)
+        generator = T5ForConditionalGeneration.from_pretrained(args.uni_model_name, cache_dir=model_cache_dir)
         tokenizer.add_special_tokens({'additional_special_tokens':['<goal>','<topic>', '<dialog>']})
     generator.resize_token_embeddings(len(tokenizer))
     generator.to(args.device)
@@ -126,8 +121,8 @@ def main(args=None):
     if args.debug: 
         train_dataset_aug_pred, test_dataset_aug_pred, args.uni_epochs = train_dataset_aug_pred[:50] , test_dataset_aug_pred[:50] , 1
 
-    train_Dataset = BART_RQ_Dataset(args, train_dataset_aug_pred, tokenizer, mode='train', method=args.method)
-    test_Dataset =BART_RQ_Dataset(args, test_dataset_aug_pred, tokenizer, mode='test', method=args.method)
+    train_Dataset = LLM_RQ_Dataset(args, train_dataset_aug_pred, tokenizer, mode='train', method=args.method)
+    test_Dataset =LLM_RQ_Dataset(args, test_dataset_aug_pred, tokenizer, mode='test', method=args.method)
     # train_Dataset = UnimindDataset(args, train_dataset_aug_pred, tokenizer, mode='train', method=args.method)
     # test_Dataset =UnimindDataset(args, test_dataset_aug_pred, tokenizer, mode='test', method=args.method)
     train_dataloader = DataLoader(train_Dataset, batch_size=args.uni_batch_size, shuffle=True)
@@ -139,9 +134,10 @@ def main(args=None):
     log_args(args)
     for epoch in range(args.uni_epochs):
         logger.info(f"Train {epoch} Start")
-
-        generator.train()
-        _, _ = epoch_play(args, tokenizer, generator, train_dataloader, optimizer, scheduler, epoch, mode='train')
+        
+        if args.finetune:
+            generator.train()
+            _, _ = epoch_play(args, tokenizer, generator, train_dataloader, optimizer, scheduler, epoch, mode='train')
         
         with torch.no_grad():
             generator.eval()
@@ -178,13 +174,13 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
         else:
             gen_ids=model.generate(source_ids, num_return_sequences=1, num_beams=1, max_length = args.uni_max_target_length, early_stopping=True)
             gen_resps.extend(tokenizer.batch_decode(gen_ids, skip_special_tokens=skip_tokens, clean_up_tokenization_spaces=skip_tokens))
-            ## >> For Gen_Rec RQ
+            # ## >> For Gen_Rec RQ
             batch_types=[args.goalDic['int'][int(idx)] for idx in batch['goal_idx']]
             types.extend(batch_types)
-            topics.extend([args.topicDic['int'][int(idx)] for idx in batch['topic_idx']])
-            p_topics.extend([args.topicDic['int'][int(idx)] for idx in batch['pred_topic']])
-            topic_in_resps.extend([bool(i) for i in batch['topic_in_resp']])
-            ## << For Gen_Rec RQ
+            # topics.extend([args.topicDic['int'][int(idx)] for idx in batch['topic_idx']])
+            # p_topics.extend([args.topicDic['int'][int(idx)] for idx in batch['pred_topic']])
+            # topic_in_resps.extend([bool(i) for i in batch['topic_in_resp']])
+            # ## << For Gen_Rec RQ
             evaluator.evaluate(gen_ids, lm_labels, log=True)
             evaluator_type.evaluate(gen_ids, lm_labels, batch_types, log=True)
 
@@ -207,7 +203,7 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
                         f"NEW_{epoch}_{mode}:  {report['bleu@1']:.3f},  {report['bleu@2']:.3f},  {report['bleu@3']:.3f},  {report['bleu@4']:.3f},  {report['dist@1']:.3f},  {report['dist@2']:.3f},  {report['dist@3']:.3f},  {report['dist@4']:.3f}"]
         output_strings.extend(report_text)
         evaluator.reset_metric()
-
+        ppl = 1 - report['bleu@2']
         report = evaluator_type.report()
         report_text = [f"NEW_{epoch}_{mode}: bleu@1, bleu@2, bleu@3, bleu@4, dist@1, dist@2, dist@3, dist@4",
                        f"NEW_{epoch}_{mode}:  {report['bleu@1']:.3f},  {report['bleu@2']:.3f},  {report['bleu@3']:.3f},  {report['bleu@4']:.3f},  {report['dist@1']:.3f},  {report['dist@2']:.3f},  {report['dist@3']:.3f},  {report['dist@4']:.3f}"]
@@ -219,14 +215,14 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, scheduler, epoch,
             reports_text = f"NEW_{epoch}_{mode:^5}_{each_type:^21}:  {report['bleu@1']:.3f},  {report['bleu@2']:.3f},  {report['bleu@3']:.3f},  {report['bleu@4']:.3f},  {report['dist@1']:.3f},  {report['dist@2']:.3f},  {report['dist@3']:.3f},  {report['dist@4']:.3f}, Count: {report['sent_cnt']}"
             output_strings.append(reports_text)
 
-        # for i in output_strings:
-        #     logger.info(f"{mode}_{epoch} {i}")
-        
-        _, hitdic_ratio, resp_topic_str = gen_resp_topic(args, real_resps=real_resps, types=types, topics=topics, gen_resps=gen_resps, topic_in_resps=topic_in_resps, p_topics=p_topics, isrq=True)
-        for i in resp_topic_str:
+        for i in output_strings:
             logger.info(f"{mode}_{epoch} {i}")
-        ppl= 1 - hitdic_ratio['total']['hit1_Gen']
-        output_strings = resp_topic_str
+        
+        # _, hitdic_ratio, resp_topic_str = gen_resp_topic(args, real_resps=real_resps, types=types, topics=topics, gen_resps=gen_resps, topic_in_resps=topic_in_resps, p_topics=p_topics, isrq=True)
+        # for i in resp_topic_str:
+        #     logger.info(f"{mode}_{epoch} {i}")
+        # ppl= 1 - hitdic_ratio['total']['hit1_Gen']
+        # output_strings = resp_topic_str
 
     save_preds_hitgen(args, contexts, real_resp=real_resps, gen_resps=gen_resps, epoch=epoch, mode=mode, topic_in_resp=topic_in_resps, topics=topics, p_topics = p_topics)
     # save_preds(args, contexts, real_resp=real_resps, gen_resps=gen_resps, epoch=epoch, mode=mode) # Default for Generation save
@@ -275,76 +271,7 @@ def save_preds(args, context, real_resp, gen_resps=[], epoch=None, mode='train')
     logger.info(f"Save {mode}, Epoch: {str(epoch)}, generated results in {path}")
     return
 
-class UnimindDataset(Dataset):
-    """ For Resp pipeline """
-    def __init__(self, args, pred_aug_dataset, tokenizer, mode='train', method='resp'):
-        super(Dataset, self).__init__()
-        self.args=args
-        self.tokenizer = tokenizer
-        self.mode=mode
-        self.method=method # unimind, bart, kers (Engligh DuRec Dataset)
-        self.pred_aug_dataset=pred_aug_dataset
-        self.input_max_length=args.uni_max_input_length
-        self.target_max_length=args.uni_max_target_length
-        self.tokenizer.truncation_side='left'
-        self.postfix = "system: "
-        ## pipeline 고려하기 (predicted_goal, predicted_topic)
-
-
-    def __len__(self):
-        return len(self.pred_aug_dataset)
-
-    def __getitem__(self, index):
-        data = self.pred_aug_dataset[index]
-        cbdicKeys = ['dialog', 'user_profile', 'response', 'goal', 'topic', 'situation', 'target_knowledge', 'candidate_knowledges', 'candidate_confidences']
-        dialog, user_profile, response, goal, topic, situation, target_knowledge, candidate_knowledges, candidate_confidences = [data[i] for i in cbdicKeys]
-        predicted_goal, predicted_topic = data['predicted_goal'][0], data['predicted_topic'][0]
-        pad_token_id = self.tokenizer.pad_token_id
-        dialog = dialog.replace('[SEP]', ' ')
-        response = response.replace('[SEP]', ' ')
-        
-        context_batch = defaultdict()
-        self.tokenizer.truncation_side='left'
-        if self.method=='unimind': 
-            if self.mode=='train': 
-                input = f"{dialog} goal: {goal} topic: {topic} Generate the response: "
-                labels = self.postfix + response
-            else:  # Test
-                input = f"{dialog} goal: {predicted_goal} topic: {predicted_topic} Generate the response: "
-                labels = response
-        elif self.method=='bart':
-            input = f"{dialog}</s>"
-            labels = self.postfix + f"{response}</s>"
-        else: 
-            raise Exception("UniMIND Or Bart For This Dataset Model")
-
-
-
-
-
-        input_sentence = self.tokenizer(input).input_ids
-        input_sentence = input_sentence[ -self.input_max_length : ]
-        input_sentence = input_sentence + [pad_token_id] * (self.input_max_length - len(input_sentence))
-        
-        context_batch['input_ids'] = torch.LongTensor(input_sentence).to(self.args.device)
-        attention_mask = context_batch['input_ids'].ne(pad_token_id)
-        context_batch['attention_mask'] = attention_mask
-        labels = self.tokenizer(labels, max_length = self.target_max_length, padding='max_length', truncation=True)['input_ids']
-        context_batch['labels'] = labels
-        ## For Gen-Rec
-        context_batch['pred_topic'] = self.args.taskDic['topic']['str'][predicted_topic]  # 받은 Predicted Topic
-        context_batch['topic_in_resp'] = topic in response  # Topic이 response에 들어있는지 True, False 로 체크
-
-        context_batch['response'] = [self.tokenizer.bos_token_id] + labels  # kobart <s> issue
-        context_batch['goal_idx'] = self.args.goalDic['str'][goal]  # index로 바꿈
-        context_batch['topic_idx'] = self.args.topicDic['str'][topic]  # index로 바꿈
-        
-        for k, v in context_batch.items():
-            if not isinstance(v, torch.Tensor):
-                context_batch[k] = torch.as_tensor(v, device=self.args.device)
-        return context_batch
-
-class BART_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
+class LLM_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
     """ For Resp pipeline """
     def __init__(self, args, pred_aug_dataset, tokenizer, mode='train', method='unimind'):
         super(Dataset, self).__init__()
@@ -358,8 +285,9 @@ class BART_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
         self.tokenizer.truncation_side='left'
         self.postfix = "system: "
         self.topic_rq=args.topic_rq # 'conf' or 'top'
-        self.topic_rq_label = args.topic_rq_label
         ## pipeline 고려하기 (predicted_goal, predicted_topic)
+        self.instruction = "I'll give you a conversation between the user and the system."
+        self.post_prompt = "Generate an appropriate recommendational response with one item from the system."
 
     def __len__(self): return len(self.pred_aug_dataset)
 
@@ -378,56 +306,58 @@ class BART_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
         predicted_topic_list = deepcopy(data['predicted_topic'][:self.args.topk_topic])
         predicted_topic_confidence_list = deepcopy(data['predicted_topic_confidence'][:self.args.topk_topic])
 
-        if self.topic_rq=='conf':
-            if self.mode == 'train':
-                random.shuffle(predicted_topic_list)
-                predicted_goal, predicted_topics = data['predicted_goal'][0], '|'.join(predicted_topic_list)
-            else:  # test
-                cum_prob, candidate_topic_entities = 0, []
-                for p_topic, conf in zip(predicted_topic_list, predicted_topic_confidence_list):
-                    candidate_topic_entities.append(p_topic)
-                    cum_prob += conf
-                    if cum_prob > self.args.topic_conf: break
-                predicted_goal, predicted_topics = data['predicted_goal'][0], '|'.join(candidate_topic_entities)
-        elif self.topic_rq=='top':
-            if self.mode == 'train':
-                random.shuffle(predicted_topic_list)
-            predicted_goal, predicted_topics = data['predicted_goal'][0], '|'.join(predicted_topic_list)
-        else: raise Exception("Topic RQ should 'conf' or 'top'")
+        # if self.topic_rq=='conf':
+        #     if self.mode == 'train':
+        #         random.shuffle(predicted_topic_list)
+        #         predicted_goal, predicted_topics = data['predicted_goal'][0], '|'.join(predicted_topic_list)
+        #     else:  # test
+        #         cum_prob, candidate_topic_entities = 0, []
+        #         for p_topic, conf in zip(predicted_topic_list, predicted_topic_confidence_list):
+        #             candidate_topic_entities.append(p_topic)
+        #             cum_prob += conf
+        #             if cum_prob > self.args.topic_conf: break
+        #         predicted_goal, predicted_topics = data['predicted_goal'][0], '|'.join(candidate_topic_entities)
+        # elif self.topic_rq=='top':
+        #     if self.mode == 'train':
+        #         random.shuffle(predicted_topic_list)
+        #     predicted_goal, predicted_topics = data['predicted_goal'][0], '|'.join(predicted_topic_list)
+        # else: # self.topic_rq==none 
+        #     predicted_goal, predicted_topics = data['predicted_goal'][0], '|'.join(predicted_topic_list)
+        #     raise Exception("Topic RQ should 'conf' or 'top'")
 
-        prefix, prompt = f"<topic>{predicted_topics} <dialog>", ' | Generate the response:'
+        # prefix, prompt = f"<topic>{predicted_topics} <dialog>", ' | Generate the response:'
 
-        if 't5' in self.args.uni_model_name: 
-            input_sentence = self.tokenizer(dialog + prompt).input_ids
-            prefix_encoding = self.tokenizer.encode(prefix)[:-1][:self.input_max_length // 4]
-            input_sentence = prefix_encoding + input_sentence[-(self.input_max_length - len(prefix_encoding) - 1):]
-        else: 
-            input_sentence = self.tokenizer(dialog + prompt, add_special_tokens=False).input_ids
-            prefix_encoding = self.tokenizer.encode(prefix)[1:-1][:self.input_max_length // 4]
-            input_sentence = [self.tokenizer.cls_token_id] + prefix_encoding + input_sentence[-(self.input_max_length - len(prefix_encoding) - 1):]
-        input_sentence = input_sentence + [pad_token_id] * (self.input_max_length - len(input_sentence))
+        prefix_encoding = self.tokenizer.encode(self.instruction) # 16
+        input_sentence = self.tokenizer.encode(dialog)
+        postfix_encoding = self.tokenizer.encode(self.post_prompt) # 15
+        
+        
+        if len(input_sentence) + len(prefix_encoding) + len(postfix_encoding) < self.input_max_length: # PAD 추가
+            input_sentence = [pad_token_id] * (self.input_max_length - (len(input_sentence) + len(prefix_encoding) + len(postfix_encoding))) + input_sentence
+        else: # 자르기
+            input_sentence = input_sentence[-(self.input_max_length - len(prefix_encoding) - len(postfix_encoding)):] 
+            pass
+        input_sentence = prefix_encoding + input_sentence + postfix_encoding
 
         
         context_batch['input_ids'] = torch.LongTensor(input_sentence).to(self.args.device)
         attention_mask = context_batch['input_ids'].ne(pad_token_id)
         context_batch['attention_mask'] = attention_mask
         
-        labels=""
-        if 'item' in self.topic_rq_label: 
-            labels += "<topic>" + topic 
-            if 'resp' in self.topic_rq_label: labels += "|"
-        if 'resp' in self.topic_rq_label: labels +=  response
 
-        # labels = response
+        labels = response
+
         labels = self.tokenizer(labels, max_length = self.target_max_length, padding='max_length', truncation=True)['input_ids']
         context_batch['labels'] = labels
         ## For Gen-Rec
-        context_batch['pred_topic'] = self.args.taskDic['topic']['str'][predicted_topic]  # 받은 Predicted Topic
-        context_batch['topic_in_resp'] = topic in response  # Topic이 response에 들어있는지 True, False 로 체크
+        # context_batch['pred_topic'] = self.args.taskDic['topic']['str'][predicted_topic]  # 받은 Predicted Topic
+        # context_batch['topic_in_resp'] = topic in response  # Topic이 response에 들어있는지 True, False 로 체크
+        
         if 't5' in self.args.uni_model_name: 
             context_batch['response'] = labels  # kobart <s> issue
         else: 
             context_batch['response'] = [self.tokenizer.bos_token_id] + labels  # kobart <s> issue
+        
         context_batch['goal_idx'] = self.args.goalDic['str'][goal]  # index로 바꿈
         context_batch['topic_idx'] = self.args.topicDic['str'][topic]  # index로 바꿈
         
@@ -467,24 +397,32 @@ if __name__=='__main__':
     # test_dataset_aug_pred = utils.read_pkl(os.path.join(home, 'data/2/pred_aug/gt_test_pred_aug_dataset.pkl'))
     # sum([i['topic']==i['predicted_topic'][0] for i in temp_data ]) / len(temp_data)
     # len(test_dataset_aug_pred)
-    main()
 
     # parser = argparse.ArgumentParser(description="ours_main.py")
     # parser = utils.default_parser(parser)
     # parser = add_ours_specific_args(parser)
     # args = parser.parse_args()
     # args = utils.dir_init(args)
+    # topicDic , goalDic = readDic(os.path.join(args.data_dir, "topic2id.txt")), readDic(os.path.join(args.data_dir, "goal2id.txt"))
+    # args.topicDic, args.goalDic = topicDic, goalDic
+    # args.topic_num, args.goal_num = len(topicDic['int']), len(goalDic['int'])
+    # args.taskDic = {'goal': goalDic, 'topic': topicDic}
     # data_dir='/home/work/CRSTEST/KEMGCRS/data/2'
-    # train_dataset_aug_pred, test_dataset_aug_pred = utils.read_pkl(os.path.join(data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl')) , utils.read_pkl(os.path.join(data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
+    # train_dataset_aug_pred, test_dataset_aug_pred = utils.read_pkl(os.path.join(data_dir, 'pred_aug', 'pkl_794',f'train_pred_aug_dataset.pkl')) , utils.read_pkl(os.path.join(data_dir, 'pred_aug', 'pkl_794',f'test_pred_aug_dataset.pkl'))
+    # args.uni_model_name="google/flan-t5-xl"
     # model_cache_dir = os.path.join(args.home, 'model_cache', args.uni_model_name)
-    # tokenizer = BartTokenizer.from_pretrained(args.uni_model_name, cache_dir=model_cache_dir)
-    # tokenizer.add_special_tokens({'additional_special_tokens':['goal: ','User: ','System: ','topic: ']})
-    # train_Dataset = BART_RQ_Dataset(args, train_dataset_aug_pred, tokenizer, mode='train', method=args.method)
-    # test_Dataset =BART_RQ_Dataset(args, test_dataset_aug_pred, tokenizer, mode='test', method=args.method)
-    # train_dataloader = DataLoader(train_Dataset, batch_size=args.uni_batch_size, shuffle=True)
+    # tokenizer = AutoTokenizer.from_pretrained(args.uni_model_name)
+    # # generator = T5ForConditionalGeneration.from_pretrained(args.uni_model_name)
+    # # tokenizer = BartTokenizer.from_pretrained(args.uni_model_name, cache_dir=model_cache_dir)
+    # # tokenizer.add_special_tokens({'additional_special_tokens':['goal: ','User: ','System: ','topic: ']})
+    # # train_Dataset = LLM_RQ_Dataset(args, train_dataset_aug_pred, tokenizer, mode='train', method=args.method)
+    # test_Dataset =LLM_RQ_Dataset(args, test_dataset_aug_pred, tokenizer, mode='test', method=args.method)
+    # # train_dataloader = DataLoader(train_Dataset, batch_size=args.uni_batch_size, shuffle=True)
     # test_dataloader = DataLoader(test_Dataset, batch_size=args.uni_batch_size, shuffle=False)
-    # for batch in tqdm(train_dataloader, desc=f"Epoch TEST", bar_format=' {l_bar} | {bar:23} {r_bar}'):   
+    # for batch in tqdm(test_dataloader, desc=f"Epoch TEST", bar_format=' {l_bar} | {bar:23} {r_bar}'):   
     #     pass
+    
+    main()
 
 
 """
@@ -502,3 +440,5 @@ pre-training이랍시고 15epoch동안 goal, topic, resp 전체 training sample 
         그대로 3711 data_reader를 가져온 다음, p_goal, p_topic을 사용하여 resp 생성 task 진행
 최종 resp점수는 pipeline처럼 예측된 goal, topic을 이용하여 resp를 생성하도록 하며, knowledge_text는 제공하지 않도록 해야함
 """
+
+# "args": ["--gpu=1","--train_ablation=RG","--task=know", "--know_item_select=conf", "--topk_topic=0", "--topic_conf=0.8", "--log_name=DEBUG"] // llm
