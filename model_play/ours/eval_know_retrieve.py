@@ -3,7 +3,7 @@ from collections import defaultdict
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-
+import os
 from data_model_know import KnowledgeDataset
 from utils import write_pkl, save_json
 import numpy as np
@@ -193,7 +193,7 @@ def eval_know(args, test_dataloader, retriever, knowledgeDB, tokenizer, write=No
     if write:
         # TODO HJ: 입출력 저장 args처리 필요시 args.save_know_output 에 store_true 옵션으로 만들 필요
         # filename = f"{args.output_dir}/eval_know_json.pkl"
-        write_pkl(obj=jsonlineSave, filename='best_model_best_setting.pkl')  # 입출력 저장
+        write_pkl(obj=jsonlineSave, filename= os.path.join(args.output_dir, 'best_model_best_setting.pkl'))  # 입출력 저장
         # save_json(args, f"{args.time}_{args.model_name}_inout", jsonlineSave)
 
     logger.info(f"avg topic: %.2f" % topic_len_avg)
