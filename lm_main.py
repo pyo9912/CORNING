@@ -44,7 +44,7 @@ def add_ours_specific_args(parser):
     parser.add_argument("--uni_train_alltype", action='store_true', help="train all type 여부")
     parser.add_argument("--uni_test_alltype", action='store_true', help="test all type 여부")
     
-    # parser.add_argument("--finetune", action='store_true', help="Training (fine-tune) 여부")
+    parser.add_argument("--finetune", action='store_true', help="Training (fine-tune) 여부")
     # parser.add_argument("--rag_our_model", default='c2dpr', type=str, help="rag_our_version_bert", choices=['', 'DPR', 'C2DPR', 'dpr','c2dpr'])
     return parser
 
