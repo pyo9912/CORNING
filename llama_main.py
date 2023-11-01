@@ -200,7 +200,8 @@ class LLaMaEvaluator:
             
             else:
                 gen_ids=model.generate(source_ids, num_return_sequences=1, num_beams=1, max_length = args.uni_max_input_length + args.uni_max_target_length, early_stopping=True)
-                gen_resps.extend(tokenizer.batch_decode(gen_ids, skip_special_tokens=skip_tokens, clean_up_tokenization_spaces=skip_tokens))
+                gen_resps.extend(tokenizer.batch_decode(gen_ids[:,source_ids.size()[-1]:]))
+                # gen_resps.extend(tokenizer.batch_decode(gen_ids, skip_special_tokens=skip_tokens, clean_up_tokenization_spaces=skip_tokens))
                 # ## >> For Gen_Rec RQ
                 batch_types=[args.goalDic['int'][int(idx)] for idx in batch['goal_idx']]
                 types.extend(batch_types)
@@ -209,8 +210,8 @@ class LLaMaEvaluator:
                 # topic_in_resps.extend([bool(i) for i in batch['topic_in_resp']])
                 # ## << For Gen_Rec RQ
                 
-                evaluator.evaluate(gen_ids, lm_labels, log=True)
-                evaluator_type.evaluate(gen_ids, lm_labels, batch_types, log=True)
+                evaluator.evaluate(gen_ids[:,source_ids.size()[-1]:], lm_labels, log=True)
+                evaluator_type.evaluate(gen_ids[:,source_ids.size()[-1]:], lm_labels, batch_types, log=True)
 
             contexts.extend(tokenizer.batch_decode(source_ids))
             real_resps.extend(tokenizer.batch_decode(lm_labels, skip_special_tokens=skip_tokens, clean_up_tokenization_spaces=skip_tokens)) # , skip_special_tokens=True, clean_up_tokenization_spaces=False
@@ -269,7 +270,7 @@ class LLM_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
         self.postfix = "system: "
         ## pipeline 고려하기 (predicted_goal, predicted_topic)
         self.instruction = "I'll give you a conversation between the user and the system."
-        self.post_prompt = "Generate an appropriate recommendational response with one item from the system."
+        self.post_prompt = "Generate an appropriate answer or recommendational response with one item from the system."
 
     def __len__(self): return len(self.pred_aug_dataset)
 
