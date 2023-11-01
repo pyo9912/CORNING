@@ -75,7 +75,7 @@ class ConvEvaluator_ByType:
             self.log_file = open(log_file_path, 'w', buffering=1, encoding='utf-8')
             self.log_cnt = 0
 
-    def evaluate(self, preds, labels, types, log=False):
+    def evaluate(self, preds, labels, types, log=False, start_id=0):
         decoded_preds = self.tokenizer.batch_decode(preds, skip_special_tokens=True)
         decoded_preds = [decoded_pred.replace('<pad>', '').replace('<|endoftext|>', '') for decoded_pred in decoded_preds]
         decoded_preds = [pred.strip() for pred in decoded_preds]
