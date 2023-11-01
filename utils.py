@@ -161,7 +161,7 @@ def default_parser(parser):
     return parser
 
 
-def dir_init(default_args):
+def dir_init(default_args, with_check=True):
     from copy import deepcopy
     """ args 받은다음, device, Home directory, data_dir, log_dir, output_dir, 들 지정하고, Path들 체크해서  """
     args = deepcopy(default_args)
@@ -188,10 +188,10 @@ def dir_init(default_args):
     # args.saved_model_dir = os.path.join(args.home, 'model_save', args.version, args.method)
     args.model_dir = os.path.join(args.home, 'model_save', args.version, args.method)
     # args.rag_our_model = args.rag_our_model.upper()
+    
+    if with_check:
+        checkPath(args.data_dir, args.saved_model_path, args.log_dir)
+        checkPath(os.path.join(args.data_dir, 'pred_aug'))
+        checkPath(os.path.join(args.output_dir))
 
-    checkPath(args.data_dir, args.saved_model_path, args.log_dir)
-    checkPath(os.path.join(args.data_dir, 'pred_aug'))
-    checkPath(os.path.join(args.output_dir))
-    # args.usebart = True
-    # args.bert_cache_name = os.path.join(args.home, "cache", args.kencoder_name)
     return args

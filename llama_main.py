@@ -2,7 +2,7 @@ import os
 import json
 import sys
 import torch
-import wandb
+# import wandb
 from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModelForCausalLM, LlamaTokenizer, GenerationConfig, LlamaForCausalLM, LlamaTokenizer
 import transformers
@@ -17,6 +17,18 @@ from datetime import datetime
 from pytz import timezone
 
 import utils
+from data_utils import readDic
+
+def add_ours_specific_args(parser):
+    # parser.add_argument("--asdf", action='store_true', help="~할지 여부")
+    parser.add_argument( "--method", type=str, default="llama", choices=["bart","unimind","t5","llm", "llama"], help=" Method " )
+    parser.add_argument("--llama_max_length", type=int, default=256, help=" Goal-Topic input max_length ")
+    parser.add_argument("--llama_batch_size", type=int, default=8, help=" Method ")
+    parser.add_argument('--base_model', type=str, default='meta-llama/Llama-2-7b-chat-hf',
+                        choices=['bert-base-uncased','google/flan-t5-large','meta-llama/Llama-2-7b-hf', 'meta-llama/Llama-2-13b-hf', 'meta-llama/Llama-2-7b-chat-hf', 'meta-llama/Llama-2-13b-chat-hf', 'gpt-3.5-turbo'])
+    return parser
+
+
 
 class Prompter(object):
     __slots__ = ("template", "_verbose")
@@ -45,13 +57,6 @@ class Prompter(object):
         return output.split(self.template["response_split"])[1].strip()
 
 
-def add_ours_specific_args(parser):
-    # parser.add_argument("--asdf", action='store_true', help="~할지 여부")
-    parser.add_argument( "--method", type=str, default="llm", choices=["bart","unimind","t5","llm"], help=" Method " )
-    parser.add_argument("--gt_max_length", type=int, default=256, help=" Goal-Topic input max_length ")
-    parser.add_argument("--gt_batch_size", type=int, default=16, help=" Method ")
-
-    return parser
 
 
 class RQ(Dataset):
@@ -320,27 +325,35 @@ if __name__ == '__main__':
     parser = utils.default_parser(parser)
     parser = add_ours_specific_args(parser)
     args = parser.parse_args()
+    args = utils.dir_init(args, with_check=False)
 
     # os.environ["CUDA_VISIBLE_DEVICES"]=args.device_id
     
-    mdhm = str(datetime.now(timezone('Asia/Seoul')).strftime('%m%d%H%M%S'))
-    result_path = os.path.join(args.output_dir, args.base_model.replace('/', '-'))
-    if not os.path.exists(result_path): os.mkdir(result_path)
+    # mdhm = str(datetime.now(timezone('Asia/Seoul')).strftime('%m%d%H%M%S'))
+    # result_path = os.path.join(args.output_dir, args.base_model.replace('/', '-'))
+    # if not os.path.exists(result_path): os.mkdir(result_path)
 
-    if args.log_file == '':
-        log_file = open(os.path.join(result_path, f'rq{args.rq_num}_{mdhm}.json'), 'a', buffering=1, encoding='UTF-8')
-    else:
-        log_file = open(os.path.join(result_path, f'{args.log_file}.json'), 'a', buffering=1, encoding='UTF-8')
+    # if args.log_file == '':
+    #     log_file = open(os.path.join(result_path, f'rq{args.rq_num}_{mdhm}.json'), 'a', buffering=1, encoding='UTF-8')
+    # else:
+    #     log_file = open(os.path.join(result_path, f'{args.log_file}.json'), 'a', buffering=1, encoding='UTF-8')
 
-    args.log_file = log_file
+    # args.log_file = log_file
 
+    # Read DuRec Dataset
+    logger.info("Read raw file")
+    topicDic , goalDic = readDic(os.path.join(args.data_dir, "topic2id.txt")), readDic(os.path.join(args.data_dir, "goal2id.txt"))
+    args.topicDic, args.goalDic = topicDic, goalDic
+    args.topic_num, args.goal_num = len(topicDic['int']), len(goalDic['int'])
+    args.taskDic = {'goal': goalDic, 'topic': topicDic}
+    
     train_dataset_aug_pred, test_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'pkl_{args.topic_score}', f'train_pred_aug_dataset.pkl')) , utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'pkl_{args.topic_score}', f'test_pred_aug_dataset.pkl'))
     
     question_data = read_data(args)
     instructions = [i[0] for i in question_data]
     labels = [i[1] for i in question_data]
 
-    wandb.init(project=args.wandb_project, name=args.wandb_run_name)
+    # wandb.init(project=args.wandb_project, name=args.wandb_run_name)
 
     if 'llama' in args.base_model.lower():
         # from preliminary.llama_finetune import llama_finetune
