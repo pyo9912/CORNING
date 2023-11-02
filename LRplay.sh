@@ -1,6 +1,6 @@
 #!/bin/bash
 # 아래에 실행시키려는 녀석들 다 입력해놓고, 마지막 echo "" 따옴표 안에 어떤걸 보기위한 실험이었는지 적어놓기
-python llama_main.py --gpu=0 --base_model=meta-llama/Llama-2-13b-chat-hf --log_name=Llama13B
+python llama_main.py --gpu=1 --base_model=meta-llama/Llama-2-13b-chat-hf --log_name=Llama13B_2
 python llama_main.py --gpu=0 --base_model=meta-llama/Llama-2-7b-chat-hf --log_name=Llama7B
 
 python lm_main.py --fast --version=2 --gpu=1 --uni_epochs=7 --uni_model_name='google/flan-t5-large' --uni_batch_size=8 --log_name="T5-large_FineTune" --finetune

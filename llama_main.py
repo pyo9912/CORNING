@@ -38,7 +38,19 @@ def add_ours_specific_args(parser):
                         choices=['bert-base-uncased','google/flan-t5-large','meta-llama/Llama-2-7b-hf', 'meta-llama/Llama-2-13b-hf', 'meta-llama/Llama-2-7b-chat-hf', 'meta-llama/Llama-2-13b-chat-hf', 'gpt-3.5-turbo'])
     return parser
 
-
+def initLogging(args):
+    import git ## pip install gitpython
+    filename = args.log_name #f'{args.time}_{"DEBUG" if args.debug else args.log_name}_{args.model_name.replace("/", "_")}_log.txt'
+    filename = os.path.join(args.log_dir, filename)
+    logger.remove()
+    fmt = "<green>{time:YYMMDD_HH:mm:ss}</green> | {message}"
+    if not args.debug : logger.add(filename, format=fmt, encoding='utf-8')
+    logger.add(sys.stdout, format=fmt, level="INFO", colorize=True)
+    logger.info(f"FILENAME: {filename}")
+    try: logger.info(f"Git commit massages: {git.Repo(search_parent_directories=True).head.object.hexsha[:7]}")
+    except: pass
+    logger.info('Commend: {}'.format(', '.join(map(str, sys.argv))))
+    return logger
 
 class Prompter(object):
     __slots__ = ("template", "_verbose")
@@ -252,7 +264,22 @@ class LLaMaEvaluator:
             # output_strings = resp_topic_str
 
         # save_preds_hitgen(args, contexts, real_resp=real_resps, gen_resps=gen_resps, epoch=epoch, mode=mode, topic_in_resp=topic_in_resps, topics=topics, p_topics = p_topics)
+        save_preds(args, contexts, real_resp=real_resps, gen_resps=gen_resps, epoch=epoch, mode=mode) # Default for Generation save
 
+def save_preds(args, context, real_resp, gen_resps=[], epoch=None, mode='train'):
+    log_file_name = mode + f'{str(epoch)}_' + args.log_name
+    path = os.path.join(args.output_dir, log_file_name)
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(f"{mode}, Epoch: {str(epoch)} Input and Output results {args.time}\n")
+        f.write(f"Log File Name: {args.log_name} \n\n\n")
+        for i, ctx in enumerate(context):
+            if i == 500: break
+            f.write(f"Source    : {ctx}\n")
+            f.write(f"Real Resp : {real_resp[i]}\n")
+            if gen_resps: f.write(f"Gen  Resp : {gen_resps[i]}\n")
+            f.write(f"\n")
+    logger.info(f"Save {mode}, Epoch: {str(epoch)}, generated results in {path}")
+    return
 
 
 class LLM_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
@@ -356,7 +383,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     # args = utils.dir_init(args, with_check=False)
     args = utils.dir_init(args, with_check=True)
-
+    initLogging(args)
     # Read DuRec Dataset
     logger.info("Read raw file")
     topicDic , goalDic = readDic(os.path.join(args.data_dir, "topic2id.txt")), readDic(os.path.join(args.data_dir, "goal2id.txt"))

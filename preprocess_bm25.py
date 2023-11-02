@@ -123,20 +123,20 @@ def make(args, mode, dialogs, start=0, end=0, m=None):
         prev_topic = ''
         for (goal, role, utt, know, topic) in zip(goal_seq, role_seq, conversation, knowledge_seq, topic_seq):
             uidx += 1
-
-            if uidx > 0:
-                response = conversation[uidx - 1] + utt
-            else:
-                response = utt
+            response=""
+            if 'resp' in args.how: response += utt
+            if 'uttr' in args.how and uidx>0: response = conversation[uidx - 1] + response
+            
+            # if uidx > 0: response = conversation[uidx - 1] + utt
+            # else: response = utt
 
             if goal == 'Food recommendation': response = ' '.join(conversation[:uidx]) + utt
             response = response.replace('℃', ' degrees Celsius')
 
             response = word_piece_tokenizer.decode(word_piece_tokenizer.encode(response)[1:-1])
-            if prev_topic != topic:
-                response = prev_topic + "|" + topic + "|" + response
-            else:
-                response = topic + "|" + response
+            if 'item' in args.how:
+                if prev_topic != topic: response = prev_topic + "|" + topic + "|" + response
+                else: response = topic + "|" + response
 
             if know:
                 # know = clean_know_texts(know)
@@ -219,6 +219,7 @@ def default_parser(parser):
     parser.add_argument('--mode', default='train', type=str, help="Train/dev/test")
     parser.add_argument('--home', default=os.path.dirname(os.path.realpath(__file__)), type=str, help="Home path")
     parser.add_argument("--save", action='store_true', help="Whether to SAVE")
+    parser.add_argument('--how', default='resp_uttr_item', type=str, help="resp_utt_item ablation")
     return parser
 
 
@@ -283,7 +284,7 @@ if __name__ == "__main__":
             assert origin['goal'] == new['goal']
         print('CLEAR')
         eval(dataset_psd)
-        save(dataset_psd, 'train')
+        if args.save: save(dataset_psd, 'train')
         del pool
 
     if 'dev' in args.mode:
@@ -298,7 +299,7 @@ if __name__ == "__main__":
             assert origin['goal'] == new['goal']
         print('CLEAR')
         eval(dataset_psd)
-        save(dataset_psd, 'dev')
+        if args.save: save(dataset_psd, 'dev')
         del pool
 
     if 'test' in args.mode:
@@ -313,5 +314,5 @@ if __name__ == "__main__":
             assert origin['goal'] == new['goal']
         print('CLEAR')
         eval(dataset_psd)
-        save(dataset_psd, 'test')
+        if args.save: save(dataset_psd, 'test')
         del pool
