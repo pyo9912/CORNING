@@ -1,13 +1,15 @@
 #!/bin/bash
 # 아래에 실행시키려는 녀석들 다 입력해놓고, 마지막 echo "" 따옴표 안에 어떤걸 보기위한 실험이었는지 적어놓기
+python preprocess_bm25.py --mode=test --how=resp_uttr_item --score_method=dpr
 
+#----------------- 20231103 ------------------#
 # python preprocess_bm25.py --mode=test --how=resp
 # python preprocess_bm25.py --mode=test --how=resp_uttr
 # python preprocess_bm25.py --mode=test --how=resp_item
 # python preprocess_bm25.py --mode=test --how=resp_uttr_item 
-python preprocess_bm25.py --mode=test --how=uttr
-python preprocess_bm25.py --mode=test --how=uttr_item
-python preprocess_bm25.py --mode=test --how=item
+# python preprocess_bm25.py --mode=test --how=uttr
+# python preprocess_bm25.py --mode=test --how=uttr_item
+# python preprocess_bm25.py --mode=test --how=item
 
 
 #----------------- 20231101 ------------------#
