@@ -169,7 +169,7 @@ def dir_init(default_args, with_check=True):
     if sysChecker() == 'Linux':
         pass  # HJ KT-server
     elif sysChecker() == "Windows":
-        args.gt_batch_size = 16
+        # args.gt_batch_size = 16
         # args.batch_size, args.num_epochs = 4, 2
         # args.debug = True
         pass  # HJ local

@@ -27,6 +27,9 @@ from evaluator_conv import ConvEvaluator, ConvEvaluator_ByType
 def add_ours_specific_args(parser):
     # parser.add_argument("--asdf", action='store_true', help="~할지 여부")
     parser.add_argument( "--method", type=str, default="llama", choices=["bart","unimind","t5","llm", "llama"], help=" Method " )
+    
+    parser.add_argument("--topic_rq", type=str, default='conf', choices=["conf","top","none"] , help=" Method ")
+    
     parser.add_argument("--llama_max_length", type=int, default=256, help=" Goal-Topic input max_length ")
     parser.add_argument("--llama_batch_size", type=int, default=8, help=" Method ")
     parser.add_argument("--uni_max_input_length", type=int, default=256, help=" input len: 256 ")

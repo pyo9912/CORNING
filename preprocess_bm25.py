@@ -14,6 +14,7 @@ import argparse
 import torch
 from itertools import chain
 import random
+from loguru import logger
 
 HOME = os.path.dirname(os.path.realpath(__file__))
 VERSION = 2
@@ -52,16 +53,13 @@ def readDic(filename, out=None):
             try:
                 k, idx = line.strip().split('\t')
             except:
-                print(line)
+                logger.info(line)
                 k, idx = line.strip().split()
             output_idx_str[k] = int(idx)
             output_idx_int[int(idx)] = k
-    if out == 'str':
-        return output_idx_str
-    elif out == 'idx':
-        return output_idx_int
-    else:
-        return {'str': output_idx_str, 'int': output_idx_int}
+    if out == 'str': return output_idx_str
+    elif out == 'idx': return output_idx_int
+    else: return {'str': output_idx_str, 'int': output_idx_int}
 
 
 def clean_know_texts(know):
@@ -80,18 +78,12 @@ def clean_know_text(text):
 def clean_join_triple(know):
     if isinstance(know, list) and len(know) > 0:
         know = clean_know_texts(know)
-        if know[1] == 'Sings':
-            return ' '.join([know[0], 'singer', know[2]])
-        elif know[1] == 'Stars':
-            return ' '.join([know[0], 'star', know[2]])
-        elif know[1] == 'Intro':
-            return ' '.join([know[0], 'is', know[2]])
-        elif know[1] == 'Birthday':
-            return ' '.join([know[0], know[1], datetime.strptime(know[2].replace(' ', ''), '%Y-%m-%d').strftime('%Y %B %dth')])
-        else:
-            return ' '.join(know)
-    else:
-        return ""
+        if know[1] == 'Sings': return ' '.join([know[0], 'singer', know[2]])
+        elif know[1] == 'Stars': return ' '.join([know[0], 'star', know[2]])
+        elif know[1] == 'Intro': return ' '.join([know[0], 'is', know[2]])
+        elif know[1] == 'Birthday': return ' '.join([know[0], know[1], datetime.strptime(know[2].replace(' ', ''), '%Y-%m-%d').strftime('%Y %B %dth')])
+        else: return ' '.join(know)
+    else: return ""
 
 
 def make(args, mode, dialogs, start=0, end=0, m=None):
@@ -99,7 +91,7 @@ def make(args, mode, dialogs, start=0, end=0, m=None):
     filtered_corpus = args.train_know_tokens if mode == 'train' else args.all_know_tokens
     bm25 = BM25Okapi(filtered_corpus)
 
-    # print(mode)
+    # logger.info(mode)
     corpus = list(args.all_knowledges)
     dataset_psd = []
     # with open(f'{HOME}/data/2/en_{mode}.txt', 'r', encoding='UTF-8') as f:
@@ -202,8 +194,8 @@ def eval(dataset_psd):
                         hitDic[f'Top{i + 1}_hit'] += 1
                         break
     for i in range(1, 11):
-        print(f"Top{i}_hit_ratio: {hitDic[f'Top{i}_hit'] / hitDic['count'] :.3f}")
-    print(f"Total count: {hitDic['count']}")
+        logger.info(f"Top{i}_hit_ratio: {hitDic[f'Top{i}_hit'] / hitDic['count'] :.3f}")
+    logger.info(f"Total count: {hitDic['count']}")
 
 
 def save(dataset_psd, mode):
@@ -215,7 +207,13 @@ def save(dataset_psd, mode):
 def default_parser(parser):
     # Default For All
     parser.add_argument("--version", default='2', type=str, help="Choose the task")
-    parser.add_argument('--bert_name', default='bert-base-uncased', type=str, help="BERT Model Name")
+    parser.add_argument( "--method", type=str, default="bm25",  help=" Method " )
+    
+    parser.add_argument("--device", "--gpu", default='0', type=str, help="GPU Device")  # HJ : Log file middle Name
+    parser.add_argument('--log_name', default='', type=str, help="log file name")  # HJ: log file name
+    parser.add_argument("--debug", action='store_true', help="Whether to run debug.")  # HJ
+
+    parser.add_argument('--model_name', default='bert-base-uncased', type=str, help="BERT Model Name")
     parser.add_argument('--mode', default='train', type=str, help="Train/dev/test")
     parser.add_argument('--home', default=os.path.dirname(os.path.realpath(__file__)), type=str, help="Home path")
     parser.add_argument("--save", action='store_true', help="Whether to SAVE")
@@ -225,10 +223,14 @@ def default_parser(parser):
 
 if __name__ == "__main__":
     import multiprocessing
-
+    from utils import dir_init
+    from main import initLogging
     set_seed()
 
     args = default_parser(argparse.ArgumentParser(description="ours_main.py")).parse_args()
+    args.log_name = args.how
+    args = dir_init(args)
+    initLogging(args)
     args.home = os.path.dirname(os.path.realpath(__file__))
 
     all_knowledges, train_knowledges, valid_knowledges, test_knowledges = dict(), dict(), dict(), dict()
@@ -282,7 +284,7 @@ if __name__ == "__main__":
         dataset_psd = list(chain.from_iterable(results))
         for origin, new in zip(train_dialogs, dataset_psd):
             assert origin['goal'] == new['goal']
-        print('CLEAR')
+        logger.info('CLEAR')
         eval(dataset_psd)
         if args.save: save(dataset_psd, 'train')
         del pool
@@ -297,7 +299,7 @@ if __name__ == "__main__":
         dataset_psd = list(chain.from_iterable(results))
         for origin, new in zip(dev_dialogs, dataset_psd):
             assert origin['goal'] == new['goal']
-        print('CLEAR')
+        logger.info('CLEAR')
         eval(dataset_psd)
         if args.save: save(dataset_psd, 'dev')
         del pool
@@ -312,7 +314,7 @@ if __name__ == "__main__":
         dataset_psd = list(chain.from_iterable(results))
         for origin, new in zip(test_dialogs, dataset_psd):
             assert origin['goal'] == new['goal']
-        print('CLEAR')
+        logger.info('CLEAR')
         eval(dataset_psd)
         if args.save: save(dataset_psd, 'test')
         del pool
