@@ -238,7 +238,7 @@ def make_with_DPR(args, mode, dialogs,  m=None):
         logger.info("Initialize with pre-trained CoTMAE")
         model_cache_dir = os.path.join(args.home, 'model_cache', 'cotmae')
         cotmae_config = AutoConfig.from_pretrained(model_cache_dir, cache_dir=model_cache_dir)
-        cotmae_model = BertForCotMAE.from_pretrained(
+        cotmae_model = BertForCotMAE.from_pretrained(#OLD_KEMGCRS_HJOLD_230801
             pretrained_model_name_or_path=model_cache_dir,
             from_tf=bool(".ckpt" in model_cache_dir),
             config=cotmae_config,
@@ -308,9 +308,9 @@ def make_with_DPR(args, mode, dialogs,  m=None):
 
                     # tokenized_query = custom_tokenizer(response.lower())
                     resp_toks=tokenizer(response.lower(), return_tensors='pt').to(args.device)
-                    if 'cont' in args.score_method:
+                    if 'cont' in args.score_method: # Contriever
                         resp_emb = bert_model(input_ids = resp_toks.input_ids.to(args.device), attention_mask=resp_toks.attention_mask.to(args.device))
-                    else:
+                    else: # DPR, Cot-MAE
                         resp_emb = bert_model(input_ids = resp_toks.input_ids.to(args.device), attention_mask=resp_toks.attention_mask.to(args.device)).last_hidden_state[:, 0, :]
                     logit = torch.matmul(resp_emb.to('cpu'), knowledge_index.transpose(1, 0).to('cpu'))
                     logit = logit.squeeze(0)
