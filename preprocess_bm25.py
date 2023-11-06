@@ -235,6 +235,7 @@ def make_with_DPR(args, mode, dialogs,  m=None):
     Dataloader = DataLoader(Dataset, batch_size=64, shuffle=False)
     knowledge_index=[]
     with torch.no_grad():
+        logger.info("Create KnowledgeDB Index")
         for batch in tqdm(Dataloader, bar_format=' {l_bar} | {bar:23} {r_bar}'):
             input_ids = batch[0].to(args.device)
             attention_mask = batch[1].to(args.device)
@@ -242,8 +243,7 @@ def make_with_DPR(args, mode, dialogs,  m=None):
             knowledge_index.extend(knowledge_emb.cpu().detach())
         knowledge_index = torch.stack(knowledge_index, 0).to(args.device)
 
-        # 
-
+        logger.info("Create Pseudo-labeled Dataset")
         for index in tqdm(range(len(dialogs)), desc=f"{mode.upper()}_Dataset Read", bar_format='{l_bar} | {bar:23} {r_bar}'):
             cnt += 1
             dialog = dialogs[index]
@@ -346,7 +346,7 @@ if __name__ == "__main__":
     set_seed()
 
     args = default_parser(argparse.ArgumentParser(description="ours_main.py")).parse_args()
-    args.log_name = args.how + args.score_method + "_"
+    args.log_name = "_" + args.how + args.score_method.upper() + "_"
     args = dir_init(args, with_check=False)
     if not args.debug: initLogging(args)
     args.home = os.path.dirname(os.path.realpath(__file__))
@@ -439,4 +439,5 @@ if __name__ == "__main__":
     
     else: # Dense Passage Retrieval
         results = make_with_DPR(args, 'test', test_dialogs,  m=None)
+        eval(results)
         pass
