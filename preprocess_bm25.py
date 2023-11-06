@@ -17,6 +17,7 @@ import random
 from loguru import logger
 from torch.utils.data import Dataset, DataLoader
 
+
 HOME = os.path.dirname(os.path.realpath(__file__))
 VERSION = 2
 DATA_DIR = os.path.join(HOME, 'data', str(VERSION))
@@ -36,7 +37,7 @@ def default_parser(parser):
     parser.add_argument("--know_max_length", type=int, default=128, help=" Knowledge Max Length ")
 
     parser.add_argument('--model_name', default='bert-base-uncased', type=str, help="BERT Model Name")
-    parser.add_argument('--score_method', default='bm25', type=str, help="Scoring method (BM25 or DPR)")
+    parser.add_argument('--score_method', default='bm25', type=str, help="Scoring method (BM25 or DPR or Contriever)")
 
     parser.add_argument('--mode', default='train', type=str, help="Train/dev/test")
     parser.add_argument('--home', default=os.path.dirname(os.path.realpath(__file__)), type=str, help="Home path")
@@ -224,9 +225,36 @@ class KnowledgeDataset(Dataset):
 def make_with_DPR(args, mode, dialogs,  m=None):
     cnt = 0
     filtered_corpus = args.train_know_tokens if mode == 'train' else args.all_know_tokens
-    bm25 = BM25Okapi(filtered_corpus)
-    bert_model = AutoModel.from_pretrained(args.model_name, cache_dir=os.path.join(args.home, "model_cache", args.model_name)).to(args.device)
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name, cache_dir=os.path.join(args.home, "model_cache", args.model_name))
+    if 'cont' in args.score_method:
+        from models.contriever.contriever import Contriever
+        args.model_name = 'facebook/contriever'
+        bert_model = Contriever.from_pretrained(args.model_name, cache_dir=os.path.join(args.home, "model_cache", args.model_name)).to(args.device)
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name, cache_dir=os.path.join(args.home, "model_cache", args.model_name))
+    elif "cot" in args.score_method.lower():
+        from models.ours.cotmae import BertForCotMAE
+        from transformers import AutoConfig
+        #args.model_name=
+        
+        logger.info("Initialize with pre-trained CoTMAE")
+        model_cache_dir = os.path.join(args.home, 'model_cache', 'cotmae')
+        cotmae_config = AutoConfig.from_pretrained(model_cache_dir, cache_dir=model_cache_dir)
+        cotmae_model = BertForCotMAE.from_pretrained(
+            pretrained_model_name_or_path=model_cache_dir,
+            from_tf=bool(".ckpt" in model_cache_dir),
+            config=cotmae_config,
+            cache_dir=model_cache_dir,
+            use_decoder_head=True,
+            n_head_layers=2,
+            enable_head_mlm=True,
+            head_mlm_coef=1.0,
+        )
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name, cache_dir=os.path.join(args.home, "model_cache", args.model_name))
+        cotmae_model.bert.resize_token_embeddings(len(tokenizer))
+        bert_model = cotmae_model.bert
+    else: # DPR
+        bert_model = AutoModel.from_pretrained(args.model_name, cache_dir=os.path.join(args.home, "model_cache", args.model_name)).to(args.device)
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name, cache_dir=os.path.join(args.home, "model_cache", args.model_name))
+    
     corpus = list(args.all_knowledges)
     dataset_psd = []
     bert_model.eval()
@@ -239,7 +267,10 @@ def make_with_DPR(args, mode, dialogs,  m=None):
         for batch in tqdm(Dataloader, bar_format=' {l_bar} | {bar:23} {r_bar}'):
             input_ids = batch[0].to(args.device)
             attention_mask = batch[1].to(args.device)
-            knowledge_emb = bert_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state[:, 0, :]  # [B, d]
+            if 'cont' in args.score_method:
+                knowledge_emb = bert_model(input_ids=input_ids, attention_mask=attention_mask)  # [B, d]
+            else:
+                knowledge_emb = bert_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state[:, 0, :]  # [B, d]
             knowledge_index.extend(knowledge_emb.cpu().detach())
         knowledge_index = torch.stack(knowledge_index, 0).to(args.device)
 
@@ -277,7 +308,10 @@ def make_with_DPR(args, mode, dialogs,  m=None):
 
                     # tokenized_query = custom_tokenizer(response.lower())
                     resp_toks=tokenizer(response.lower(), return_tensors='pt').to(args.device)
-                    resp_emb = bert_model(input_ids = resp_toks.input_ids.to(args.device), attention_mask=resp_toks.attention_mask.to(args.device)).last_hidden_state[:, 0, :]
+                    if 'cont' in args.score_method:
+                        resp_emb = bert_model(input_ids = resp_toks.input_ids.to(args.device), attention_mask=resp_toks.attention_mask.to(args.device))
+                    else:
+                        resp_emb = bert_model(input_ids = resp_toks.input_ids.to(args.device), attention_mask=resp_toks.attention_mask.to(args.device)).last_hidden_state[:, 0, :]
                     logit = torch.matmul(resp_emb.to('cpu'), knowledge_index.transpose(1, 0).to('cpu'))
                     logit = logit.squeeze(0)
                     doc_scores = logit.detach().numpy()
@@ -339,7 +373,7 @@ def save(args, dataset_psd, mode):
 
 
 
-if __name__ == "__main__":
+def main():
     import multiprocessing
     from utils import dir_init
     from main import initLogging
@@ -437,7 +471,18 @@ if __name__ == "__main__":
             if args.save: save(args, dataset_psd, 'test')
             del pool
     
-    else: # Dense Passage Retrieval
+    elif "dpr" in args.score_method.lower(): # Dense Passage Retrieval
         results = make_with_DPR(args, 'test', test_dialogs,  m=None)
         eval(results)
         pass
+    elif "con" in args.score_method.lower(): # Contriever 
+        results = make_with_DPR(args, 'test', test_dialogs,  m=None)
+        eval(results)
+        pass
+    elif "cot" in args.score_method.lower(): # Contriever 
+        results = make_with_DPR(args, 'test', test_dialogs,  m=None)
+        eval(results)
+        pass
+
+if __name__ == "__main__":
+    main()
