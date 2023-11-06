@@ -250,7 +250,7 @@ def make_with_DPR(args, mode, dialogs,  m=None):
         )
         tokenizer = AutoTokenizer.from_pretrained(args.model_name, cache_dir=os.path.join(args.home, "model_cache", args.model_name))
         cotmae_model.bert.resize_token_embeddings(len(tokenizer))
-        bert_model = cotmae_model.bert
+        bert_model = cotmae_model.bert.to(args.device)
     else: # DPR
         bert_model = AutoModel.from_pretrained(args.model_name, cache_dir=os.path.join(args.home, "model_cache", args.model_name)).to(args.device)
         tokenizer = AutoTokenizer.from_pretrained(args.model_name, cache_dir=os.path.join(args.home, "model_cache", args.model_name))
