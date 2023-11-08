@@ -359,7 +359,7 @@ def eval(dataset_psd):
                         hitDic[f'Top{i + 1}_hit'] += 1
                         break
     for i in range(1, 11):
-        logger.info(f"Top{i}_hit_ratio: {hitDic[f'Top{i}_hit'] / hitDic['count'] :.3f}")
+        logger.info(f"Top{i:^2}_hit_ratio: {hitDic[f'Top{i}_hit'] / hitDic['count'] :.3f}")
     logger.info(f"Total count: {hitDic['count']}")
 
 

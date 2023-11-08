@@ -11,7 +11,7 @@ from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 from typing import Union
 from peft import LoraConfig, get_peft_model, get_peft_model_state_dict # prepare_model_for_kbit_training,prepare_model_for_int8_training,set_peft_model_state_dict
-from peft import PeftModel
+from peft import PeftModel, prepare_model_for_int8_training, set_peft_model_state_dict
 
 from loguru import logger
 from datetime import datetime
@@ -35,7 +35,7 @@ def add_ours_specific_args(parser):
     parser.add_argument("--uni_max_input_length", type=int, default=256, help=" input len: 256 ")
     parser.add_argument("--uni_max_target_length", type=int, default=128, help=" output len: 128 ")
     parser.add_argument("--uni_num_beams", type=int, default=1, help=" num beam ") # Only one
-
+    
     parser.add_argument("--lora_weights", type=str, default='')
     parser.add_argument('--base_model', type=str, default='meta-llama/Llama-2-13b-chat-hf',
                         choices=['bert-base-uncased','google/flan-t5-large','meta-llama/Llama-2-7b-hf', 'meta-llama/Llama-2-13b-hf', 'meta-llama/Llama-2-7b-chat-hf', 'meta-llama/Llama-2-13b-chat-hf', 'gpt-3.5-turbo'])
@@ -149,7 +149,12 @@ class LLaMaEvaluator:
 
         if not load_8bit:
             model.half()  # seems to fix bugs for some users.
-
+        if self.mode == 'train':
+            lora_r, lora_alpha, lora_target_modules, lora_dropout = 8, 16, ["q_proj","v_proj"], 0.05
+            config = LoraConfig(r=lora_r,lora_alpha=lora_alpha,target_modules=lora_target_modules,lora_dropout=lora_dropout,bias="none",task_type="CAUSAL_LM",)
+            model = get_peft_model(model, config)
+            resume_from_checkpoint = None
+            model.print_trainable_parameters()
         return model
 
     def prepare_dataloader(self):
@@ -163,7 +168,7 @@ class LLaMaEvaluator:
 
     def evaluate(self, input_ids, attention_mask, model,
                  input=None,
-                 temperature=0.1, top_p=0.75, top_k=40, num_beams=4,  # todo: beam 1개로 바꿔보기
+                 temperature=0.1, top_p=0.75, top_k=40, num_beams=1,  # todo: beam 1개로 바꿔보기
                  max_new_tokens=50, **kwargs):
         generation_config = GenerationConfig( temperature=temperature, top_p=top_p, top_k=top_k, num_beams=num_beams, **kwargs, )
 
@@ -182,12 +187,10 @@ class LLaMaEvaluator:
         return [self.prompter.get_response(i) for i in output] # TODO
 
     def test(self, model=None):
-        if model is None:
-            model = self.prepare_model()
+        if model is None: model = self.prepare_model()
 
         model.eval()
-        if torch.__version__ >= "2" and sys.platform != "win32":
-            model = torch.compile(model)
+        if torch.__version__ >= "2" and sys.platform != "win32": model = torch.compile(model)
 
         cat_hit, sub_hit, hit, cnt = 0.0, 0.0, 0.0, 0.0
         mode='test'
@@ -259,13 +262,7 @@ class LLaMaEvaluator:
 
             for i in output_strings:
                 logger.info(f"{mode}_{epoch} {i}")
-            
-            # _, hitdic_ratio, resp_topic_str = gen_resp_topic(args, real_resps=real_resps, types=types, topics=topics, gen_resps=gen_resps, topic_in_resps=topic_in_resps, p_topics=p_topics, isrq=True)
-            # for i in resp_topic_str:
-            #     logger.info(f"{mode}_{epoch} {i}")
-            # ppl= 1 - hitdic_ratio['total']['hit1_Gen']
-            # output_strings = resp_topic_str
-
+   
         # save_preds_hitgen(args, contexts, real_resp=real_resps, gen_resps=gen_resps, epoch=epoch, mode=mode, topic_in_resp=topic_in_resps, topics=topics, p_topics = p_topics)
         save_preds(args, contexts, real_resp=real_resps, gen_resps=gen_resps, epoch=epoch, mode=mode) # Default for Generation save
 
