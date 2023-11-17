@@ -4,7 +4,7 @@ import sys
 import torch
 # import wandb
 from tqdm import tqdm
-from transformers import AutoTokenizer, AutoModelForCausalLM, LlamaTokenizer, GenerationConfig, LlamaForCausalLM, LlamaTokenizer
+from transformers import AutoTokenizer, AutoModelForCausalLM, LlamaTokenizer, GenerationConfig, LlamaForCausalLM, LlamaTokenizer, Trainer
 import transformers
 import argparse
 from torch.utils.data import Dataset, DataLoader
@@ -35,9 +35,9 @@ def add_ours_specific_args(parser):
     parser.add_argument("--uni_max_input_length", type=int, default=256, help=" input len: 256 ")
     parser.add_argument("--uni_max_target_length", type=int, default=128, help=" output len: 128 ")
     parser.add_argument("--uni_num_beams", type=int, default=1, help=" num beam ") # Only one
-    
+
     parser.add_argument("--lora_weights", type=str, default='')
-    parser.add_argument('--base_model', type=str, default='meta-llama/Llama-2-13b-chat-hf',
+    parser.add_argument('--base_model', type=str, default='meta-llama/Llama-2-7b-chat-hf',
                         choices=['bert-base-uncased','google/flan-t5-large','meta-llama/Llama-2-7b-hf', 'meta-llama/Llama-2-13b-hf', 'meta-llama/Llama-2-7b-chat-hf', 'meta-llama/Llama-2-13b-chat-hf', 'gpt-3.5-turbo'])
     return parser
 
@@ -85,7 +85,8 @@ class Prompter(object):
 
 class LLaMaEvaluator:
     def __init__(self, args, tokenizer, restrict_decode_vocab, instructions: list = None, labels: list = None, prompt_template: str = "", cache_dir = None, custom_dataloader=None,
-                 mode='test'):
+                 train_dataloader=None, test_dataloader=None
+                 ):
         self.args = args
         self.instructions = instructions
         self.labels = labels
@@ -93,19 +94,18 @@ class LLaMaEvaluator:
         # self.prompter = Prompter(args, prompt_template)
         self.restrict_decode_vocab = restrict_decode_vocab
         self.cache_dir = cache_dir
-        self.mode = mode
-        self.dataloader = custom_dataloader if custom_dataloader else self.prepare_dataloader()
+        self.train_dataloader = train_dataloader
+        self.test_dataloader = test_dataloader
+        # self.dataloader = custom_dataloader if custom_dataloader else self.prepare_dataloader()
         # self.model = self.prepare_model()
-
-    def set_dataloader(self, dataloader):
-        self.dataloader = dataloader
 
     def prepare_model(self,
                       base_model: str = "",
                       load_8bit: bool = False,
                       lora_weights: str = "",
                       server_name: str = "0.0.0.0",  # Allows to listen on all interfaces by providing '0.
-                      share_gradio: bool = False, ):
+                      share_gradio: bool = False, 
+                      mode='test'):
         print('prepare new model for evaluating')
         # if self.args.lora_weights != "":
         #     lora_weights = self.args.lora_weights
@@ -146,22 +146,35 @@ class LLaMaEvaluator:
         model.config.pad_token_id = self.tokenizer.pad_token_id = 0  # <unk>
         model.config.bos_token_id = 1 # <s>
         model.config.eos_token_id = 2 # </s>
-
-        if not load_8bit:
-            model.half()  # seems to fix bugs for some users.
-        if self.mode == 'train':
+        # if not load_8bit:
+        #     model.half()  # seems to fix bugs for some users.
+        model = prepare_model_for_int8_training(model)
+        if mode == 'train':
             lora_r, lora_alpha, lora_target_modules, lora_dropout = 8, 16, ["q_proj","v_proj"], 0.05
-            config = LoraConfig(r=lora_r,lora_alpha=lora_alpha,target_modules=lora_target_modules,lora_dropout=lora_dropout,bias="none",task_type="CAUSAL_LM",)
+            config = LoraConfig(r=lora_r, lora_alpha=lora_alpha, target_modules=lora_target_modules, lora_dropout=lora_dropout, bias="none", task_type="CAUSAL_LM",)
             model = get_peft_model(model, config)
             resume_from_checkpoint = None
+            if resume_from_checkpoint:
+                checkpoint_name = os.path.join(resume_from_checkpoint, "pytorch_model.bin")  # Full checkpoint
+                if not os.path.exists(checkpoint_name):
+                    checkpoint_name = os.path.join(resume_from_checkpoint, "adapter_model.bin")  # only LoRA model - LoRA config above has to fit
+                    resume_from_checkpoint = (False) # So the trainer won't try loading its state
+                # The two files above have a different name depending on how they were saved, but are actually the same.
+                if os.path.exists(checkpoint_name):
+                    print(f"Restarting from {checkpoint_name}")
+                    adapters_weights = torch.load(checkpoint_name)
+                    set_peft_model_state_dict(model, adapters_weights)
+                else:
+                    print(f"Checkpoint {checkpoint_name} not found")
             model.print_trainable_parameters()
-        return model
+            
+        return model.to(args.device)
 
-    def prepare_dataloader(self):
+    def prepare_dataloader(self, mode='test'):
         self.tokenizer.padding_side = 'left'
         # instructions = [self.prompter.generate_prompt(i) for i in self.instructions]
         # instruction_dataset = Textdataset(self.args, instructions, self.labels, self.tokenizer)
-        instruction_dataset = LLM_RQ_Dataset(args, self.instructions, self.tokenizer, mode='test')
+        instruction_dataset = LLM_RQ_Dataset(args, self.instructions, self.tokenizer, mode=mode)
         dataloader = DataLoader(instruction_dataset, batch_size=self.args.eval_batch_size, shuffle=False)
 
         return dataloader
@@ -185,15 +198,38 @@ class LLaMaEvaluator:
         s = generation_output.sequences
         output = self.tokenizer.batch_decode(s, skip_special_tokens=True)
         return [self.prompter.get_response(i) for i in output] # TODO
+    
+    def train(self, args=None, model=None):
+        if model is None: model=self.prepare_model(mode='train')
+        if args==None: args = self.args
+        val_set_size=0
+        group_by_length=False
+        ddp=False
+        
+        model.config.use_cache = False
+        old_state_dict = model.state_dict
+        model.state_dict = (lambda self, *_, **__: get_peft_model_state_dict(self, old_state_dict())).__get__(model, type(model))
+        if torch.__version__ >= "2" and sys.platform != "win32":model = torch.compile(model)
+        self.epoch_play(model=model, data_loader=self.train_dataloader, mode='train')
 
-    def test(self, model=None):
-        if model is None: model = self.prepare_model()
+        # trainer.train(resume_from_checkpoint=None)
+        model.save_pretrained(args.output_dir)
+        print("\n If there's a warning about missing keys above, please disregard :)")
 
-        model.eval()
+
+
+
+
+    def test(self, args=None, model=None, data_loader=None):
+        self.epoch_play(args, model, data_loader, mode='test')
+
+    def epoch_play(self, args=None, model=None, data_loader=None, mode='test'):
+        if model is None: model = self.prepare_model(mode=mode)
+        if args==None: args = self.args
+
         if torch.__version__ >= "2" and sys.platform != "win32": model = torch.compile(model)
 
         cat_hit, sub_hit, hit, cnt = 0.0, 0.0, 0.0, 0.0
-        mode='test'
         optimizer=None
         epoch_loss, total_steps, epoch, skip_tokens = 0, 0, 0, False
         contexts, real_resps, gen_resps = [],[],[]
@@ -201,11 +237,12 @@ class LLaMaEvaluator:
         evaluator = ConvEvaluator(tokenizer=tokenizer)
         evaluator_type = ConvEvaluator_ByType(tokenizer=tokenizer, log_file_path=os.path.join(args.output_dir, f"{epoch}_{mode}_GEN_REPORT.txt") if mode=='test' else None)
         torch._dynamo.config.suppress_errors = True
-        model.to(args.device)
-        for batch in tqdm(self.dataloader, bar_format=' {percentage:3.0f} % | {bar:23} {r_bar}'):
-            pass
+        # model.to(args.device)
+        for batch in tqdm(data_loader, bar_format=' {percentage:3.0f} % | {bar:23} {r_bar}'):
+            # pass
             total_steps += 1
             source_ids, source_mask, lm_labels = batch["input_ids"].to(args.device), batch["attention_mask"].to(args.device), batch["labels"].to(args.device)
+            # source_ids, source_mask, lm_labels = source_ids.to(torch.float16), source_mask.to(torch.float16), lm_labels.to(torch.float16)
             
             if mode=='train': 
                 outputs = model(input_ids=source_ids, attention_mask=source_mask,  labels=lm_labels)
@@ -236,7 +273,7 @@ class LLaMaEvaluator:
 
 
             # if mode=='train': scheduler.step()
-
+        
         ppl = torch.exp(torch.tensor(epoch_loss/total_steps)).item()
         logger.info(f"{mode}_Epoch {epoch} loss: {epoch_loss:.3f}, ppl: {ppl:.3f}")
         output_strings = [f"{mode}_{epoch}, loss: {epoch_loss:.3f}, ppl: {ppl:.3f}"]
@@ -263,8 +300,8 @@ class LLaMaEvaluator:
             for i in output_strings:
                 logger.info(f"{mode}_{epoch} {i}")
    
-        # save_preds_hitgen(args, contexts, real_resp=real_resps, gen_resps=gen_resps, epoch=epoch, mode=mode, topic_in_resp=topic_in_resps, topics=topics, p_topics = p_topics)
-        save_preds(args, contexts, real_resp=real_resps, gen_resps=gen_resps, epoch=epoch, mode=mode) # Default for Generation save
+            # save_preds_hitgen(args, contexts, real_resp=real_resps, gen_resps=gen_resps, epoch=epoch, mode=mode, topic_in_resp=topic_in_resps, topics=topics, p_topics = p_topics)
+            save_preds(args, contexts, real_resp=real_resps, gen_resps=gen_resps, epoch=epoch, mode=mode) # Default for Generation save
 
 def save_preds(args, context, real_resp, gen_resps=[], epoch=None, mode='train'):
     log_file_name = mode + f'{str(epoch)}_' + args.log_name
@@ -404,16 +441,20 @@ if __name__ == '__main__':
         # from preliminary.llama_finetune import llama_finetune
         tokenizer = LlamaTokenizer.from_pretrained(args.base_model, cache_dir=model_cache_dir)
 
+        test_Dataset =LLM_RQ_Dataset(args, train_dataset_aug_pred, tokenizer, mode='train', method=args.method)
         test_Dataset =LLM_RQ_Dataset(args, test_dataset_aug_pred, tokenizer, mode='test', method=args.method)
+        train_dataloader = DataLoader(test_Dataset, batch_size=2, shuffle=True)
         test_dataloader = DataLoader(test_Dataset, batch_size=1, shuffle=False)
 
         evaluator = LLaMaEvaluator(args=args, tokenizer=tokenizer, restrict_decode_vocab=None, instructions=test_dataset_aug_pred, labels=None,
-                                   cache_dir = model_cache_dir, custom_dataloader=test_dataloader, mode='test')
+                                   cache_dir = model_cache_dir, train_dataloader=train_dataloader, test_dataloader=test_dataloader, )
 
         # if 'train' in args.mode:
         #     llama_finetune(args=args, evaluator=evaluator, tokenizer=tokenizer, instructions=instructions, labels=labels)
             # evaluator.test()
         
         # Test (No Finetune)
-        evaluator.test()
+        evaluator.train()
+
+        evaluator.test(args, None, test_dataloader)
 

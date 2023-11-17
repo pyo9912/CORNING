@@ -227,8 +227,9 @@ def make_with_DPR(args, mode, dialogs,  m=None):
     filtered_corpus = args.train_know_tokens if mode == 'train' else args.all_know_tokens
     if 'cont' in args.score_method:
         from models.contriever.contriever import Contriever
-        args.model_name = 'facebook/contriever'
-        bert_model = Contriever.from_pretrained(args.model_name, cache_dir=os.path.join(args.home, "model_cache", args.model_name)).to(args.device)
+        args.model_name = 'facebook/contriever' # facebook/contriever-msmarco || facebook/mcontriever-msmarco
+        temp_plm_name = 'facebook/contriever-msmarco'
+        bert_model = Contriever.from_pretrained(args.model_name, cache_dir=os.path.join(args.home, "model_cache", temp_plm_name)).to(args.device)
         tokenizer = AutoTokenizer.from_pretrained(args.model_name, cache_dir=os.path.join(args.home, "model_cache", args.model_name))
     elif "cot" in args.score_method.lower():
         from models.ours.cotmae import BertForCotMAE
@@ -252,8 +253,18 @@ def make_with_DPR(args, mode, dialogs,  m=None):
         cotmae_model.bert.resize_token_embeddings(len(tokenizer))
         bert_model = cotmae_model.bert.to(args.device)
     else: # DPR
-        bert_model = AutoModel.from_pretrained(args.model_name, cache_dir=os.path.join(args.home, "model_cache", args.model_name)).to(args.device)
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name, cache_dir=os.path.join(args.home, "model_cache", args.model_name))
+        from transformers import DPRContextEncoder, DPRContextEncoderTokenizer, DPRQuestionEncoder, DPRQuestionEncoderTokenizer
+        context_model_name = "facebook/dpr-ctx_encoder-multiset-base" # facebook/dpr-ctx_encoder-single-nq-base
+        query_model_name = "facebook/dpr-question_encoder-multiset-base"  # facebook/dpr-question_encoder-single-nq-base 
+        context_tokenizer = DPRContextEncoderTokenizer.from_pretrained(context_model_name, cache_dir=os.path.join(args.home, "model_cache", context_model_name))
+        context_model = DPRContextEncoder.from_pretrained(context_model_name, cache_dir=os.path.join(args.home, "model_cache", context_model_name)).to(args.device).eval()
+
+        query_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(query_model_name, cache_dir=os.path.join(args.home, "model_cache", query_model_name))
+        query_model = DPRQuestionEncoder.from_pretrained(query_model_name, cache_dir=os.path.join(args.home, "model_cache", query_model_name)).to(args.device).eval()
+        tokenizer = context_tokenizer
+        bert_model = query_model
+        # bert_model = AutoModel.from_pretrained(args.model_name, cache_dir=os.path.join(args.home, "model_cache", args.model_name)).to(args.device)
+        # tokenizer = AutoTokenizer.from_pretrained(args.model_name, cache_dir=os.path.join(args.home, "model_cache", args.model_name))
     
     corpus = list(args.all_knowledges)
     dataset_psd = []
@@ -262,6 +273,9 @@ def make_with_DPR(args, mode, dialogs,  m=None):
     logger.info(len(corpus))
     Dataloader = DataLoader(Dataset, batch_size=64, shuffle=False)
     knowledge_index=[]
+
+    if "cot" not in args.score_method.lower() and "cont" not in args.score_method.lower(): tokenizer = query_tokenizer
+    
     with torch.no_grad():
         logger.info("Create KnowledgeDB Index")
         for batch in tqdm(Dataloader, bar_format=' {l_bar} | {bar:23} {r_bar}'):
@@ -269,8 +283,11 @@ def make_with_DPR(args, mode, dialogs,  m=None):
             attention_mask = batch[1].to(args.device)
             if 'cont' in args.score_method:
                 knowledge_emb = bert_model(input_ids=input_ids, attention_mask=attention_mask)  # [B, d]
-            else:
+            elif 'cot' in args.score_method.lower():
                 knowledge_emb = bert_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state[:, 0, :]  # [B, d]
+            else: # DPR
+                # tokenizer = context_tokenizer
+                knowledge_emb = context_model(input_ids=input_ids, attention_mask=attention_mask).pooler_output  # [B, d]
             knowledge_index.extend(knowledge_emb.cpu().detach())
         knowledge_index = torch.stack(knowledge_index, 0).to(args.device)
 
@@ -310,8 +327,11 @@ def make_with_DPR(args, mode, dialogs,  m=None):
                     resp_toks=tokenizer(response.lower(), return_tensors='pt').to(args.device)
                     if 'cont' in args.score_method: # Contriever
                         resp_emb = bert_model(input_ids = resp_toks.input_ids.to(args.device), attention_mask=resp_toks.attention_mask.to(args.device))
-                    else: # DPR, Cot-MAE
+                    elif 'cot' in args.score_method.lower():
                         resp_emb = bert_model(input_ids = resp_toks.input_ids.to(args.device), attention_mask=resp_toks.attention_mask.to(args.device)).last_hidden_state[:, 0, :]
+                    else: # DPR, Cot-MAE
+                        resp_emb = bert_model(input_ids = resp_toks.input_ids.to(args.device), attention_mask=resp_toks.attention_mask.to(args.device)).pooler_output
+
                     logit = torch.matmul(resp_emb.to('cpu'), knowledge_index.transpose(1, 0).to('cpu'))
                     logit = logit.squeeze(0)
                     doc_scores = logit.detach().numpy()
@@ -380,7 +400,7 @@ def main():
     set_seed()
 
     args = default_parser(argparse.ArgumentParser(description="ours_main.py")).parse_args()
-    args.log_name = "_" + args.how + args.score_method.upper() + "_"
+    args.log_name += "_" + args.how + args.score_method.upper() + "_"
     args = dir_init(args, with_check=False)
     if not args.debug: initLogging(args)
     args.home = os.path.dirname(os.path.realpath(__file__))
