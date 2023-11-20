@@ -410,6 +410,16 @@ class LLM_RQ_Dataset(Dataset):# 20230918_BART-large_RQ
         return context_batch
 
 
+def save_data_sample(args, labeled_dataset, mode='test'):
+    with open(f'{args.output_dir}/en_{mode}_3711.txt', 'a', encoding='utf8') as fw:
+        for dialog in labeled_dataset:
+            cands={
+                'predicted_goal':dialog['predicted_goal'], 
+                'predicted_goal_confidence':str(dialog['predicted_goal_confidence']),
+                'predicted_topic':dialog['predicted_topic'],
+                'predicted_topic_confidence':str(dialog['predicted_topic_confidence']),
+                   }
+            fw.write(json.dumps(cands) + "\n")
 
 #------------------------------------ Main ------------------------#
 
