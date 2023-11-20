@@ -27,13 +27,63 @@ stop_words = set(stopwords.words('english'))
 word_piece_tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased', cache_dir=CACHE_DIR)
 
 
+
+def get_models(args):
+    # return query_tok, query_model, doc_tok, doc_model
+    if 'cont' in args.score_method:
+        from models.contriever.contriever import Contriever
+        args.model_name = 'facebook/contriever' # facebook/contriever-msmarco || facebook/mcontriever-msmarco
+        temp_plm_name = 'facebook/contriever-msmarco'
+        bert_model = Contriever.from_pretrained(args.model_name, cache_dir=os.path.join(args.home, "model_cache", temp_plm_name)).to(args.device).eval()
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name, cache_dir=os.path.join(args.home, "model_cache", args.model_name))
+        return tokenizer, bert_model, tokenizer, bert_model
+    elif "cot" in args.score_method.lower():
+        from models.ours.cotmae import BertForCotMAE
+        from transformers import AutoConfig
+        logger.info("Initialize with pre-trained CoTMAE")
+        model_name = 'caskcsg/cotmae_base_uncased'
+        # model_name = 'caskcsg/cotmae_base_msmarco_retriever'
+        # model_name = 'caskcsg/cotmae_base_msmarco_reranker'
+        model_cache_dir = os.path.join(args.home, 'model_cache', 'cotmae', model_name)
+        # cotmae_config = AutoConfig.from_pretrained(model_cache_dir, cache_dir=model_cache_dir)
+        # cotmae_model = BertForCotMAE.from_pretrained(#OLD_KEMGCRS_HJOLD_230801
+        #     pretrained_model_name_or_path=model_cache_dir,
+        #     from_tf=bool(".ckpt" in model_cache_dir),
+        #     config=cotmae_config,
+        #     cache_dir=model_cache_dir,
+        #     use_decoder_head=True,
+        #     n_head_layers=2,
+        #     enable_head_mlm=True,
+        #     head_mlm_coef=1.0,)
+        # tokenizer = AutoTokenizer.from_pretrained(args.model_name, cache_dir=os.path.join(args.home, "model_cache", args.model_name))
+        # cotmae_model.bert.resize_token_embeddings(len(tokenizer))
+        # bert_model = cotmae_model.bert.to(args.device).eval()
+        
+        tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir = model_cache_dir)
+        model = AutoModel.from_pretrained(model_name, cache_dir = model_cache_dir).to(args.device)
+        
+        return tokenizer, model, tokenizer, model
+    else: # DPR
+        from transformers import DPRContextEncoder, DPRContextEncoderTokenizer, DPRQuestionEncoder, DPRQuestionEncoderTokenizer
+        context_model_name = "facebook/dpr-ctx_encoder-multiset-base" # facebook/dpr-ctx_encoder-single-nq-base
+        query_model_name = "facebook/dpr-question_encoder-multiset-base"  # facebook/dpr-question_encoder-single-nq-base 
+        context_tokenizer = DPRContextEncoderTokenizer.from_pretrained(context_model_name, cache_dir=os.path.join(args.home, "model_cache", context_model_name))
+        context_model = DPRContextEncoder.from_pretrained(context_model_name, cache_dir=os.path.join(args.home, "model_cache", context_model_name)).to(args.device).eval()
+
+        query_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(query_model_name, cache_dir=os.path.join(args.home, "model_cache", query_model_name))
+        query_model = DPRQuestionEncoder.from_pretrained(query_model_name, cache_dir=os.path.join(args.home, "model_cache", query_model_name)).to(args.device).eval()
+        tokenizer = context_tokenizer
+        bert_model = query_model
+        return query_tokenizer, query_model, context_tokenizer, context_model
+
+
 class Labeler:
     def __init__(self, args, query_tokenizer, query_model, doc_tokenizer, doc_model, knowledge_db_list):
         self.args = args
         self.query_tokenizer=query_tokenizer
-        self.query_model = query_model
+        self.query_model = query_model.to(args.device)
         self.doc_tokenizer = doc_tokenizer
-        self.doc_model = doc_model
+        self.doc_model = doc_model.to(args.device)
         self.knowledge_list = list(knowledge_db_list)
         self.knowledge_dataloader = DataLoader(KnowledgeDataset(args, self.knowledge_list, doc_tokenizer), batch_size=64, shuffle=False)
         self.knowledge_index = self.mk_passage_db()
@@ -49,7 +99,8 @@ class Labeler:
                 if 'cont' in self.args.score_method.lower():
                     knowledge_emb = self.doc_model(input_ids=input_ids, attention_mask=attention_mask)  # [B, d]
                 elif 'cot' in self.args.score_method.lower():
-                    knowledge_emb = self.doc_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state[:, 0, :]  # [B, d]
+                    knowledge_emb = self.doc_model(input_ids=input_ids, attention_mask=attention_mask).pooler_output  # [B, d]
+                    # knowledge_emb = self.doc_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state[:, 0, :]  # [B, d]
                 else: # DPR
                     knowledge_emb = self.doc_model(input_ids=input_ids, attention_mask=attention_mask).pooler_output  # [B, d]
                 knowledge_index.extend(knowledge_emb.cpu().detach())
@@ -61,7 +112,8 @@ class Labeler:
         if 'cont' in self.args.score_method: # Contriever
             resp_emb = self.query_model(input_ids = resp_toks.input_ids.to(self.args.device), attention_mask=resp_toks.attention_mask.to(self.args.device))
         elif 'cot' in self.args.score_method.lower():
-            resp_emb = self.query_model(input_ids = resp_toks.input_ids.to(self.args.device), attention_mask=resp_toks.attention_mask.to(self.args.device)).last_hidden_state[:, 0, :]
+            resp_emb = self.query_model(input_ids = resp_toks.input_ids.to(self.args.device), attention_mask=resp_toks.attention_mask.to(self.args.device)).pooler_output
+            # resp_emb = self.query_model(input_ids = resp_toks.input_ids.to(self.args.device), attention_mask=resp_toks.attention_mask.to(self.args.device)).last_hidden_state[:, 0, :]
         else: # DPR
             resp_emb = self.query_model(input_ids = resp_toks.input_ids.to(self.args.device), attention_mask=resp_toks.attention_mask.to(self.args.device)).pooler_output
         logit = torch.matmul(resp_emb.to('cpu'), self.knowledge_index).squeeze(0) #
@@ -121,11 +173,21 @@ class Labeler:
         return dataset_psd
     
     
-    def eval_dataset(self, labeled_dataset):
-        eval(labeled_dataset)
+    @staticmethod
+    def eval_dataset(labeled_dataset): return eval(labeled_dataset)
     
-    def save_dataset(self, labeled_dataset, mode='test'):
-        with open(f'{self.args.output_dir}/en_{mode}_know_cand_score20_new.txt', 'a', encoding='utf8') as fw:
+    @staticmethod
+    def save_data_sample(args, labeled_dataset, mode='test'):
+        from data_utils import process_augment_sample, dataset_reader
+        readed_dataset = dataset_reader(args, mode, labeled_dataset)[0]
+        auged_dataset = process_augment_sample(readed_dataset, None, None)
+        with open(f'{args.output_dir}/en_{mode}_pseudo_BySamples3711.txt', 'a', encoding='utf8') as fw:
+            for dialog in auged_dataset:
+                cands={'candidate_knowledges':dialog['candidate_knowledges'], 'candidate_confidences': dialog['candidate_confidences']}
+                fw.write(json.dumps(cands) + "\n")
+    @staticmethod
+    def save_dataset(args, labeled_dataset, mode='test'):
+        with open(f'{args.output_dir}/en_{mode}_know_cand_score20_new.txt', 'a', encoding='utf8') as fw:
             for dialog in labeled_dataset:
                 fw.write(json.dumps(dialog) + "\n")
 
@@ -335,49 +397,7 @@ def save(args, dataset_psd, mode):
             fw.write(json.dumps(dialog) + "\n")
 
 
-
-def get_models(args):
-    # return query_tok, query_model, doc_tok, doc_model
-    if 'cont' in args.score_method:
-        from models.contriever.contriever import Contriever
-        args.model_name = 'facebook/contriever' # facebook/contriever-msmarco || facebook/mcontriever-msmarco
-        temp_plm_name = 'facebook/contriever-msmarco'
-        bert_model = Contriever.from_pretrained(args.model_name, cache_dir=os.path.join(args.home, "model_cache", temp_plm_name)).to(args.device).eval()
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name, cache_dir=os.path.join(args.home, "model_cache", args.model_name))
-        return tokenizer, bert_model, tokenizer, bert_model
-    elif "cot" in args.score_method.lower():
-        from models.ours.cotmae import BertForCotMAE
-        from transformers import AutoConfig
-        logger.info("Initialize with pre-trained CoTMAE")
-        model_cache_dir = os.path.join(args.home, 'model_cache', 'cotmae')
-        cotmae_config = AutoConfig.from_pretrained(model_cache_dir, cache_dir=model_cache_dir)
-        cotmae_model = BertForCotMAE.from_pretrained(#OLD_KEMGCRS_HJOLD_230801
-            pretrained_model_name_or_path=model_cache_dir,
-            from_tf=bool(".ckpt" in model_cache_dir),
-            config=cotmae_config,
-            cache_dir=model_cache_dir,
-            use_decoder_head=True,
-            n_head_layers=2,
-            enable_head_mlm=True,
-            head_mlm_coef=1.0,)
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name, cache_dir=os.path.join(args.home, "model_cache", args.model_name))
-        cotmae_model.bert.resize_token_embeddings(len(tokenizer))
-        bert_model = cotmae_model.bert.to(args.device).eval()
-        return tokenizer, bert_model, tokenizer, bert_model
-    else: # DPR
-        from transformers import DPRContextEncoder, DPRContextEncoderTokenizer, DPRQuestionEncoder, DPRQuestionEncoderTokenizer
-        context_model_name = "facebook/dpr-ctx_encoder-multiset-base" # facebook/dpr-ctx_encoder-single-nq-base
-        query_model_name = "facebook/dpr-question_encoder-multiset-base"  # facebook/dpr-question_encoder-single-nq-base 
-        context_tokenizer = DPRContextEncoderTokenizer.from_pretrained(context_model_name, cache_dir=os.path.join(args.home, "model_cache", context_model_name))
-        context_model = DPRContextEncoder.from_pretrained(context_model_name, cache_dir=os.path.join(args.home, "model_cache", context_model_name)).to(args.device).eval()
-
-        query_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(query_model_name, cache_dir=os.path.join(args.home, "model_cache", query_model_name))
-        query_model = DPRQuestionEncoder.from_pretrained(query_model_name, cache_dir=os.path.join(args.home, "model_cache", query_model_name)).to(args.device).eval()
-        tokenizer = context_tokenizer
-        bert_model = query_model
-        return query_tokenizer, query_model, context_tokenizer, context_model
-
-def main_pseudo_labeler():
+def main_pseudo_labeled_dataset():
     import multiprocessing
     from utils import dir_init
     from main import initLogging
@@ -442,7 +462,10 @@ def main_pseudo_labeler():
             for origin, new in zip(train_dialogs, dataset_psd):
                 assert origin['goal'] == new['goal']
             logger.info('CLEAR')
-            eval(dataset_psd)
+            # eval(dataset_psd)
+            Labeler.eval_dataset(dataset_psd)
+            Labeler.save_dataset(args, dataset_psd, mode='train')
+            Labeler.save_data_sample(args, dataset_psd, mode='train')
             if args.save: save(args, dataset_psd, 'train')
             del pool
 
@@ -457,7 +480,10 @@ def main_pseudo_labeler():
             for origin, new in zip(dev_dialogs, dataset_psd):
                 assert origin['goal'] == new['goal']
             logger.info('CLEAR')
-            eval(dataset_psd)
+            # eval(dataset_psd)
+            Labeler.eval_dataset(dataset_psd)
+            Labeler.save_dataset(args, dataset_psd, mode='dev')
+            Labeler.save_data_sample(args, dataset_psd, mode='dev')
             if args.save: save(args, dataset_psd, 'dev')
             del pool
 
@@ -472,7 +498,10 @@ def main_pseudo_labeler():
             for origin, new in zip(test_dialogs, dataset_psd):
                 assert origin['goal'] == new['goal']
             logger.info('CLEAR')
-            eval(dataset_psd)
+            # eval(dataset_psd)
+            Labeler.eval_dataset(dataset_psd)
+            Labeler.save_dataset(args, dataset_psd, mode='test')
+            Labeler.save_data_sample(args, dataset_psd, mode='test')
             if args.save: save(args, dataset_psd, 'test')
             del pool
     else:
@@ -480,17 +509,21 @@ def main_pseudo_labeler():
         labeler = Labeler(args, query_tokenizer, query_model, doc_tokenizer, doc_model, args.all_knowledges)
         if 'train' in args.mode: 
             results = labeler.mk_labeled_dataset(dialogs=train_dialogs, mode='train')
-            labeler.eval_dataset(results)
-            labeler.save_dataset(results, mode='train')
+            Labeler.eval_dataset(results)
+            Labeler.save_dataset(args, results, mode='train')
+            Labeler.save_data_sample(args, results, mode='train')
         if 'dev' in args.mode: 
             results = labeler.mk_labeled_dataset(dialogs=dev_dialogs, mode='dev')
-            labeler.eval_dataset(results)
-            labeler.save_dataset(results, mode='dev')
+            Labeler.eval_dataset(results)
+            Labeler.save_dataset(args, results, mode='dev')
+            Labeler.save_data_sample(args, results, mode='dev')
         if 'test' in args.mode: 
             results = labeler.mk_labeled_dataset(dialogs=test_dialogs, mode='test')
-            labeler.eval_dataset(results)
-            labeler.save_dataset(results, mode='test')
+            Labeler.eval_dataset(results)
+            Labeler.save_dataset(args, results, mode='test')
+            Labeler.save_data_sample(args, results, mode='test')
+
 
 
 if __name__ == "__main__":
-    main_pseudo_labeler()
+    main_pseudo_labeled_dataset()

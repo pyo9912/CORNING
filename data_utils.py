@@ -201,56 +201,60 @@ def process_augment_sample(raw_data, tokenizer=None, knowledgeDB=None, goal_list
     return train_sample
 
 
-def dataset_reader(args, data_name='train'):
+def dataset_reader(args, data_name='train', dataset=None):
     all_knowledge = set()
     all_knowledge_topic = []
     conversation_sample = []
-    data_path = os.path.join(args.data_dir, f"en_{data_name}_know_cand_score20_new.txt")
-    with open(data_path, 'r', encoding='UTF-8') as f:
-        line_idx = 0
-        for line in tqdm(f, desc="Dataset Read", bar_format='{l_bar} | {bar:23} {r_bar}'):
-            line_idx += 1
-            # if args.debug and line_idx>30: break
-            dialog = json.loads(line)
-            conversation = dialog['conversation']
-            role_seq = ["User", "System"] if dialog['goal_type_list'][0] != 'Greetings' else ["System", "User"]
+    if dataset: f=dataset
+    else: 
+        data_path = os.path.join(args.data_dir, f"en_{data_name}_know_cand_score20_new.txt")
+        f = open(data_path, 'r', encoding='UTF-8')
+        # with open(data_path, 'r', encoding='UTF-8') as f:
+    line_idx = 0
+    for line in tqdm(f, desc="Dataset Read", bar_format='{l_bar} | {bar:23} {r_bar}'):
+        line_idx += 1
+        # if args.debug and line_idx>30: break
+        dialog = line if dataset else json.loads(line)
+        conversation = dialog['conversation']
+        role_seq = ["User", "System"] if dialog['goal_type_list'][0] != 'Greetings' else ["System", "User"]
 
-            for i in range(2, len(conversation)):
-                role_seq.append(role_seq[i % 2])
+        for i in range(2, len(conversation)):
+            role_seq.append(role_seq[i % 2])
 
-            knowledge_seq = dialog['knowledge']
-            know_candidates = dialog['know_candidates']
-            pseudo_knowledge_seq = []
-            pseudo_confidence_seq = []
-            for idx, know_conf_list in enumerate(know_candidates):
-                positive_candidates = [know[0] for know in know_conf_list]
-                # knowledge_topic = [args.topicDic['str'][candidate[0]] if candidate[0] in args.topicDic else 0 for candidate in positive_candidates]
-                positive_candidates = [convert_know(candidate) for candidate in positive_candidates]
+        knowledge_seq = dialog['knowledge']
+        know_candidates = dialog['know_candidates']
+        pseudo_knowledge_seq = []
+        pseudo_confidence_seq = []
+        for idx, know_conf_list in enumerate(know_candidates):
+            positive_candidates = [know[0] for know in know_conf_list]
+            # knowledge_topic = [args.topicDic['str'][candidate[0]] if candidate[0] in args.topicDic else 0 for candidate in positive_candidates]
+            positive_candidates = [convert_know(candidate) for candidate in positive_candidates]
 
-                conf_list = [know[1] for know in know_conf_list]
-                pseudo_knowledge_seq.append(positive_candidates)
-                pseudo_confidence_seq.append(conf_list)
+            conf_list = [know[1] for know in know_conf_list]
+            pseudo_knowledge_seq.append(positive_candidates)
+            pseudo_confidence_seq.append(conf_list)
 
-            knowledge_seq = [convert_know(know) for know in knowledge_seq]
-            all_knowledge.update(knowledge_seq)
+        knowledge_seq = [convert_know(know) for know in knowledge_seq]
+        all_knowledge.update(knowledge_seq)
 
-            user_profile = user_profile_setting(dialog['user_profile'])
-            situation = dialog['situation']
+        user_profile = user_profile_setting(dialog['user_profile'])
+        situation = dialog['situation']
 
-            for i in range(len(conversation)):  # HJ: [1],[2] 같은 text 제거, conversation 추가해넣는코드
-                conversation[i] = conversation[i] if conversation[i][0] != '[' else conversation[i][4:]
-                conversation[i] = role_seq[i] + ": " + conversation[i]
-            conversation_sample.append({
-                'dialog': conversation,
-                'role_seq': role_seq,
-                'goal': dialog['goal_type_list'],
-                'topic': dialog['goal_topic_list'],
-                'situation': situation,
-                'user_profile': user_profile,
-                'knowledge_seq': knowledge_seq,
-                'pseudo_knowledge_seq': pseudo_knowledge_seq,
-                'pseudo_confidence_seq': pseudo_confidence_seq
-            })
-
+        for i in range(len(conversation)):  # HJ: [1],[2] 같은 text 제거, conversation 추가해넣는코드
+            conversation[i] = conversation[i] if conversation[i][0] != '[' else conversation[i][4:]
+            conversation[i] = role_seq[i] + ": " + conversation[i]
+        conversation_sample.append({
+            'dialog': conversation,
+            'role_seq': role_seq,
+            'goal': dialog['goal_type_list'],
+            'topic': dialog['goal_topic_list'],
+            'situation': situation,
+            'user_profile': user_profile,
+            'knowledge_seq': knowledge_seq,
+            'pseudo_knowledge_seq': pseudo_knowledge_seq,
+            'pseudo_confidence_seq': pseudo_confidence_seq
+        })
+    if dataset: pass 
+    else: f.close()
     return conversation_sample, list(all_knowledge), all_knowledge_topic
 
