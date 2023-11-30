@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 def eval_goal_topic_model(args, train_auged_Dataset, test_auged_Dataset, retriever, tokenizer, valid_auged_Dataset=None, device=None):
     logger.info(f"Dataset Length [Train, Test]: {len(train_auged_Dataset)}, {len(test_auged_Dataset)}")
 
-    retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"goal_best_model1.pt"), map_location=args.device), strict=False)
+    retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"goal_best_model{args.device[-1]}.pt"), map_location=args.device), strict=False)
     retriever.to(args.device)
     train_datamodel_topic = train_auged_Dataset  # GenerationDataset(args, train_dataset, train_knowledgeDB, tokenizer, mode='train', subtask=args.subtask)
     test_datamodel_topic = test_auged_Dataset  # GenerationDataset(args, test_dataset, all_knowledgeDB, tokenizer, mode='test', subtask=args.subtask)
@@ -27,7 +27,7 @@ def eval_goal_topic_model(args, train_auged_Dataset, test_auged_Dataset, retriev
     pred_goal_topic_aug(args, retriever, tokenizer, test_datamodel_topic, task='goal')
 
     train_datamodel_topic.input_length, test_datamodel_topic.input_length, valid_datamodel_topic.input_length = args.gt_max_length, args.gt_max_length, args.gt_max_length
-    retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"topic_best_model1.pt"), map_location=args.device), strict=False)
+    retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"topic_best_model{args.device[-1]}.pt"), map_location=args.device), strict=False)
     retriever.to(args.device)
     pred_goal_topic_aug(args, retriever, tokenizer, train_datamodel_topic, task='topic')
     pred_goal_topic_aug(args, retriever, tokenizer, valid_datamodel_topic, task='topic')
@@ -160,7 +160,11 @@ def savePrint(args, contexts, task_preds, task_labels, gold_goal, gold_topic, ep
 
 def HitbyType(args, task_preds, task_labels, gold_goal):
     if len(task_preds[0]) != 2: Exception("Task preds sould be list of tok-k(5)")
-    goal_types = ['Q&A', 'Movie recommendation', 'Music recommendation', 'POI recommendation', 'Food recommendation'] if args.version=='2' else ['Movie Recommendation','QA','Chit-chat']
+    if args.version=='2' or args.version=='3':
+        goal_types = ['Q&A', 'Movie recommendation', 'Music recommendation', 'POI recommendation', 'Food recommendation']
+    else:
+        goal_types = ['Movie Recommendation','QA','Chit-chat']
+    # goal_types = ['Q&A', 'Movie recommendation', 'Music recommendation', 'POI recommendation', 'Food recommendation'] if (args.version=='2' or args.version=='3') else ['Movie Recommendation','QA','Chit-chat']
     # Hitdit=defaultdict({'hit1':0,'hit3':0,'hit5':0})
     Hitdic = {goal_type: {'hit1': 0, 'hit3': 0, 'hit5': 0, 'total': 0} for goal_type in goal_types + ["Others", 'Total']}
     for goal, preds, label in zip(gold_goal, task_preds, task_labels):

@@ -128,7 +128,7 @@ def default_parser(parser):
     parser.add_argument('--saved_model_path', default='', type=str, help="saved model file name")  # TH: model file directory
 
     parser.add_argument('--log_name', default='', type=str, help="log file name")  # HJ: log file name
-    parser.add_argument('--version', default='2', type=str, help="DuRec Version")  # HJ: log file name
+    parser.add_argument('--version', default='3', type=str, help="DuRec Version")  # HJ: log file name  # 2: original / 3: without profile,situation
     parser.add_argument("--debug", action='store_true', help="Whether to run debug.")  # HJ
 
     parser.add_argument('--input_prompt', default='dialog_topic_profile', type=str, help="input_prompt")
@@ -137,17 +137,17 @@ def default_parser(parser):
 
     # Default For Knowledge retrieve task
     parser.add_argument('--max_length', default=128, type=int, help="dataset name")  # max_length_know 로 변경 예정
-    parser.add_argument("--know_ablation", default='pseudo', type=str, help="know_ablation", choices=['target', 'pseudo'])
+    parser.add_argument("--know_ablation", default='target', type=str, help="know_ablation", choices=['target', 'pseudo'])
     parser.add_argument("--train_ablation", default='RG', type=str, help="train ablation", choices=['CL', 'RG'])
-    parser.add_argument('--topk_topic', default=2, type=int, help="num of topics for input prompt")
-    parser.add_argument('--topic_conf', type=float, default=0.7, help='Minimum threshold for topic confidence')
+    parser.add_argument('--topk_topic', default=1, type=int, help="num of topics for input prompt")
+    parser.add_argument('--topic_conf', type=float, default=0.8, help='Minimum threshold for topic confidence')
     parser.add_argument('--know_conf', type=float, default=0.2, help='Minimum threshold for topic confidence')
     parser.add_argument("--know_max_length", type=int, default=128, help=" Knowledge Max Length ")
 
     parser.add_argument("--siamese", action='store_true', help="Whether to Fine-tune on type.")
     parser.add_argument("--pseudo", action='store_true', help="Whether to Fine-tune on type.")
-    parser.add_argument('--pseudo_pos_num', default=2, type=int, help="pseudo_pos_num") # pseudo label로 Top-k개를 사용 --> sample이 두배가 되는것
-    parser.add_argument('--pseudo_pos_rank', default=2, type=int, help="pseudo_pos_rank")
+    parser.add_argument('--pseudo_pos_num', default=1, type=int, help="pseudo_pos_num") # pseudo label로 Top-k개를 사용 --> sample이 두배가 되는것
+    parser.add_argument('--pseudo_pos_rank', default=1, type=int, help="pseudo_pos_rank")
     parser.add_argument("--pseudo_confidence", action='store_true', help="Whether to Fine-tune on type.")
     parser.add_argument('--tau', type=float, default=1.0, help='Learning rate')
     parser.add_argument('--train_ratio', type=float, default=1.0, help='train_ratio')
@@ -189,6 +189,7 @@ def dir_init(default_args, with_check=True):
     args.model_dir = os.path.join(args.home, 'model_save', args.version, args.method)
     # args.rag_our_model = args.rag_our_model.upper()
     
+    checkPath(args.data_dir)
     checkPath(args.data_dir, args.saved_model_path, args.log_dir)
     checkPath(os.path.join(args.data_dir, 'pred_aug'))
     if with_check:

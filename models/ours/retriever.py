@@ -42,12 +42,14 @@ class Retriever(nn.Module):
         return dot_score
 
     def compute_know_score_candidate(self, token_seq, mask, knowledge_index):
-
         if self.args.siamese:
             dialog_emb = self.rerank_bert(input_ids=token_seq, attention_mask=mask).last_hidden_state[:, 0, :]  # [B, d]
         else:
             dialog_emb = self.query_bert(input_ids=token_seq, attention_mask=mask).last_hidden_state[:, 0, :]  # [B, d]
 
+        knowledge_index = knowledge_index.to(self.args.device)
+        dialog_emb = dialog_emb.to(self.args.device)
+        
         dot_score = torch.sum(knowledge_index * dialog_emb.unsqueeze(1), dim=-1)  # [B, K, d] x [B, 1, d]
         return dot_score
 

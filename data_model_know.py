@@ -82,8 +82,10 @@ class DialogDataset(Dataset):
 
     def __getitem__(self, idx):  # TODO 구현 전
         data = self.augmented_raw_sample[idx]
-        cbdicKeys = ['dialog', 'user_profile', 'response', 'goal', 'topic', 'situation', 'target_knowledge', 'candidate_knowledges', 'candidate_confidences']
-        dialog, user_profile, response, goal, topic, situation, target_knowledge, candidate_knowledges, candidate_confidences = [data[i] for i in cbdicKeys]
+        # cbdicKeys = ['dialog', 'user_profile', 'response', 'goal', 'topic', 'situation', 'target_knowledge', 'candidate_knowledges', 'candidate_confidences']  # 11/27 Remove user profile, situation
+        cbdicKeys = ['dialog', 'response', 'goal', 'topic', 'target_knowledge', 'candidate_knowledges', 'candidate_confidences']
+        # dialog, user_profile, response, goal, topic, situation, target_knowledge, candidate_knowledges, candidate_confidences = [data[i] for i in cbdicKeys]  # 11/27 Remove user profile, situation
+        dialog, response, goal, topic, target_knowledge, candidate_knowledges, candidate_confidences = [data[i] for i in cbdicKeys]
         candidate_knowledges = [self.knowledgeDB.index(passage) for passage in candidate_knowledges]
         # candidate_confidences = min_max_norm(candidate_confidences)
         candidate_confidences = softmax(candidate_confidences)
@@ -128,9 +130,11 @@ class DialogDataset(Dataset):
             prefix = '<goal>' + predicted_goal + '<topic>' + predicted_topic + self.tokenizer.sep_token
 
         elif self.args.input_prompt == 'dialog_topic_profile':
-            prefix = '<profile>' + user_profile + '<topic>' + predicted_topic + self.tokenizer.sep_token
+            # prefix = '<profile>' + user_profile + '<topic>' + predicted_topic + self.tokenizer.sep_token  # 11/27 Remove user profile, situation
+            prefix = '<topic>' + predicted_topic + self.tokenizer.sep_token
         elif self.args.input_prompt == 'dialog_goal_profile':
-            prefix = '<profile>' + user_profile + '<goal>' + predicted_goal + self.tokenizer.sep_token
+            # prefix = '<profile>' + user_profile + '<goal>' + predicted_goal + self.tokenizer.sep_token  # 11/27 Remove user profile, situation
+            prefix = '<goal>' + predicted_goal + self.tokenizer.sep_token
         else:
             assert Exception
 

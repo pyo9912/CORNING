@@ -33,8 +33,10 @@ class RagDataset(Dataset):
 
     def __getitem__(self, item):
         data = self.augmented_raw_sample[item]
-        cbdicKeys = ['dialog', 'user_profile', 'response', 'goal', 'topic', 'situation', 'target_knowledge', 'candidate_knowledges', 'candidate_confidences']
-        dialog, user_profile, response, goal, topic, situation, target_knowledge, candidate_knowledges, candidate_confidences = [data[i] for i in cbdicKeys]
+        # cbdicKeys = ['dialog', 'user_profile', 'response', 'goal', 'topic', 'situation', 'target_knowledge', 'candidate_knowledges', 'candidate_confidences']  # 11/27 Remove user profile, situation
+        cbdicKeys = ['dialog', 'response', 'goal', 'topic', 'target_knowledge', 'candidate_knowledges', 'candidate_confidences']
+        # dialog, user_profile, response, goal, topic, situation, target_knowledge, candidate_knowledges, candidate_confidences = [data[i] for i in cbdicKeys]  # 11/27 Remove user profile, situation
+        dialog, response, goal, topic, target_knowledge, candidate_knowledges, candidate_confidences = [data[i] for i in cbdicKeys]
 
         pad_token_id = self.tokenizer.question_encoder.pad_token_id
 
@@ -113,8 +115,10 @@ class GenerationDataset(Dataset):
     def __getitem__(self, idx):  # TODO 구현 전
         data = self.augmented_raw_sample[idx]
         self.idxList.append(idx)
-        cbdicKeys = ['dialog', 'user_profile', 'response', 'goal', 'topic', 'situation', 'target_knowledge', 'candidate_knowledges', 'candidate_confidences']
-        dialog, user_profile, response, goal, topic, situation, target_knowledge_idx, candidate_knowledges, candidate_confidences = [data[i] for i in cbdicKeys]
+        # cbdicKeys = ['dialog', 'user_profile', 'response', 'goal', 'topic', 'situation', 'target_knowledge', 'candidate_knowledges', 'candidate_confidences']  ## 11/27 remove user profile, situation
+        cbdicKeys = ['dialog', 'response', 'goal', 'topic', 'target_knowledge', 'candidate_knowledges', 'candidate_confidences']
+        # dialog, user_profile, response, goal, topic, situation, target_knowledge_idx, candidate_knowledges, candidate_confidences = [data[i] for i in cbdicKeys] ## 11/27 removed variables: user_profile, situation
+        dialog, response, goal, topic, target_knowledge_idx, candidate_knowledges, candidate_confidences = [data[i] for i in cbdicKeys]
         pad_token_id = self.tokenizer.pad_token_id
 
         context_batch = defaultdict()
@@ -128,10 +132,12 @@ class GenerationDataset(Dataset):
             if self.TopicTask_Test_Prompt_usePredGoal and 'predicted_goal' in data: predicted_goal = data['predicted_goal'][0]
             else: predicted_goal = goal
 
-            prefix = self.tokenizer.encode('<goal>%s. <profile>%s.' % (predicted_goal, user_profile))[:int(self.input_length * 3 / 5)]
+            # prefix = self.tokenizer.encode('<goal>%s. <profile>%s.' % (predicted_goal, user_profile))[:int(self.input_length * 3 / 5)]  # 11/27 Remove user profile
+            prefix = self.tokenizer.encode('<goal>%s.' % (predicted_goal))[:int(self.input_length * 2 / 5)]
             prompt = self.tokenizer.encode('. predict the next topic: ')
         elif self.subtask == 'goal':
-            prefix = self.tokenizer.encode('<profile>%s.' % user_profile)[:int(self.input_length * 2 / 5)]
+            # prefix = self.tokenizer.encode('<profile>%s.' % user_profile)[:int(self.input_length * 2 / 5)]  # 11/27 Remove user profile
+            prefix = self.tokenizer.encode('<base>.')[:int(self.input_length / 5)]
             prompt = self.tokenizer.encode('. predict the next goal: ')
         # elif self.subtask == 'resp':  # predicted_goal, predicted_topic
         #     predicted_goal = data['predicted_goal'][0]
@@ -206,8 +212,10 @@ class TopicDataset(Dataset):
     def __getitem__(self, idx):  # TODO 구현 전
         data = self.augmented_raw_sample[idx]
         self.idxList.append(idx)
-        cbdicKeys = ['dialog', 'user_profile', 'response', 'goal', 'topic', 'situation', 'target_knowledge', 'candidate_knowledges', 'candidate_confidences']
-        dialog, user_profile, response, goal, topic, situation, target_knowledge_idx, candidate_knowledges, candidate_confidences = [data[i] for i in cbdicKeys]
+        # cbdicKeys = ['dialog', 'user_profile', 'response', 'goal', 'topic', 'situation', 'target_knowledge', 'candidate_knowledges', 'candidate_confidences']  # 11/27 Remove user_profile, situation
+        cbdicKeys = ['dialog', 'response', 'goal', 'topic', 'target_knowledge', 'candidate_knowledges', 'candidate_confidences']
+        # dialog, user_profile, response, goal, topic, situation, target_knowledge_idx, candidate_knowledges, candidate_confidences = [data[i] for i in cbdicKeys]  # 11/27 Remove user profile, situation
+        dialog, response, goal, topic, target_knowledge_idx, candidate_knowledges, candidate_confidences = [data[i] for i in cbdicKeys]
         pad_token_id = self.tokenizer.pad_token_id
 
         context_batch = defaultdict()
@@ -217,9 +225,10 @@ class TopicDataset(Dataset):
         ## Prompt
         prefix = ''
         # if self.subtask == 'topic':
-        usr_profile = '| '.join(list(filter(lambda x:x[:8]=='Accepted' or x[:8]=='Rejected', user_profile.split('| '))))
+        # usr_profile = '| '.join(list(filter(lambda x:x[:8]=='Accepted' or x[:8]=='Rejected', user_profile.split('| '))))  # 11/27 Remove user profile
         predicted_goal = goal
-        prefix = self.tokenizer.encode('<user_profile>%s.' % (usr_profile))[:int(self.args.gt_max_length * 3 / 5)]
+        # prefix = self.tokenizer.encode('<user_profile>%s.' % (usr_profile))[:int(self.args.gt_max_length * 3 / 5)]  # 11/27 Remove user profile
+        prefix = self.tokenizer.encode('<base>.')[:int(self.args.gt_max_length / 5)]
         prompt = self.tokenizer.encode('. predict the next topic: ')
         # elif self.subtask == 'goal':
         #     prefix = self.tokenizer.encode('<profile>%s.' % user_profile)[:int(self.args.gt_max_length * 2 / 5)]

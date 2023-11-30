@@ -10,8 +10,8 @@ from utils import *
 from config import *
 from models.ours.retriever import Retriever  # KEMGCRS
 from data_model import GenerationDataset
-from data_model_know import DialogDataset, KnowledgeDataset
-from rank_bm25 import BM25Okapi
+# from data_model_know import DialogDataset, KnowledgeDataset
+# from rank_bm25 import BM25Okapi
 from model_play.ours.train_bert_goal_topic import train_goal_topic_bert, pred_goal_topic_aug, eval_goal_topic_model
 from model_play.ours import train_know_retrieve, eval_know_retrieve  # , train_our_rag_retrieve_gen
 # from model_play.ours.eval_know import *
@@ -32,7 +32,7 @@ def add_ours_specific_args(parser):
 
     ## For know
     parser.add_argument("--know_item_select", default='conf', type=str, help="item selector use conf or topk", choices=['conf', 'top'])
-    parser.add_argument("--cotmae", action='store_true', help="Initialize the retriever from pretrained CoTMAE")
+    # parser.add_argument("--cotmae", action='store_true', help="Initialize the retriever from pretrained CoTMAE") # 11/23 diet
 
     ## For resp
     parser.add_argument("--rag_batch_size", type=int, default=4, help=" Method ")
@@ -123,8 +123,10 @@ def main(args=None):
     log_args(args)
     temp_epoch = args.num_epochs
     if 'goal' in args.task:
-        args.num_epochs = 15
-        # Goal Prediction TASk
+        args.num_epochs = 10
+        args.gt_max_length=256
+        args.subtask = 'goal'
+        # Goal Prediction TASK
         logger.info("Goal Prediction Task")
         retriever = Retriever(args, query_bert=bert_model)
         retriever = retriever.to(args.device)
@@ -132,7 +134,6 @@ def main(args=None):
         train_dataset = process_augment_all_sample(train_dataset_raw, tokenizer, train_knowledgeDB)
         valid_dataset = process_augment_all_sample(valid_dataset_raw, tokenizer, all_knowledgeDB)
         test_dataset = process_augment_all_sample(test_dataset_raw, tokenizer, all_knowledgeDB)
-        args.subtask = 'goal'
 
         train_datamodel_topic = GenerationDataset(args, train_dataset, train_knowledgeDB, tokenizer, mode='train', subtask=args.subtask, max_length=256)
         # valid_datamodel_topic = TopicDataset(args, valid_dataset, all_knowledgeDB, train_knowledgeDB, tokenizer, task='know')
@@ -151,17 +152,18 @@ def main(args=None):
         write_pkl(test_dataset, os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset{args.device[-1]}.pkl'))
 
     if 'topic' in args.task:
+        args.gt_max_length=256
         if args.num_epochs != temp_epoch: args.num_epochs = temp_epoch
         args.subtask = 'topic'
         # KNOWLEDGE TASk
         retriever = Retriever(args, bert_model)
-        goal_model_name = f"goal_best_model{args.device[-1]}.pt" if 'goal' in args.task and 'topic' in args.task else f"goal_best_model.pt" # goal이랑 topic동시에 넘어가면 학습된녀석으로 가져가도록, topic만 학습할땐 goal_best_model 불러와서 쓰도록
-        # goal_model_name = f"goal_best_model{args.device[-1]}.pt"
+        # goal_model_name = f"goal_best_model{args.device[-1]}.pt" if 'goal' in args.task and 'topic' in args.task else f"goal_best_model.pt" # goal이랑 topic동시에 넘어가면 학습된녀석으로 가져가도록, topic만 학습할땐 goal_best_model 불러와서 쓰도록
+        goal_model_name = f"goal_best_model{args.device[-1]}.pt"
         if not os.path.exists(os.path.join(args.saved_model_path, goal_model_name)): Exception(f'Goal Best Model 이 있어야함 {os.path.join(args.saved_model_path, goal_model_name)}')
         retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, goal_model_name)), strict=False)
         retriever.to(args.device)
-        train_dataset = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gtall_train_pred_aug_dataset.pkl')) # Train 42086
-        test_dataset = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl')) # Test 3711 
+        train_dataset = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gtall_train_pred_aug_dataset{args.device[-1]}.pkl')) # Train 42086
+        test_dataset = read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset{args.device[-1]}.pkl')) # Test 3711 
         logger.info(f"Train dataset {len(train_dataset)} predicted goal Hit@1 ratio: {sum([dataset['goal'] == dataset['predicted_goal'][0] for dataset in train_dataset]) / len(train_dataset):.3f}")
         logger.info(f"Test  dataset {len(test_dataset)} predicted goal Hit@1 ratio: {sum([dataset['goal'] == dataset['predicted_goal'][0] for dataset in test_dataset]) / len(test_dataset):.3f}")
 
@@ -187,12 +189,12 @@ def main(args=None):
         logger.info(f" Goal, Topic Task Evaluation with predicted goal,topic augment")
         train_dataset, valid_dataset, test_dataset = None, None, None
         pkname='gt'
-        if args.alltype:
+        if args.alltype: # All Type
             pkname+='all'
             train_dataset = process_augment_all_sample(train_dataset_raw, tokenizer, train_knowledgeDB)
             test_dataset = process_augment_all_sample(test_dataset_raw, tokenizer, all_knowledgeDB)
             valid_dataset = process_augment_all_sample(valid_dataset_raw, tokenizer, all_knowledgeDB)
-        else:
+        else: #3711 setting --> know, resp 는 3711세팅임
             train_dataset = process_augment_sample(train_dataset_raw, tokenizer, train_knowledgeDB)
             test_dataset = process_augment_sample(test_dataset_raw, tokenizer, all_knowledgeDB)
             valid_dataset = process_augment_sample(valid_dataset_raw, tokenizer, all_knowledgeDB)
@@ -223,17 +225,22 @@ def main(args=None):
         # eval_know_retrieve.aug_pred_know(args, train_dataset_aug_pred, valid_dataset_aug_pred, test_dataset_aug_pred, train_knowledgeDB, all_knowledgeDB, bert_model, tokenizer)
         # item_know_rq(args, bert_model, tokenizer, train_dataset_raw, valid_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
 
-    if 'rq' in args.task:
-        from model_play.ours.item_know_ref import item_know_rq
-        item_know_rq(args, bert_model, tokenizer, train_dataset_raw, valid_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
+    # if 'rq' in args.task:
+    #     from model_play.ours.item_know_ref import item_know_rq
+    #     item_know_rq(args, bert_model, tokenizer, train_dataset_raw, valid_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
 
     if 'resp' in args.task:
         from model_play.ours import train_our_rag_retrieve_gen
         train_our_rag_retrieve_gen.train_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, valid_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB)
 
+
+    if 'chat' in args.task:
+        logger.info("Chat Interface Started")
+        import chat_interface
+        chat_interface.chat(args, bert_model, tokenizer, goalDic, topicDic, all_knowledgeDB)
+
     logger.info("THE END")
     return
-
 
 def initLogging(args):
     try: import git  ## pip install gitpython
@@ -265,7 +272,7 @@ if __name__ == "__main__":
 
 """
 python main.py --batch_size=32 --max_len=128 --num_epochs=10 --know_ablation=pseudo --pseudo_pos_num=1 --pseudo_pos_rank=1 \
---negative_num=1 --input_prompt=dialog_topic --model_name=DPR_origin --train_ablation=RG --stage=rerank --device=3
+--negative_num=1 --input_prompt=dialog_topic --model_name=DPR_origin --train_ablation=RG --stage=rerank --device=0
 
 python main.py --batch_size=32 --max_len=512 --num_epochs=10 --task=resp --saved_goal_model_path=myretriever_goal_best \
 --saved_topic_model_path=myretriever_topic_best --device=0

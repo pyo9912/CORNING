@@ -92,15 +92,15 @@ def truncationPadding(input_ids, max_length, prefix=[], suffix=[]):
         input_ids = prefix + input_ids + suffix
     return input_ids + [0] * (max_length - len(input_ids))
 
-
-def user_profile_setting(ufDic: dict) -> str:
-    uf = ''
-    for k, v in ufDic.items():
-        if isinstance(v, list):
-            uf += f" {k}: {', '.join(v)}|"
-        elif isinstance(v, str):
-            uf += f" {k}: {v.replace(' ', ' ')}|"
-    return uf
+## 11/27 Test without user profile
+# def user_profile_setting(ufDic: dict) -> str:
+#     uf = ''
+#     for k, v in ufDic.items():
+#         if isinstance(v, list):
+#             uf += f" {k}: {', '.join(v)}|"
+#         elif isinstance(v, str):
+#             uf += f" {k}: {v.replace(' ', ' ')}|"
+#     return uf
 
 
 def softmax(x):
@@ -133,7 +133,9 @@ def bm_tokenizer(text, tokenizer):
 
     return tokens
 
-
+'''
+Raw data가 주어진 경우에 대해 sample augment 수행
+'''
 def process_augment_all_sample(raw_data, tokenizer, knowledgeDB):
     train_sample = []
     if tokenizer.eos_token is not None:
@@ -150,11 +152,11 @@ def process_augment_all_sample(raw_data, tokenizer, knowledgeDB):
             if role.lower() == 'system' and len(augmented_dialog) > 0:
                 flatten_dialog = ''.join(augmented_dialog)
                 train_sample.append({'dialog': flatten_dialog,
-                                     'user_profile': conversation['user_profile'],
+                                    #  'user_profile': conversation['user_profile'],  # 11/27 Test without profile
                                      'response': utterance,
                                      'goal': conversation['goal'][i],
                                      'topic': conversation['topic'][i],
-                                     'situation': conversation['situation'],
+                                    #  'situation': conversation['situation'],  # 11/27 Test without situation
                                      'target_knowledge': conversation['knowledge_seq'][i],
                                      'candidate_knowledges': conversation['pseudo_knowledge_seq'][i],
                                      'candidate_confidences': conversation['pseudo_confidence_seq'][i],  # prob
@@ -164,6 +166,9 @@ def process_augment_all_sample(raw_data, tokenizer, knowledgeDB):
     return train_sample
 
 
+'''
+Goal list가 주어진 경우에 대해 sample augment 수행
+'''
 def process_augment_sample(raw_data, tokenizer=None, knowledgeDB=None, goal_list=['Movie recommendation', 'POI recommendation', 'Music recommendation', 'Q&A', 'Food recommendation']):
     goal_list = [goal.lower() for goal in goal_list]
     train_sample = []
@@ -186,12 +191,12 @@ def process_augment_sample(raw_data, tokenizer=None, knowledgeDB=None, goal_list
                 if role.lower() == 'system' and len(augmented_dialog) > 0 and len(conversation['pseudo_knowledge_seq'][i]) != 0:  # Test 3711 Setting
                     flatten_dialog = ''.join(augmented_dialog)
                     train_sample.append({'dialog': flatten_dialog,
-                                         'user_profile': conversation['user_profile'],
+                                        #  'user_profile': conversation['user_profile'],  # 11/27 Test without profile
                                          'response': utterance,
                                          'goal': conversation['goal'][i],
                                          'last_goal': conversation['goal'][i - 1],
                                          'topic': conversation['topic'][i],
-                                         'situation': conversation['situation'],
+                                        #  'situation': conversation['situation'],  # 11/27 Test without situation
                                          'target_knowledge': conversation['knowledge_seq'][i],
                                          'candidate_knowledges': conversation['pseudo_knowledge_seq'][i],
                                          'candidate_confidences': conversation['pseudo_confidence_seq'][i]  # prob
@@ -237,8 +242,9 @@ def dataset_reader(args, data_name='train', dataset=None):
         knowledge_seq = [convert_know(know) for know in knowledge_seq]
         all_knowledge.update(knowledge_seq)
 
-        user_profile = user_profile_setting(dialog['user_profile'])
-        situation = dialog['situation']
+        ## 11/27 Test without user profile and situation
+        # user_profile = user_profile_setting(dialog['user_profile'])
+        # situation = dialog['situation']
 
         for i in range(len(conversation)):  # HJ: [1],[2] 같은 text 제거, conversation 추가해넣는코드
             conversation[i] = conversation[i] if conversation[i][0] != '[' else conversation[i][4:]
@@ -248,8 +254,9 @@ def dataset_reader(args, data_name='train', dataset=None):
             'role_seq': role_seq,
             'goal': dialog['goal_type_list'],
             'topic': dialog['goal_topic_list'],
-            'situation': situation,
-            'user_profile': user_profile,
+            ## 11/27 Test without user profile and situation
+            # 'situation': situation,
+            # 'user_profile': user_profile,
             'knowledge_seq': knowledge_seq,
             'pseudo_knowledge_seq': pseudo_knowledge_seq,
             'pseudo_confidence_seq': pseudo_confidence_seq

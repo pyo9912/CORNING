@@ -118,73 +118,12 @@ def eval_know(args, test_dataloader, retriever, knowledgeDB, tokenizer, write=No
         g_goals.extend(batch_goals)
         g_topics.extend(batch_topics)
         target_knows.extend([knowledgeDB[int(top10)] for top10 in target_knowledge_idx])
-        # for idx, (score, target, pseudo_targets, goal, new, topic) in enumerate(zip(dot_score, target_knowledge_idx, batch['pseudo_targets'], batch_goals, new_knowledge, batch_topics)):
-        #     if new:
-        #         new_cnt += 1
-        #     for k in [1, 3, 5, 10]:
-
-        #         top_candidate = torch.topk(score, k=k).indices
-        #         # if args.stage == 'rerank': # todo: DPR시 주석처리 / 2-stage 시 roll-back(2/2)
-        #         #     top_candidate = torch.gather(candidate_indice[idx], 0, top_candidate)
-        #         correct_k = False
-        #         for t in target:
-        #             correct_k |= (t in top_candidate)
-        #         if k == 1:
-        #             hit1_topic.append(topic.lower() in knowledgeDB[top_candidate[0]].lower())
-        #             hit1.append(correct_k)
-        #             hit1_goal[goal].append(correct_k)
-        #             if new:
-        #                 hit1_new.append(correct_k)
-        #         elif k == 3:
-        #             hit3.append(correct_k)
-        #             hit3_goal[goal].append(correct_k)
-        #             if new:
-        #                 hit3_new.append(correct_k)
-        #         elif k == 5:
-        #             hit5.append(correct_k)
-        #             hit5_goal[goal].append(correct_k)
-        #             if new:
-        #                 hit5_new.append(correct_k)
-        #         elif k == 10:
-        #             hit10.append(correct_k)
-        #             hit10_goal[goal].append(correct_k)
-        #             if new:
-        #                 hit10_new.append(correct_k)
-        #         # elif k == 20:
-        #         #     hit20.append(correct_k)
-        #         #     hit20_goal[goal].append(correct_k)
-        #         #     if new:
-        #         #         hit20_new.append(correct_k)
+        
 
     hitdic, hitdic_ratio, output_str = evaluator_conv.know_hit_ratio(args, pred_pt=top10_cand_knows, gold_pt=target_knows, new_knows=is_new_knows, types=g_goals)
     topic_len_avg = np.average(topic_lens)
 
-    # hit1 = np.average(hit1)
-    # hit3 = np.average(hit3)
-    # hit5 = np.average(hit5)
-    # hit10 = np.average(hit10)
-    # hit20 = np.average(hit20)
-    # hit1_topic = np.average(hit1_topic)
-
-    # hit1_new = np.average(hit1_new)
-    # hit3_new = np.average(hit3_new)
-    # hit5_new = np.average(hit5_new)
-    # hit10_new = np.average(hit10_new)
-    # hit20_new = np.average(hit20_new)
-
-    # hit_movie_result = [np.average(hit1_goal["Movie recommendation"]), np.average(hit3_goal["Movie recommendation"]), np.average(hit5_goal["Movie recommendation"]), np.average(hit10_goal["Movie recommendation"]), np.average(hit20_goal["Movie recommendation"])]
-    # hit_music_result = [np.average(hit1_goal["Music recommendation"]), np.average(hit3_goal["Music recommendation"]), np.average(hit5_goal["Music recommendation"]), np.average(hit10_goal["Music recommendation"]), np.average(hit20_goal["Music recommendation"])]
-    # hit_qa_result = [np.average(hit1_goal["Q&A"]), np.average(hit3_goal["Q&A"]), np.average(hit5_goal["Q&A"]), np.average(hit10_goal["Q&A"]), np.average(hit20_goal["Q&A"])]
-    # hit_poi_result = [np.average(hit1_goal["POI recommendation"]), np.average(hit3_goal["POI recommendation"]), np.average(hit5_goal["POI recommendation"]), np.average(hit10_goal["POI recommendation"]), np.average(hit20_goal["POI recommendation"])]
-    # hit_food_result = [np.average(hit1_goal["Food recommendation"]), np.average(hit3_goal["Food recommendation"]), np.average(hit5_goal["Food recommendation"]), np.average(hit10_goal["Food recommendation"]), np.average(hit20_goal["Food recommendation"])]
-    # hit_chat_result = [np.average(hit1_goal["Chat about stars"]), np.average(hit3_goal["Chat about stars"]), np.average(hit5_goal["Chat about stars"]), np.average(hit10_goal["Chat about stars"]), np.average(hit20_goal["Chat about stars"])]
-
-    # hit_movie_result = ["%.4f" % hit for hit in hit_movie_result]
-    # hit_music_result = ["%.4f" % hit for hit in hit_music_result]
-    # hit_qa_result = ["%.4f" % hit for hit in hit_qa_result]
-    # hit_poi_result = ["%.4f" % hit for hit in hit_poi_result]
-    # hit_food_result = ["%.4f" % hit for hit in hit_food_result]
-    # hit_chat_result = ["%.4f" % hit for hit in hit_chat_result]
+    
 
     if retrieve:
         with open(f'augmented_dataset_{data_type}.txt', 'wb') as f:
@@ -199,30 +138,4 @@ def eval_know(args, test_dataloader, retriever, knowledgeDB, tokenizer, write=No
     logger.info(f"avg topic: %.2f" % topic_len_avg)
 
 
-    # # logger.info(f"Test Hit@1: %.4f" % np.average(hit1))
-    # # logger.info(f"Test Hit@3: %.4f" % np.average(hit3))
-    # # logger.info(f"Test Hit@5: %.4f" % np.average(hit5))
-    # # logger.info(f"Test Hit@10: %.4f" % np.average(hit10))
-    # # logger.info(f"Test Hit@20: %.4f" % np.average(hit20))
-    # logger.info(f"Test Hit@1/3/5/10/20: {np.average(hit1):.4}\t{np.average(hit3):.3}\t{np.average(hit5):.3}\t{np.average(hit10):.3}\t{np.average(hit20):.3}")
-    # logger.info(f"Test New Hit@1/3/5/10/20: {np.average(hit1_new):.4}\t{np.average(hit3_new):.3}\t{np.average(hit5_new):.3}\t{np.average(hit10_new):.3}\t{np.average(hit20_new):.3}")
-    # # logger.info(f"Test New Hit@1: %.4f" % np.average(hit1_new))
-    # # logger.info(f"Test New Hit@3: %.4f" % np.average(hit3_new))
-    # # logger.info(f"Test New Hit@5: %.4f" % np.average(hit5_new))
-    # # logger.info(f"Test New Hit@10: %.4f" % np.average(hit10_new))
-    # # logger.info(f"Test New Hit@20: %.4f" % np.average(hit20_new))
-    # logger.info(f"Test Hit Topic: %.4f" % np.average(hit1_topic))
-
-    # # logger.info(f"Test Hit@20_P1: %.4f" % np.average(hit20_p1))
-    # # logger.info(f"Test Hit@20_P2: %.4f" % np.average(hit20_p2))
-
-    # logger.info("Movie recommendation\t" + "\t".join(hit_movie_result))
-    # logger.info("Music recommendation\t" + "\t".join(hit_music_result))
-    # logger.info("Q&A\t" + "\t".join(hit_qa_result))
-    # logger.info("POI recommendation\t" + "\t".join(hit_poi_result))
-    # logger.info("Food recommendation\t" + "\t".join(hit_food_result))
-    # logger.info("Chat about stars\t" + "\t".join(hit_chat_result))
-
-    # logger.info("new knowledge %d\n\n" % new_cnt)
-    # return [hit1, hit3, hit5, hit10, hit20, hit_movie_result, hit_music_result, hit_qa_result, hit_poi_result, hit_food_result, hit_chat_result, hit1_new, hit3_new, hit5_new, hit10_new, hit20_new]
     return hitdic_ratio, output_str

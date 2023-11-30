@@ -13,12 +13,12 @@ import pickle
 from loguru import logger
 
 
-def item_know_rq(args, bert_model, tokenizer, train_dataset_raw, valid_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB):
-    train_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
-    valid_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_valid_pred_aug_dataset.pkl'))
-    test_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
-    aug_pred_know(args, train_dataset_aug_pred, valid_dataset_aug_pred, test_dataset_aug_pred, train_knowledgeDB, all_knowledgeDB, bert_model, tokenizer)
-    return train_dataset_aug_pred, valid_dataset_aug_pred, test_dataset_aug_pred
+# def item_know_rq(args, bert_model, tokenizer, train_dataset_raw, valid_dataset_raw, test_dataset_raw, train_knowledgeDB, all_knowledgeDB):
+#     train_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_train_pred_aug_dataset.pkl'))
+#     valid_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_valid_pred_aug_dataset.pkl'))
+#     test_dataset_aug_pred = utils.read_pkl(os.path.join(args.data_dir, 'pred_aug', f'gt_test_pred_aug_dataset.pkl'))
+#     aug_pred_know(args, train_dataset_aug_pred, valid_dataset_aug_pred, test_dataset_aug_pred, train_knowledgeDB, all_knowledgeDB, bert_model, tokenizer)
+#     return train_dataset_aug_pred, valid_dataset_aug_pred, test_dataset_aug_pred
 
 
 def aug_pred_know(args, train_dataset_aug_pred, valid_dataset_aug_pred, test_dataset_aug_pred, train_knowledgeDB, all_knowledgeDB, bert_model, tokenizer):
