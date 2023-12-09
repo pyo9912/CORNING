@@ -32,16 +32,16 @@ HOME
 |   |--3
 |-model_cache
 |	|--bert-base-uncased
-|   |--facebook
+|	|--facebook
 |-output
 |	|--3
 |		|--ours
 |-model_save
 |	|--3
 |		|--goal_best_model.pt  
-|       |--ours_know_best.pt  
-|       |--ours_RAG_best.pt  
-|       |--topic_best_model.pt  
+|		|--ours_know_best.pt  
+|		|--ours_RAG_best.pt  
+|		|--topic_best_model.pt  
 |-data
 |	|--3
 |		|--input_examples
@@ -49,13 +49,15 @@ HOME
 |		|--pred_aug
 |			|-- # Goal, Topic predicted labeled pkl file
 |		|--rag
-            |--my_knowledge_dataset_0
-            |--my_knowledge_dataset_0.csv
+|			|--my_knowledge_dataset_0
+|			|--my_knowledge_dataset_0.csv
 |       |--en_dev.txt
 |		|--en_train.txt
 |		|--en_test.txt
-|       |--goal2id_new.txt
-|       |--topic2id_new.txt
+|		|--goal2id_new.txt
+|		|--goal2id.txt
+|		|--topic2id_new.txt
+|		|--topic2id.txt
 |-model_play
 |	|--ours
 |	|--rag
