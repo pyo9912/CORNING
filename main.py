@@ -1,6 +1,7 @@
 import sys
 import os
-from transformers import AutoModel, AutoTokenizer, BartForConditionalGeneration, GPT2LMHeadModel, GPT2Config, AutoConfig, BartTokenizer
+import warnings
+from transformers import AutoModel, AutoTokenizer, AutoConfig
 import torch
 import numpy as np
 from torch.utils.data import DataLoader
@@ -21,6 +22,7 @@ import utils
 import data_utils
 import data_model
 
+warnings.filterwarnings('ignore')
 
 def add_ours_specific_args(parser):
     parser.add_argument("--gt_max_length", type=int, default=256, help=" Goal-Topic input max_length ")

@@ -158,7 +158,7 @@ models/
 !/model_cache/
 model_cache/
 
-
+/bin/
 /data/
 /logs/
 /model_save/

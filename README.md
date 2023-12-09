@@ -1,160 +1,69 @@
-# 프로젝트
+# Team_BIG212HO
+참가자명: 김준표/김태호
+  
 
-BigDas Lab - CRS Team project
+# 프로젝트
+LLM을 이용한 query engine
+  
 
 ---
+# 1. 프로젝트 개요
+## 세부 주제:  
+- 대화형 추천을 위한 chat interface  
+- Retrieval system을 활용하여 informative and factually correct response를 제공하는 것을 목표함  
+  
+## 주제 선정 배경:  
+Traditional search engine은 keywords와 algorithms을 이용하여 search result를 반환하는 방식으로 동작합니다. 이는 단순한 구조를 가지고 있어서 query에 relevant한 passage를 제공하는데 한계가 있습니다. 반면, LLM을 이용한다면 언어모델의 능력을 leverage할 수 있어서, query에 relevant한 passage를 더 잘 제공할 수 있다고 생각합니다. 구체적으로는 LLM을 이용한 query engine은 단순 문서 검색 이상의 역할을 수행할 수 있다고 생각합니다. 특히, chat dialog를 활용하게 되면, 사용자와의 interaction을 통해 사용자의 검색 의도를 파악하는 것이 가능할 것이라고 판단했는데, 이러한 관점에서 세부주제를 "대화형 추천을 위한 chat interface"로 정하게 되었습니다.
 
-# 1. 구현 명세
-
-파일목록
-
-## main.py
-
-- Main starting point
-- training, evalutation, test 진행
-
-utils로부터 parsed argument 받아오기
-
-data로부터 각 dataset 받아오기
-
-model로 부터 model 받아오기
-
-training, eval, test 진행 (metric 들 활용)
-
-## utils.py
-
-- main을 수행하는데 있어 도움되는 유틸함수들
-    - parser, save_output 등
-    - read_pkl, write_pkl
-
-## data.py
-
-- data preprocessing 및 dataset 관리
-
-data_util로 부터 필요 함수들 호출하여 사용
-
-## data_util.py
-
-- data.py에서 특수하게 수행이 필요할경우 수행에 도움되는 유틸함수들
-
-## models.py
-
-- 모델 관리
-
-## metric.py
-
-- 각 평가함수들 관리
+## 데이터셋 및 동작:
+- 데이터셋: DuRecDial2.0
+- data/3/input_examples/input_sample.txt 파일에 입출력 예제를 제작하여 첨부하였습니다.
+- 프로그램 동작에 필요한 conda env file, data file, model pt file은 별도로 제출하였습니다.
+- 프로그램 동작에 문제가 있을 시 메일로 문의 부탁드립니다.
+  
 
 # 2. Directory 관리
 
 ```bash
 HOME
 |-logs
-|---1	
-|---2
+|   |--3
 |-model_cache
 |	|--bert-base-uncased
-|-epoch_output
-|	|--1	
-|	|--2
+|   |--facebook
+|-output
+|	|--3
 |		|--ours
 |-model_save
-|	|--1	
-|	|--2	
-|		|--ours
-|			|--[Saved Retriever BERT.pt]
+|	|--3
+|		|--goal_best_model.pt
+|       |--ours_know_best.pt
+|       |--ours_RAG_best.pt
+|       |--topic_best_model.pt
 |-data
-|	|--1	
-|	|--2
-|		|--cached
-|			|--[Preprocessed file cache]
+|	|--3
+|		|--input_examples
+|			|--input_sample.txt
 |		|--pred_aug
-|			|- # Goal, Topic predicted labeled pkl file
-|		|--en_dev.txt
+|			|-- # Goal, Topic predicted labeled pkl file
+|		|--rag
+            |--my_knowledge_dataset_0
+            |--my_knowledge_dataset_0.csv
+|       |--en_dev.txt
 |		|--en_train.txt
 |		|--en_test.txt
+|       |--goal2id_new.txt
+|       |--topic2id_new.txt
 |-model_play
-|	|--1	
-|	|--2
-|		|--ours
-|			|--goal_topic.py
-|			|--knowledge_retrieve.py
+|	|--ours
+|	|--rag
 |			...
-|-main.py # ours
+|-main.py # Main
+|-chat_interface.py # Chat-bot
 |-data.py
 |-data_utils.py
 |-utils.py
 |-models.py
 |-metric.py
 ```
-
----
-
-# main.py
-
-## main()
-
-- Main starting point
-- training, evalutation, test 진행 → 향후 코드 길어질경우 분리예정
-
-## train()
-
-`def train(args, train_dataloader,  knowledge_index, bert_model ):`
-
-## evaluation()
-
-## test()
-
-# dataModel.py
-
-## class KnowledgeDataset(Dataset)
-
-- `def __init__(self, knowledgeDB, max_length, tokenizer):`
-    - asd
-- `def __getitem__(self, item):`
-    - `return tokens, mask`
-
-## class DialogDataset(Dataset)
-
-- `def __init__(self, train_sample):`
-- `def __getitem__(self, idx):`
-    - `return dialog_token, dialog_mask, target_knowledge, goal_type, response, topic`
-
-# data_utils.py
-
-# utils.py
-
-- `get_time_kst()`
-    - 현재 한국 시간을 지정된 form으로 return
-    - `return: (str)'%Y-%m-%d_%H%M%S'`
-- `write_pkl(obj, filename)`
-    - filename의 해당 file이름으로 obj 를 pickle 파일로 저장
-    - `return: None`
-- `read_pkl(obj, filename)`
-    - 해당 file이름의 pickle 파일을 load하여 return
-    - `return: (obj) object`
-- `parseargs()`
-    - CMD의 입력과 기본세팅을 args로 return
-    - `return: args`
-- print_json(args, filename, saved_jsonlines)
-    - 지정된 format에 맞게 해당 `args.data_dir/print/filename.txt` 의 위치에 saved_jsonlines 저장
-    - `return: None`
-
-# models.py
-
-- class Retriever(nn.Module):
-    - `init: bert_model, hiddensize`
-        - bert 모델과 mlp 레이어로 구성
-    - `mlp size: hidden/4`
-    - forward: bert_model → mlp
-        - `return: tensor (B,hidden/4)`
-
-- class Generator(nn.Module):
-    - `init:`
-        - description
-    - forward: asdf → bfewafw
-        - `return: tensor (B, xxx)`
-
-- 
-
-# metric.py
+  

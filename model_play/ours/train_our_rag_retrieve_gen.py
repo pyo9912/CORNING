@@ -138,7 +138,7 @@ def train_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, val
         logger.info("@@@@@@@@@@@@@@@@@@@@@@@@@@ Model question_encoder changed by ours @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n\n")
         rag_model.rag.question_encoder.question_encoder.bert_model = our_question_encoder
         rag_tokenizer.question_encoder = tokenizer
-
+    
     train_Dataset = data_model.RagDataset(args, train_dataset_aug_pred, rag_tokenizer, all_knowledgeDB, mode='train')
     valid_Dataset = data_model.RagDataset(args, valid_dataset_aug_pred, rag_tokenizer, all_knowledgeDB, mode='valid')
     test_Dataset = data_model.RagDataset(args, test_dataset_aug_pred, rag_tokenizer, all_knowledgeDB, mode='test')
@@ -200,6 +200,8 @@ def train_our_rag_generation(args, bert_model, tokenizer, train_dataset_raw, val
             if best_hitdic_ratio['total']['hit1'] <= hitdic_ratio['total']['hit1']:
                 best_hitdic_ratio = hitdic_ratio
                 best_hitdic_str = output_str
+                logger.info(f"RAG Best model saved: {args.saved_model_path}")
+                torch.save(rag_model.state_dict(), os.path.join(args.saved_model_path, f"{args.model_name}_RAG{int(epoch)+5}.pt"))
         if epoch == 0: rag_model_weight_logging(args, rag_model, epoch, 'after_test', faiss_dataset)
 
     for i in best_hitdic_str:

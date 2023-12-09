@@ -128,7 +128,7 @@ def default_parser(parser):
     parser.add_argument('--saved_model_path', default='', type=str, help="saved model file name")  # TH: model file directory
 
     parser.add_argument('--log_name', default='', type=str, help="log file name")  # HJ: log file name
-    parser.add_argument('--version', default='3', type=str, help="DuRec Version")  # HJ: log file name  # 2: original / 3: without profile,situation
+    parser.add_argument('--version', default='3', type=str, help="DuRec Version")  # HJ: log file name  # 2: Original / 3: Chat interface (without 'Profile', 'Situation')
     parser.add_argument("--debug", action='store_true', help="Whether to run debug.")  # HJ
 
     parser.add_argument('--input_prompt', default='dialog_topic_profile', type=str, help="input_prompt")

@@ -162,15 +162,7 @@ def know_hit_ratio(args, pred_pt, gold_pt, new_knows=None, types=None, typelist=
                 hitdic_ratio[key][hit] = hitdic[key][hit] / hitdic[key]['total']
         hitdic_ratio[key]['total'] = hitdic[key]['total']
         output_str.append(f"{key:^22}: {hitdic_ratio[key]['hit1']:.3f}, {hitdic_ratio[key]['hit3']:.3f}, {hitdic_ratio[key]['hit5']:.3f}, {hitdic_ratio[key]['total']}")
-    # for key in hitdic.keys():
-    #     hitdic_ratio[key]['total'] = hitdic[key]['total']
-    #     if key=='total': continue
-    #     for hit in ['hit1', 'hit3', 'hit5']:
-    #         if hitdic[key]['total'] > 0:
-    #             hitdic_ratio[key][hit] = hitdic[key][hit] / hitdic[key]['total']
-    #     output_str.append(f"{key:^22}: {hitdic_ratio[key]['hit1']:.3f}, {hitdic_ratio[key]['hit3']:.3f}, {hitdic_ratio[key]['hit5']:.3f}, {hitdic_ratio[key]['total']}")
-    # hitdic_ratio['total']['hit1'],hitdic_ratio['total']['hit3'], hitdic_ratio['total']['hit5'],
-    # output_str.append(f"{'total':^22}: {hitdic_ratio['total']['hit1']/hitdic_ratio['total']['total']:.3f}, {hitdic_ratio['total']['hit3']/hitdic_ratio['total']['total']:.3f}, {hitdic_ratio['total']['hit5']/hitdic_ratio['total']['total']:.3f}, {hitdic_ratio['total']['total']}")
+    
     return hitdic, hitdic_ratio, output_str
 
 
@@ -202,19 +194,7 @@ class RAG_KnowledgeDataset(Dataset):  # knowledge용 데이터셋
 
         pad_token_id = source_tokenizer.pad_token_id
 
-        # max_knowledge_length = self.args.max_length*5//10 # 768의 50%까지 knowledge데이터 넣어주기
-
-        # type_token = source_tokenizer('<type>' + type , max_length=max_knowledge_length//20, truncation=True).input_ids
-        # last_type_token = source_tokenizer('<last_type>' + last_type, max_length=max_knowledge_length//20, truncation=True).input_ids
-        # topic_token = source_tokenizer('<topic>' + topic , max_length=max_knowledge_length//20, truncation=True).input_ids
-
-        # if self.args.inputWithTopic:
-        #     input = source_tokenizer('<dialog>' + dialog, max_length=self.args.max_length - len(type_token)-len(last_type_token) - len(topic_token) ,padding='max_length' ,truncation=True).input_ids
-        #     input = input + type_token + last_type_token + topic_token
-        # else:
-        #     input = source_tokenizer('<dialog>' + dialog, max_length=self.args.max_length - len(type_token)-len(last_type_token) ,padding='max_length' ,truncation=True).input_ids
-        #     input = input + type_token + last_type_token
-
+        
         if 'topic' in self.args.input_dialog and 'goal' in self.args.input_dialog:
             input_dialog = dialog + "<type>" + type + " <topic>" + topic
         elif 'topic' in self.args.input_dialog:
@@ -243,9 +223,7 @@ class RAG_KnowledgeDataset(Dataset):  # knowledge용 데이터셋
             'knowledge_task_pseudo_label': candidate_knowledges[0],
             'is_new_knowledge': 1 if target_knowledge not in self.train_knowledge_seq_set else 0,
         }
-            # 'knowledge_task_label': torch.LongTensor(label), # tensor
-            # 'knowledge_task_pseudo_label': torch.LongTensor(pseudo_label), # tensor
-
+            
 
 
 def split_documents(documents: dict) -> dict:

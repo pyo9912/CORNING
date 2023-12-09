@@ -70,20 +70,27 @@ def knowledge_reindexing(args, knowledge_data, retriever, stage):
 
 
 def chat(args, bert_model, tokenizer, goalDic, topicDic, all_knowledgeDB):
-    querys = []
-    input_length = args.max_length
-    
     ## Model calls
     # Call Goal-Topic model
     retriever = Retriever(args, bert_model)
     # Goal model
-    goal_model_name = f"goal_best_model{args.device[-1]}.pt"
+    # goal_model_name = f"goal_best_model{args.device[-1]}.pt"
+    goal_model_name = f"goal_best_model.pt"
     if not os.path.exists(os.path.join(args.saved_model_path, goal_model_name)): Exception(f'Goal Best Model 이 있어야함 {os.path.join(args.saved_model_path, goal_model_name)}')
+    goal_best_model = deepcopy(retriever)
+    goal_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, goal_model_name)), strict=False)
+    goal_best_model.to(args.device)
+    
     # Topic model
-    topic_model_name = f"topic_best_model{args.device[-1]}.pt"
+    # topic_model_name = f"topic_best_model{args.device[-1]}.pt"
+    topic_model_name = f"topic_best_model.pt"
     if not os.path.exists(os.path.join(args.saved_model_path, topic_model_name)): Exception(f'Topic Best Model 이 있어야함 {os.path.join(args.saved_model_path, topic_model_name)}')
+    topic_best_model = deepcopy(retriever)
+    topic_best_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, topic_model_name)), strict=False)
+    topic_best_model.to(args.device)
+    
     # Knowledge model
-    know_model_name = f"ours_know.pt"
+    know_model_name = f"ours_know_best.pt"
     if not os.path.exists(os.path.join(args.saved_model_path, know_model_name)): Exception(f'Know Best Model 이 있어야함 {os.path.join(args.saved_model_path, know_model_name)}')
     retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, know_model_name)), strict=False)
     retriever.to(args.device)
@@ -128,7 +135,7 @@ def chat(args, bert_model, tokenizer, goalDic, topicDic, all_knowledgeDB):
 
     index = faiss.IndexHNSWFlat(768, 128, faiss.METRIC_INNER_PRODUCT)
     faiss_dataset.add_faiss_index('embeddings', custom_index=index)
-    #
+    
     print(f"Length of Knowledge knowledge_DB : {len(faiss_dataset)}")
 
     ### MODEL CALL
@@ -142,28 +149,47 @@ def chat(args, bert_model, tokenizer, goalDic, topicDic, all_knowledgeDB):
         rag_model.rag.question_encoder.question_encoder.bert_model = our_question_encoder
         rag_tokenizer.question_encoder = tokenizer
 
-    print("Chat Interface Started\nType 'Exit' to exit\nHow can I help you?")
+    rag_model.load_state_dict(torch.load(os.path.join(args.saved_model_path, f"ours_RAG_best.pt"), map_location=args.device), strict=False)
+    querys = [""]
+    input_length = args.max_length
+    guide_text="Chat Interface Started\n1. Type 'Exit' to end system\n2. Type 'clear!' to clear dialog history. \nHow can I help you?"
+    print(guide_text)
     while(True):
         # Get user query
+        context = "".join(querys)
         query = input("User Query: ")
-        if query == 'Exit':
+        if query == 'Exit' or 'exit' in query.lower():
             break
+        elif 'clear!' in query.lower():
+            querys = [""]
+            print("==================================================")
+            print("Dialog histories are cleared. Start a new conversation!!")
+            print(guide_text)
+            print("==================================================")
+            continue
+        elif query == '':
+            print("==================================================")
+            print("Input is Empty. Check it again")
+            print(guide_text)
+            print("==================================================")
+            continue
         query = 'User: ' + query
         queryDic = dict(dialog="", goal="", topic="", knowledge="")
-        queryDic["dialog"] = str(query)
+        queryDic["dialog"] = context + str(query)
         input_dialog = queryDic["dialog"]
         
         ## Goal prediction
         args.subtask = 'goal'
         # goal_model_name = f"goal_best_model{args.device[-1]}.pt"
         # if not os.path.exists(os.path.join(args.saved_model_path, goal_model_name)): Exception(f'Goal Best Model 이 있어야함 {os.path.join(args.saved_model_path, goal_model_name)}')
-        retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, goal_model_name)), strict=False)
-        retriever.to(args.device)
+        # retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, goal_model_name)), strict=False)
+        # retriever.to(args.device)
         # Add Prefix
         prefix = tokenizer.encode('<base>.')[:int(input_length / 5)]
         prompt = tokenizer.encode('. predict the next goal: ')
         prompt=prompt[1:-1]
-        dialog_tokens = tokenizer('<dialog>' + input_dialog).input_ids[-(input_length - len(prefix) - len(prompt)):]
+        # dialog_tokens = tokenizer('<dialog>' + input_dialog).input_ids[-(input_length - len(prefix) - len(prompt)):]
+        dialog_tokens = tokenizer('<dialog>' + input_dialog + '<query>' + query).input_ids[-(input_length - len(prefix) - len(prompt)):]
         dialog_tokens = prefix + dialog_tokens + prompt
         # Tokenizer
         dialog_tokens_str = tokenizer.decode(dialog_tokens, skip_special_tokens=True)
@@ -172,9 +198,9 @@ def chat(args, bert_model, tokenizer, goalDic, topicDic, all_knowledgeDB):
         attention_mask = tokenized_inputs.attention_mask.to(args.device)
 
         with torch.no_grad():
-            dialog_emb = retriever(input_ids = input_ids, attention_mask = attention_mask)
+            dialog_emb = goal_best_model(input_ids = input_ids, attention_mask = attention_mask)
         
-        scores = retriever.goal_proj(dialog_emb)
+        scores = goal_best_model.goal_proj(dialog_emb)
         scores = torch.softmax(scores, dim=-1)
         
         topk = 1
@@ -188,13 +214,14 @@ def chat(args, bert_model, tokenizer, goalDic, topicDic, all_knowledgeDB):
         args.subtask = 'topic'
         # topic_model_name = f"topic_best_model{args.device[-1]}.pt"
         # if not os.path.exists(os.path.join(args.saved_model_path, topic_model_name)): Exception(f'Topic Best Model 이 있어야함 {os.path.join(args.saved_model_path, topic_model_name)}')
-        retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, topic_model_name)), strict=False)
-        retriever.to(args.device)
+        # retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, topic_model_name)), strict=False)
+        # retriever.to(args.device)
         # Add prefix
         prefix = tokenizer.encode('<goal>%s.' % (goal_pred))[:int(input_length * 2 / 5)]
         prompt = tokenizer.encode('. predict the next topic: ')
         prompt=prompt[1:-1]
-        dialog_tokens = tokenizer('<dialog>' + input_dialog).input_ids[-(input_length - len(prefix) - len(prompt)):]
+        # dialog_tokens = tokenizer('<dialog>' + input_dialog).input_ids[-(input_length - len(prefix) - len(prompt)):]
+        dialog_tokens = tokenizer('<dialog>' + input_dialog + '<query>' + query).input_ids[-(input_length - len(prefix) - len(prompt)):]
         dialog_tokens = prefix + dialog_tokens + prompt
         # Tokenizer
         dialog_tokens_str = tokenizer.decode(dialog_tokens, skip_special_tokens=True)
@@ -203,9 +230,9 @@ def chat(args, bert_model, tokenizer, goalDic, topicDic, all_knowledgeDB):
         attention_mask = tokenized_inputs.attention_mask.to(args.device)
 
         with torch.no_grad():
-            dialog_emb = retriever(input_ids = input_ids, attention_mask = attention_mask)
+            dialog_emb = topic_best_model(input_ids = input_ids, attention_mask = attention_mask)
 
-        scores = retriever.topic_proj(dialog_emb)
+        scores = topic_best_model.topic_proj(dialog_emb)
         scores = torch.softmax(scores, dim=-1)
         
         topk = 1
@@ -219,8 +246,8 @@ def chat(args, bert_model, tokenizer, goalDic, topicDic, all_knowledgeDB):
         args.subtask = 'know'
         # know_model_name = f"ours_know.pt"
         # if not os.path.exists(os.path.join(args.saved_model_path, know_model_name)): Exception(f'Know Best Model 이 있어야함 {os.path.join(args.saved_model_path, know_model_name)}')
-        retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, know_model_name)), strict=False)
-        retriever.to(args.device)
+        # retriever.load_state_dict(torch.load(os.path.join(args.saved_model_path, know_model_name)), strict=False)
+        # retriever.to(args.device)
         # # Make knowledge index
         # from data_model_know import KnowledgeDataset
         # knowledge_data = KnowledgeDataset(args, all_knowledgeDB, tokenizer)  # knowledge dataset class
@@ -230,10 +257,12 @@ def chat(args, bert_model, tokenizer, goalDic, topicDic, all_knowledgeDB):
 
         # Add Prefix
         input_length = 128
-        prefix = tokenizer.encode('<goal>%s <topic>%s.'% (goal_pred, topic_pred))[:int(input_length * 3 / 5)]#####
+        # prefix = tokenizer.encode('<goal>%s <topic>%s.'% (goal_pred, topic_pred))[:int(input_length * 3 / 5)]#####
+        prefix = tokenizer.encode('<topic>%s.'% (topic_pred))[:int(input_length * 2 / 5)]#####
         prompt = tokenizer.encode('. predict the next knowledge: ')
         prompt=prompt[1:-1]
-        dialog_tokens = tokenizer('<dialog>' + input_dialog).input_ids[-(input_length - len(prefix) - len(prompt)):]
+        # dialog_tokens = tokenizer('<dialog>' + input_dialog).input_ids[-(input_length - len(prefix) - len(prompt)):]
+        dialog_tokens = tokenizer('<dialog>' + input_dialog + '<query>' + query).input_ids[-(input_length - len(prefix) - len(prompt)):]
         dialog_tokens = prefix + dialog_tokens + prompt
         # Tokenizer
         dialog_tokens_str = tokenizer.decode(dialog_tokens, skip_special_tokens=True)
@@ -253,7 +282,7 @@ def chat(args, bert_model, tokenizer, goalDic, topicDic, all_knowledgeDB):
 
         queryDic["knowledge"] = top_passages
 
-        querys.append(queryDic)
+        # querys.append(queryDic["dialog"])
 
         # Generation
         args.subtask = 'resp'
@@ -261,33 +290,42 @@ def chat(args, bert_model, tokenizer, goalDic, topicDic, all_knowledgeDB):
         target_max_length = args.rag_max_target_length
         # Data augment 하기
         gen_pad_id = rag_tokenizer.generator.pad_token_id
-        context_batch = {}
-        context_batch['context_input_ids'] = []
-        context_batch['context_input_attention_mask'] = []
-        context_batch['context_doc_scores'] = []
-        context_batch['context_knowledges'] = []
-        for top_passage, top_conf in zip(top_passages, top_confidences):
+        context_input_ids = []
+        context_top_conf = []
+        context_top_conf.append(top_confidences.tolist())
+
+        for top_passage in top_passages:
             know_topic_token = rag_tokenizer.generator(f"goal: {goal_pred} | topic: {topic_pred} | {top_passage} |", max_length=input_max_length // 2, truncation=True).input_ids
             dialog_token = rag_tokenizer.generator(input_dialog).input_ids
             ctx_input_token1 = know_topic_token + dialog_token[-(input_max_length - len(know_topic_token)):]
             ctx_input_token = ctx_input_token1 + [gen_pad_id] * (input_max_length - len(ctx_input_token1))
-            ctx_input_ids = torch.LongTensor(ctx_input_token)  # .to(self.args.device)
-            ctx_atten_mask = ctx_input_ids.ne(gen_pad_id)
-            context_batch['context_input_ids'].append(ctx_input_ids)
-            context_batch['context_input_attention_mask'].append(ctx_atten_mask)
-            context_batch['context_doc_scores'].append(top_conf)
-            # context_batch['context_knowledges'].append(all_knowledgeDB.index(top_passage))
-        # context_batch['context_input_ids'] = torch.stack(context_batch['context_input_ids'], dim=0)
-        # context_batch['context_input_attention_mask'] = torch.stack(context_batch['context_input_attention_mask'], dim=0)
-        # Rag model 불러와서 생성하기
+            context_input_ids.append(ctx_input_token)
+            
+
+        context_input_ids = torch.LongTensor(context_input_ids)
+        context_atten_mask = context_input_ids.ne(gen_pad_id)
+        context_top_conf = torch.tensor(context_top_conf)
+
         output_ids = rag_model.generate(
-            context_input_ids=context_batch['context_input_ids']#.reshape(-1, args.rag_context_input_length).to(args.device)
-            , context_attention_mask=context_batch['context_input_attention_mask']#.reshape(-1, args.rag_context_input_length).to(args.device)
-            , doc_scores = context_batch['context_doc_scores']
+            context_input_ids = context_input_ids.reshape(-1, args.rag_context_input_length).to(args.device)
+            , context_attention_mask = context_atten_mask.reshape(-1, args.rag_context_input_length).to(args.device)
+            , doc_scores = context_top_conf.to(args.device)
             , n_docs = n_doc
-            # , doc_scores=batch['context_doc_scores'].to(args.device)  # [B,topk]
-            # , n_docs=batch["context_doc_scores"].size()[-1]
         )
-        print(output_ids)
+        cleanup = True
+        output_gen = rag_tokenizer.generator.batch_decode(output_ids, skip_special_tokens=cleanup, clean_up_tokenization_spaces=cleanup)
+        sys_output = output_gen[0]
+        # sys_output = output_gen[0].replace('<','>').split('>')[4]
+        print("==================================================")
+        print(sys_output)
+        print("==================================================")
+        print("Retrived Passages")
+        for passage in top_passages:
+            print(passage)
+        print("==================================================")
+        querys.append(query)
+        querys.append(f"System: {sys_output}")
+        
+
 
     # print(dialog)

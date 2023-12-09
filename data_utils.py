@@ -22,7 +22,7 @@ except:
     else: ssl._create_default_https_context = _create_unverified_https_context
 
     from nltk.corpus import stopwords
-
+    nltk.download("stopwords")
     stop_words = set(stopwords.words('english'))
 
 

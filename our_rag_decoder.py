@@ -236,51 +236,6 @@ def epoch_play(args, tokenizer, model, data_loader, optimizer, epoch, faiss_data
     return hitDic, hitdic_ratio, output_str  # output_strings, hit1_ratio, total_hit1, total_hit3, total_hit5, total_hit1_new, total_hit3_new, total_hit5_new
 
 
-# def process_augment_rag_sample(args, raw_data, tokenizer=None, mode='train', goal_types=['Q&A', 'Movie recommendation', 'Music recommendation', 'POI recommendation', 'Food recommendation']):
-#     from tqdm import tqdm
-#     from copy import deepcopy
-#     train_sample = []
-#     logger.info(f"{mode} Data Goal types: {goal_types}")
-#     if tokenizer:
-#         try:
-#             if tokenizer.eos_token is not None:
-#                 eos_token = tokenizer.eos_token
-#             else:
-#                 eos_token = tokenizer.sep_token
-#         except:
-#             eos_token = tokenizer.generator.eos_token
-#     else:
-#         eos_token = '</s>'
-#     for ij in tqdm(range(len(raw_data)), desc="Dataset Augment", bar_format='{l_bar} | {bar:23} {r_bar}'):
-#         conversation = raw_data[ij]
-#         augmented_dialog = []
-#         augmented_knowledge = []
-#         last_type = ""
-#         for i in range(len(conversation['dialog'])):
-#             role = conversation['role_seq'][i]
-#             utterance = conversation['dialog'][i] + eos_token
-#             goal = conversation['goal'][i]
-#             # if goal == 'Movie recommendation' or goal == 'POI recommendation' or goal == 'Music recommendation' or goal == 'Q&A': # TH 230601
-#             # if goal == 'Q&A': # QA에 대해서만 볼 때
-#             if goal in goal_types:
-#                 if role == 'System' and len(augmented_dialog) > 0 and len(conversation['pseudo_knowledge_seq'][i]) != 0:  # Test 3360 Setting
-#                     flatten_dialog = ''.join(augmented_dialog)
-#                     train_sample.append({'dialog': flatten_dialog,
-#                                          'user_profile': conversation['user_profile'],
-#                                          'response': utterance,
-#                                          'goal': conversation['goal'][i],
-#                                          'last_goal': conversation['goal'][i - 1],
-#                                          'topic': conversation['topic'][i],
-#                                          'situation': conversation['situation'],
-#                                          'target_knowledge': conversation['knowledge_seq'][i],
-#                                          'candidate_knowledges': conversation['pseudo_knowledge_seq'][i],
-#                                          'candidate_confidences': conversation['pseudo_confidence_seq'][i]  # prob
-#                                          })
-#             if role == 'system': last_type = conversation['goal'][i]
-#             augmented_dialog.append(utterance)
-#             augmented_knowledge.append(conversation['knowledge_seq'][i])
-#     return train_sample
-
 
 if __name__ == '__main__':
     ## TEMP For our
