@@ -13,7 +13,9 @@ LLM을 이용한 query engine
 - Retrieval system을 활용하여 informative and factually correct response를 제공하는 것을 목표함  
   
 ## 주제 선정 배경:  
-Traditional search engine은 keywords와 algorithms을 이용하여 search result를 반환하는 방식으로 동작합니다. 이는 단순한 구조를 가지고 있어서 query에 relevant한 passage를 제공하는데 한계가 있습니다. 반면, LLM을 이용한다면 언어모델의 능력을 leverage할 수 있어서, query에 relevant한 passage를 더 잘 제공할 수 있다고 생각합니다. 구체적으로는 LLM을 이용한 query engine은 단순 문서 검색 이상의 역할을 수행할 수 있다고 생각합니다. 특히, chat dialog를 활용하게 되면, 사용자와의 interaction을 통해 사용자의 검색 의도를 파악하는 것이 가능할 것이라고 판단했는데, 이러한 관점에서 세부주제를 "대화형 추천을 위한 chat interface"로 정하게 되었습니다.
+Traditional search engine은 keywords와 algorithms을 이용하여 search result를 반환하는 방식으로 동작합니다. 이는 단순한 구조를 가지고 있어서 query에 relevant한 passage를 제공하는데 한계가 있습니다.  
+반면, LLM을 이용한다면 언어모델의 능력을 leverage할 수 있어서, query에 relevant한 passage를 더 잘 제공할 수 있다고 생각합니다. 구체적으로는 LLM을 이용한 query engine은 단순 문서 검색 이상의 역할을 수행할 수 있다고 생각합니다.  
+특히, chat dialog를 활용하게 되면, 사용자와의 interaction을 통해 사용자의 검색 의도를 파악하는 것이 가능할 것이라고 판단했는데, 이러한 관점에서 세부주제를 "대화형 추천을 위한 chat interface"로 정하게 되었습니다.
 
 ## 데이터셋 및 동작:
 - 데이터셋: DuRecDial2.0
