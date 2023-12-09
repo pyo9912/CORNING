@@ -38,10 +38,10 @@ HOME
 |		|--ours
 |-model_save
 |	|--3
-|		|--goal_best_model.pt
-|       |--ours_know_best.pt
-|       |--ours_RAG_best.pt
-|       |--topic_best_model.pt
+|		|--goal_best_model.pt  
+|       |--ours_know_best.pt  
+|       |--ours_RAG_best.pt  
+|       |--topic_best_model.pt  
 |-data
 |	|--3
 |		|--input_examples
